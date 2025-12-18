@@ -14,7 +14,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate  # Only one instance should run at a time
+    type: Recreate
   selector:
     matchLabels:
       app: pihole
@@ -25,28 +25,28 @@ spec:
         app.kubernetes.io/name: pihole
         app.kubernetes.io/component: dns
     spec:
-      # Target application nodes
-      nodeSelector:
-        lane: applications
+      # Removed nodeSelector - let it float
       
-      # Use host network for direct DNS access
+      # Tolerate control-plane taint in case it needs to run on master
+      tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      
       hostNetwork: true
-      dnsPolicy: None  # Don't use cluster DNS (would be circular!)
+      dnsPolicy: None
       dnsConfig:
         nameservers:
-          - 1.1.1.1  # Bootstrap DNS
+          - 1.1.1.1
           - 1.0.0.1
-      
       containers:
       - name: pihole
         image: pihole/pihole:2024.07.0
         imagePullPolicy: IfNotPresent
-        
         securityContext:
           capabilities:
             add:
-              - NET_ADMIN  # Required for DNS operations
-        
+              - NET_ADMIN
         ports:
         - name: dns-tcp
           containerPort: 53
@@ -63,7 +63,6 @@ spec:
         - name: https
           containerPort: 443
           protocol: TCP
-        
         env:
         - name: TZ
           valueFrom:
@@ -95,7 +94,6 @@ spec:
             configMapKeyRef:
               name: pihole-config
               key: FTLCONF_LOCAL_IPV4
-        
         volumeMounts:
         - name: pihole-data
           mountPath: /etc/pihole
@@ -103,7 +101,6 @@ spec:
         - name: pihole-data
           mountPath: /etc/dnsmasq.d
           subPath: dnsmasq.d
-        
         resources:
           requests:
             memory: "256Mi"
@@ -111,7 +108,6 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
-        
         livenessProbe:
           httpGet:
             path: /admin/
@@ -120,7 +116,6 @@ spec:
           periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
-        
         readinessProbe:
           httpGet:
             path: /admin/
@@ -129,7 +124,6 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
-      
       volumes:
       - name: pihole-data
         persistentVolumeClaim:
