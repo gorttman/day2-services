@@ -3,7 +3,6 @@ kind: Kustomization
 namespace: pihole
 
 resources:
-  - pihole-namespace.yml
   - pihole-configmap.yml
   - pihole-pvc.yml
   - pihole-deployment.yml

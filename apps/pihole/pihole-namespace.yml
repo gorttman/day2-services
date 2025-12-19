@@ -6,5 +6,5 @@ metadata:
     app.kubernetes.io/name: pihole
     app.kubernetes.io/part-of: day2-services
   annotations:
-    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-wave: "-1"
 

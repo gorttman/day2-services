@@ -12,10 +12,10 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 data:
-  TZ: "America/New_York"  # Adjust to your timezone
-  WEBPASSWORD: "changeme123"  # Change this!
-  PIHOLE_DNS_: "1.1.1.1;1.0.0.1"  # Cloudflare upstream
+  TZ: "America/New_York"
+  WEBPASSWORD: "changeme123"
+  PIHOLE_DNS_: "1.1.1.1;1.0.0.1"
   DNSSEC: "true"
   DNSMASQ_LISTENING: "all"
-  FTLCONF_LOCAL_IPV4: "192.168.1.10"  # Your Pi-hole service IP
+  FTLCONF_LOCAL_IPV4: "192.168.1.10"
 
