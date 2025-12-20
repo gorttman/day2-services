@@ -1,25 +1,17 @@
-apiVersion: argoproj.io/v1alpha1
-kind: Application
+apiVersion: v1
+kind: PersistentVolumeClaim
 metadata:
-  name: pihole
-  namespace: argocd
+  name: pihole-data
+  namespace: pihole
   labels:
-    app.kubernetes.io/part-of: day2-services
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
+    app: pihole
+    app.kubernetes.io/name: pihole
+    argocd.argoproj.io/managed-by: argocd
 spec:
-  project: default
-  source:
-    repoURL: https://github.com/gorttman/day2-services.git
-    targetRevision: main
-    path: apps/pihole
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: pihole
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 2Gi
 

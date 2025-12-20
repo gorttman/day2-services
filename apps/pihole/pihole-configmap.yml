@@ -9,8 +9,6 @@ metadata:
     app.kubernetes.io/component: dns
     app.kubernetes.io/part-of: day2-services
     argocd.argoproj.io/managed-by: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
 data:
   TZ: "America/New_York"
   WEBPASSWORD: "changeme123"

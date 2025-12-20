@@ -9,8 +9,6 @@ metadata:
     app.kubernetes.io/component: dns
     app.kubernetes.io/part-of: day2-services
     argocd.argoproj.io/managed-by: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: 1
   strategy:
@@ -25,9 +23,6 @@ spec:
         app.kubernetes.io/name: pihole
         app.kubernetes.io/component: dns
     spec:
-      # Removed nodeSelector - let it float
-      
-      # Tolerate control-plane taint in case it needs to run on master
       tolerations:
       - key: "node-role.kubernetes.io/control-plane"
         operator: "Exists"
@@ -39,6 +34,7 @@ spec:
         nameservers:
           - 1.1.1.1
           - 1.0.0.1
+      
       containers:
       - name: pihole
         image: pihole/pihole:2024.07.0

@@ -8,17 +8,16 @@ metadata:
     app.kubernetes.io/name: pihole
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "3"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - pihole.pilab.local  # Replace with your domain
+    - pihole.pilab.local
     secretName: pihole-tls
   rules:
-  - host: pihole.pilab.local  # Replace with your domain
+  - host: pihole.pilab.local
     http:
       paths:
       - path: /

@@ -8,8 +8,6 @@ metadata:
     app.kubernetes.io/name: pihole
     app.kubernetes.io/component: dns
     argocd.argoproj.io/managed-by: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"
 spec:
   type: ClusterIP
   ports:
@@ -38,8 +36,6 @@ metadata:
     app.kubernetes.io/name: pihole
     app.kubernetes.io/component: web
     argocd.argoproj.io/managed-by: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"
 spec:
   type: ClusterIP
   ports:
