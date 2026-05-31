@@ -101,7 +101,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /admin/
-            port: 80
+            port: 8080
           initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 5
@@ -109,7 +109,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /admin/
-            port: 80
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
