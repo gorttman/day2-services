@@ -53,12 +53,6 @@ spec:
         - name: dhcp
           containerPort: 67
           protocol: UDP
-        - name: web
-          containerPort: 80
-          protocol: TCP
-        - name: https
-          containerPort: 443
-          protocol: TCP
         env:
         - name: TZ
           valueFrom:
