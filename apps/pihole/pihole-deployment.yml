@@ -28,13 +28,12 @@ spec:
         operator: "Exists"
         effect: "NoSchedule"
       
-      hostNetwork: true
       dnsPolicy: None
       dnsConfig:
         nameservers:
           - 1.1.1.1
           - 1.0.0.1
-      
+
       containers:
       - name: pihole
         image: pihole/pihole:2024.07.0
