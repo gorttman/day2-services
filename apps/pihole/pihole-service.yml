@@ -35,10 +35,9 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
 spec:
   type: LoadBalancer
-  loadBalancerIP: 192.168.2.11
   ports:
   - name: http
-    port: 80
+    port: 8080
     targetPort: 80
     protocol: TCP
   selector:
