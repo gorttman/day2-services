@@ -34,7 +34,8 @@ metadata:
     app.kubernetes.io/component: web
     argocd.argoproj.io/managed-by: argocd
 spec:
-  type: ClusterIP
+  type: LoadBalancer
+  loadBalancerIP: 192.168.2.11
   ports:
   - name: http
     port: 80
