@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: obsidian
+  namespace: obsidian
+  labels:
+    app: obsidian
+    app.kubernetes.io/name: obsidian
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # KasmVNC requires long-lived WebSocket connections
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - obsidian.pilab.local
+    secretName: obsidian-tls
+  rules:
+  - host: obsidian.pilab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: obsidian
+            port:
+              number: 3000
