@@ -6,4 +6,3 @@ resources:
   - obsidian-pvc.yml
   - obsidian-deploy.yml
   - obsidian-service.yml
-  - obsidian-ingress.yml
