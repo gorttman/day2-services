@@ -36,14 +36,19 @@ spec:
 
       containers:
       - name: novnc
-        image: ghcr.io/novnc/novnc:latest
+        image: dougw/novnc:latest
         imagePullPolicy: IfNotPresent
-        command: ["/usr/share/novnc/utils/novnc_proxy"]
-        args: ["--vnc", "192.168.2.163:5900", "--listen", "8080"]
         ports:
         - name: http
-          containerPort: 8080
+          containerPort: 8081
           protocol: TCP
+        env:
+        - name: REMOTE_HOST
+          value: "192.168.2.163"
+        - name: REMOTE_PORT
+          value: "5900"
+        - name: LOCAL_PORT
+          value: "8081"
         resources:
           requests:
             memory: "64Mi"
@@ -54,7 +59,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /
-            port: 8080
+            port: 8081
           initialDelaySeconds: 15
           periodSeconds: 30
           timeoutSeconds: 5
@@ -62,7 +67,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /
-            port: 8080
+            port: 8081
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
