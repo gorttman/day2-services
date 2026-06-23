@@ -36,19 +36,17 @@ spec:
 
       containers:
       - name: novnc
-        image: dougw/novnc:latest
+        image: dockerguiimages/docker-novnc:arm64
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
-          containerPort: 8081
+          containerPort: 8080
           protocol: TCP
         env:
-        - name: REMOTE_HOST
+        - name: VNC_HOST
           value: "192.168.2.163"
-        - name: REMOTE_PORT
+        - name: VNC_PORT
           value: "5900"
-        - name: LOCAL_PORT
-          value: "8081"
         resources:
           requests:
             memory: "64Mi"
@@ -59,7 +57,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /
-            port: 8081
+            port: 8080
           initialDelaySeconds: 15
           periodSeconds: 30
           timeoutSeconds: 5
@@ -67,7 +65,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /
-            port: 8081
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
