@@ -6,3 +6,4 @@ resources:
   - novnc-deployment.yml
   - novnc-service.yml
   - novnc-ingress.yml
+  - novnc-certificate.yml
