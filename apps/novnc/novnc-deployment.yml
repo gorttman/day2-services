@@ -36,19 +36,16 @@ spec:
 
       containers:
       - name: novnc
-        image: dougw/novnc:latest
+        image: alpine:3.19
         imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args:
+          - "apk add --no-cache novnc py3-websockify &&
+             python3 -m websockify --web=/usr/share/webapps/novnc 0.0.0.0:8080 192.168.2.163:5900"
         ports:
         - name: http
-          containerPort: 8081
+          containerPort: 8080
           protocol: TCP
-        env:
-        - name: REMOTE_HOST
-          value: "192.168.2.163"
-        - name: REMOTE_PORT
-          value: "5900"
-        - name: LOCAL_PORT
-          value: "8081"
         resources:
           requests:
             memory: "64Mi"
@@ -59,7 +56,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /
-            port: 8081
+            port: 8080
           initialDelaySeconds: 15
           periodSeconds: 30
           timeoutSeconds: 5
@@ -67,7 +64,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /
-            port: 8081
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
