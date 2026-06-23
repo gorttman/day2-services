@@ -36,16 +36,17 @@ spec:
 
       containers:
       - name: novnc
-        image: alpine:3.19
+        image: dockerguiimages/docker-novnc:arm64
         imagePullPolicy: IfNotPresent
-        command: ["/bin/sh", "-c"]
-        args:
-          - "apk add --no-cache novnc py3-websockify &&
-             python3 -m websockify --web=/usr/share/webapps/novnc 0.0.0.0:8080 192.168.2.163:5900"
         ports:
         - name: http
           containerPort: 8080
           protocol: TCP
+        env:
+        - name: VNC_HOST
+          value: "192.168.2.163"
+        - name: VNC_PORT
+          value: "5900"
         resources:
           requests:
             memory: "64Mi"
