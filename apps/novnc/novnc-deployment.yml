@@ -38,6 +38,7 @@ spec:
       - name: novnc
         image: theasp/novnc:latest
         imagePullPolicy: IfNotPresent
+        command: ["sh", "/app/entrypoint.sh"]
         ports:
         - name: http
           containerPort: 8080
