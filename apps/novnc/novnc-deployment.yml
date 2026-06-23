@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: novnc
+  namespace: remote-access
+  labels:
+    app: novnc
+    app.kubernetes.io/name: novnc
+    app.kubernetes.io/component: remote-access
+    app.kubernetes.io/part-of: day2-services
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: novnc
+  template:
+    metadata:
+      labels:
+        app: novnc
+        app.kubernetes.io/name: novnc
+        app.kubernetes.io/component: remote-access
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: lane
+                operator: In
+                values:
+                - applications
+
+      containers:
+      - name: novnc
+        image: theasp/novnc:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: DISPLAY_WIDTH
+          value: "1280"
+        - name: DISPLAY_HEIGHT
+          value: "800"
+        - name: VNC_HOST
+          value: "192.168.2.163"
+        - name: VNC_PORT
+          value: "5900"
+        - name: NO_VNC_PORT
+          value: "8080"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
