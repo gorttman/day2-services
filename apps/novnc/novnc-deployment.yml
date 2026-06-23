@@ -36,9 +36,8 @@ spec:
 
       containers:
       - name: novnc
-        image: theasp/novnc:latest
-        imagePullPolicy: IfNotPresent
-        command: ["sh", "/app/entrypoint.sh"]
+        image: ghcr.io/gorttman/novnc:latest
+        imagePullPolicy: Always
         ports:
         - name: http
           containerPort: 8080
