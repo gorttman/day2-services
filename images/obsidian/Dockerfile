@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim AS extract
+FROM --platform=$BUILDPLATFORM debian:bookworm-slim AS extract
 
 ARG OBSIDIAN_VERSION=1.12.7
 ARG TARGETARCH
@@ -6,6 +6,8 @@ ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
+      squashfs-tools \
+      binutils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -17,11 +19,14 @@ RUN set -eux; \
     esac; \
     curl -fsSL \
         "https://github.com/obsidianmd/obsidian-releases/releases/download/v${OBSIDIAN_VERSION}/${FILE}" \
-        -o obsidian.AppImage \
-    && chmod +x obsidian.AppImage \
-    && ./obsidian.AppImage --appimage-extract \
-    && mv squashfs-root /opt/obsidian \
-    && rm obsidian.AppImage
+        -o obsidian.AppImage; \
+    OFFSET=$(readelf -h obsidian.AppImage | awk \
+        '/Start of section headers:/{shoff=$5} \
+         /Size of section headers:/{shentsize=$5} \
+         /Number of section headers:/{shnum=$5} \
+         END{print shoff + shentsize * shnum}'); \
+    unsquashfs -o "${OFFSET}" -d /opt/obsidian obsidian.AppImage; \
+    rm obsidian.AppImage
 
 FROM debian:bookworm-slim
 
