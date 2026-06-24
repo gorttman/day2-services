@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - obsidian-namespace.yml
+  - obsidian-pvc.yml
+  - obsidian-deploy.yml
+  - obsidian-service.yml

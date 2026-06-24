@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: obsidian
+  namespace: obsidian
+  labels:
+    app: obsidian
+    app.kubernetes.io/name: obsidian
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  ports:
+  - name: vnc
+    port: 5900
+    targetPort: 5900
+    protocol: TCP
+  selector:
+    app: obsidian

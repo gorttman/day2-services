@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obsidian
+  namespace: obsidian
+  labels:
+    app: obsidian
+    app.kubernetes.io/name: obsidian
+    app.kubernetes.io/component: gui
+    app.kubernetes.io/part-of: day2-services
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: obsidian
+  template:
+    metadata:
+      labels:
+        app: obsidian
+        app.kubernetes.io/name: obsidian
+        app.kubernetes.io/component: gui
+    spec:
+      nodeSelector:
+        lane: applications
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - pi-2
+
+      initContainers:
+      - name: seed-obsidian-config
+        image: alpine/git:latest
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          if [ ! -d /config/.obsidian ]; then
+            echo "Seeding .obsidian from obsidian-config repo..."
+            git clone --depth=1 https://github.com/gorttman/obsidian-config.git /tmp/obs-cfg
+            cp -r /tmp/obs-cfg/.obsidian /config/.obsidian
+            echo "Seed complete."
+          else
+            echo ".obsidian already present, skipping seed."
+          fi
+        volumeMounts:
+        - name: vault
+          mountPath: /config
+
+      containers:
+      - name: obsidian
+        image: ghcr.io/gorttman/obsidian:latest
+        imagePullPolicy: Always
+        ports:
+        - name: vnc
+          containerPort: 5900
+          protocol: TCP
+        volumeMounts:
+        - name: vault
+          mountPath: /config
+        - name: dshm
+          mountPath: /dev/shm
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        livenessProbe:
+          tcpSocket:
+            port: 5900
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 5900
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+
+      volumes:
+      - name: vault
+        persistentVolumeClaim:
+          claimName: obsidian-vault
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Gi
