@@ -3,7 +3,6 @@ kind: Kustomization
 
 resources:
   - novnc-namespace.yml
-  - novnc-configmap.yml
   - novnc-deployment.yml
   - novnc-service.yml
   - novnc-ingress.yml
