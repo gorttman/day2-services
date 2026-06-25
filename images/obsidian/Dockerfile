@@ -48,6 +48,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libasound2 \
       libpango-1.0-0 \
       libcairo2 \
+      libgtk-3-0 \
+      libx11-xcb1 \
+      libxcb-dri3-0 \
+      libxshmfence1 \
+      libxtst6 \
+      libxss1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=extract /opt/obsidian /opt/obsidian
