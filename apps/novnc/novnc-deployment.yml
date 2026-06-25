@@ -38,6 +38,7 @@ spec:
       - name: novnc
         image: ghcr.io/gorttman/novnc:latest
         imagePullPolicy: Always
+        command: ["websockify", "--web", "/opt/novnc", "8080", "192.168.2.163:5900"]
         ports:
         - name: http
           containerPort: 8080
