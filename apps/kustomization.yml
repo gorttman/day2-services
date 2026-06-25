@@ -5,4 +5,4 @@ resources:
   - pihole/pihole-app.yml
   - novnc/novnc-app.yml
   - cert-manager/cert-manager-app.yml
- # - obsidian/obsidian-app.yml
+  - obsidian/obsidian-app.yml
