@@ -8,7 +8,9 @@ RUN curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v1.5.0.tar.gz \
       | tar -xz -C /opt && mv /opt/noVNC-1.5.0 /opt/novnc
 
 ENV NO_VNC_PORT=8080
+ENV REMOTE_HOST=192.168.2.163
+ENV REMOTE_PORT=5900
 
 EXPOSE 8080
 
-CMD websockify --web /opt/novnc --target-config /etc/novnc/tokens.cfg "$NO_VNC_PORT"
+CMD websockify --web /opt/novnc "$NO_VNC_PORT" "$REMOTE_HOST:$REMOTE_PORT"
