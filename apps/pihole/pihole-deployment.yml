@@ -35,13 +35,15 @@ spec:
       initContainers:
       - name: gravity-update
         image: pihole/pihole:2024.07.0
-        command: ["/bin/sh", "-c", "pihole -g"]
+        command: ["pihole", "-g"]
         env:
         - name: TZ
           valueFrom:
             configMapKeyRef:
               name: pihole-config
               key: TZ
+        - name: GRAVITYDB
+          value: /db/gravity.db
         - name: FTLCONF_GRAVITYDB
           value: /db/gravity.db
         - name: FTLCONF_DBFILE
