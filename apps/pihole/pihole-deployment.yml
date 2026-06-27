@@ -94,6 +94,8 @@ spec:
             configMapKeyRef:
               name: pihole-config
               key: FTLCONF_LOCAL_IPV4
+        - name: SKIPGRAVITYONBOOT
+          value: "true"
         - name: FTLCONF_REPLY_WHEN_BUSY
           value: REFUSE
         - name: FTLCONF_GRAVITYDB
