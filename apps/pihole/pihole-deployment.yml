@@ -33,17 +33,18 @@ spec:
         - 1.1.1.1
         - 1.0.0.1
       initContainers:
-      - name: db-init
-        image: pihole/pihole:2024.07.0
+      - name: fix-ftl-conf
+        image: busybox:1.36
         command:
         - /bin/sh
         - -c
         - |
-          sqlite3 /db/gravity.db "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS init(x TEXT);"
-          sqlite3 /db/pihole-FTL.db "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS init(x TEXT);"
+          grep -v '^GRAVITYDB=' /etc/pihole/pihole-FTL.conf > /tmp/ftl.conf || true
+          cat /tmp/ftl.conf > /etc/pihole/pihole-FTL.conf
         volumeMounts:
-        - name: pihole-db
-          mountPath: /db
+        - name: pihole-data
+          mountPath: /etc/pihole
+          subPath: pihole
       containers:
       - name: pihole
         image: pihole/pihole:2024.07.0
