@@ -35,19 +35,21 @@ spec:
       initContainers:
       - name: gravity-update
         image: pihole/pihole:2024.07.0
-        command: ["pihole", "-g"]
+        command:
+        - /bin/sh
+        - -c
+        - |
+          grep -v '^GRAVITYDB=\|^DBFILE=' /etc/pihole/pihole-FTL.conf > /tmp/.ftl.conf 2>/dev/null || true
+          echo 'GRAVITYDB=/db/gravity.db' >> /tmp/.ftl.conf
+          echo 'DBFILE=/db/pihole-FTL.db' >> /tmp/.ftl.conf
+          cat /tmp/.ftl.conf > /etc/pihole/pihole-FTL.conf
+          GRAVITYDB=/db/gravity.db pihole -g
         env:
         - name: TZ
           valueFrom:
             configMapKeyRef:
               name: pihole-config
               key: TZ
-        - name: GRAVITYDB
-          value: /db/gravity.db
-        - name: FTLCONF_GRAVITYDB
-          value: /db/gravity.db
-        - name: FTLCONF_DBFILE
-          value: /db/pihole-FTL.db
         volumeMounts:
         - name: pihole-data
           mountPath: /etc/pihole
