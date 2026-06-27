@@ -32,6 +32,18 @@ spec:
         nameservers:
         - 1.1.1.1
         - 1.0.0.1
+      initContainers:
+      - name: db-init
+        image: pihole/pihole:2024.07.0
+        command:
+        - /bin/sh
+        - -c
+        - |
+          sqlite3 /db/gravity.db "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS init(x TEXT);"
+          sqlite3 /db/pihole-FTL.db "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS init(x TEXT);"
+        volumeMounts:
+        - name: pihole-db
+          mountPath: /db
       containers:
       - name: pihole
         image: pihole/pihole:2024.07.0
