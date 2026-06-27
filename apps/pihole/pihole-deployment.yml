@@ -84,7 +84,7 @@ spec:
         - name: FTLCONF_REPLY_WHEN_BUSY
           value: REFUSE
         - name: FTLCONF_GRAVITYDB
-          value: /db/gravity.db
+          value: /etc/pihole/gravity.db
         - name: FTLCONF_DBFILE
           value: /db/pihole-FTL.db
         volumeMounts:
