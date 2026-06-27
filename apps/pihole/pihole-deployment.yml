@@ -145,4 +145,5 @@ spec:
         configMap:
           name: pihole-custom-dns
       - name: pihole-db
-        emptyDir: {}
+        emptyDir:
+          medium: Memory
