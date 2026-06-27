@@ -24,16 +24,14 @@ spec:
         app.kubernetes.io/component: dns
     spec:
       tolerations:
-      - key: "node-role.kubernetes.io/control-plane"
-        operator: "Exists"
-        effect: "NoSchedule"
-      
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
       dnsPolicy: None
       dnsConfig:
         nameservers:
-          - 1.1.1.1
-          - 1.0.0.1
-
+        - 1.1.1.1
+        - 1.0.0.1
       containers:
       - name: pihole
         image: pihole/pihole:2024.07.0
@@ -41,7 +39,7 @@ spec:
         securityContext:
           capabilities:
             add:
-              - NET_ADMIN
+            - NET_ADMIN
         ports:
         - name: dns-tcp
           containerPort: 53
@@ -90,13 +88,16 @@ spec:
         - name: pihole-data
           mountPath: /etc/dnsmasq.d
           subPath: dnsmasq.d
+        - mountPath: /etc/dnsmasq.d/02-i3sec-custom-dns.conf
+          name: pihole-custom-dns
+          subPath: 02-i3sec-custom-dns.conf
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "100m"
+            memory: 256Mi
+            cpu: 100m
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: 512Mi
+            cpu: 500m
         livenessProbe:
           httpGet:
             path: /admin/
@@ -117,4 +118,6 @@ spec:
       - name: pihole-data
         persistentVolumeClaim:
           claimName: pihole-data
-
+      - name: pihole-custom-dns
+        configMap:
+          name: pihole-custom-dns
