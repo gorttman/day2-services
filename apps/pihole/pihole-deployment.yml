@@ -32,6 +32,20 @@ spec:
         nameservers:
         - 1.1.1.1
         - 1.0.0.1
+      initContainers:
+      - name: gravity-update
+        image: pihole/pihole:2024.07.0
+        command: ["pihole", "-g"]
+        env:
+        - name: TZ
+          valueFrom:
+            configMapKeyRef:
+              name: pihole-config
+              key: TZ
+        volumeMounts:
+        - name: pihole-data
+          mountPath: /etc/pihole
+          subPath: pihole
       containers:
       - name: pihole
         image: pihole/pihole:2024.07.0
@@ -81,6 +95,8 @@ spec:
             configMapKeyRef:
               name: pihole-config
               key: FTLCONF_LOCAL_IPV4
+        - name: FTLCONF_REPLY_WHEN_BUSY
+          value: REFUSE
         volumeMounts:
         - name: pihole-data
           mountPath: /etc/pihole
