@@ -27,5 +27,8 @@ x11vnc \
     -quiet \
     -bg
 
+# Start noVNC websockify proxy (HTTP on 8080 → VNC on 5900)
+websockify --web /opt/novnc 8080 localhost:5900 &
+
 # Start Obsidian
 exec /opt/obsidian/obsidian --no-sandbox --disable-gpu

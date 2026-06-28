@@ -14,5 +14,9 @@ spec:
     port: 5900
     targetPort: 5900
     protocol: TCP
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
   selector:
     app: obsidian

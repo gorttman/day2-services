@@ -34,6 +34,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       xvfb \
       openbox \
       x11vnc \
+      python3 \
+      python3-websockify \
+      curl \
+      ca-certificates \
       libnss3 \
       libatk1.0-0 \
       libatk-bridge2.0-0 \
@@ -56,10 +60,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libxss1 \
     && rm -rf /var/lib/apt/lists/*
 
+RUN curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v1.5.0.tar.gz \
+      | tar -xz -C /opt && mv /opt/noVNC-1.5.0 /opt/novnc \
+    && ln -s /opt/novnc/vnc.html /opt/novnc/index.html
+
 COPY --from=extract /opt/obsidian /opt/obsidian
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 5900
+EXPOSE 5900 8080
 
 ENTRYPOINT ["/entrypoint.sh"]
