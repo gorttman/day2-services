@@ -22,7 +22,7 @@ metadata:
     app.kubernetes.io/name: obsidian
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/cluster-issuer: "private-ca"
     traefik.ingress.kubernetes.io/router.middlewares: obsidian-obsidian-to-novnc@kubernetescrd
 spec:
   ingressClassName: traefik

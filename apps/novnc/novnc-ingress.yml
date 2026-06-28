@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: novnc
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/cluster-issuer: "private-ca"
     traefik.ingress.kubernetes.io/router.middlewares: remote-access-novnc-redirect@kubernetescrd
 spec:
   ingressClassName: traefik
