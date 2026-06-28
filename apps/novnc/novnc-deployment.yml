@@ -38,7 +38,7 @@ spec:
       - name: novnc
         image: ghcr.io/gorttman/novnc:latest
         imagePullPolicy: Always
-        command: ["websockify", "--web", "/opt/novnc", "8080", "192.168.2.163:5900"]
+        command: ["websockify", "--web", "/opt/novnc", "--token-file", "/tokens/tokens.cfg", "8080"]
         ports:
         - name: http
           containerPort: 8080
@@ -50,6 +50,10 @@ spec:
           value: "192.168.2.163"
         - name: REMOTE_PORT
           value: "5900"
+        volumeMounts:
+        - name: tokens
+          mountPath: /tokens
+          readOnly: true
         resources:
           requests:
             memory: "64Mi"
@@ -73,3 +77,8 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
+
+      volumes:
+      - name: tokens
+        configMap:
+          name: novnc-tokens

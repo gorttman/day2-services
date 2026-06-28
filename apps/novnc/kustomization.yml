@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - novnc-namespace.yml
+  - novnc-tokens-cm.yml
   - novnc-deployment.yml
   - novnc-service.yml
   - novnc-middleware.yml

@@ -9,5 +9,5 @@ metadata:
 spec:
   redirectRegex:
     regex: "^(https?://[^/]+)/?$"
-    replacement: "${1}/vnc.html"
+    replacement: "${1}/vnc.html?autoconnect=true&path=websockify%3Ftoken%3Dmac"
     permanent: true
