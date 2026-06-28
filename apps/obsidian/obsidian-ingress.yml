@@ -9,7 +9,7 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    # KasmVNC requires long-lived WebSocket connections
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
