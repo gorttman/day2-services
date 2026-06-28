@@ -1,0 +1,13 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: novnc-redirect
+  namespace: remote-access
+  labels:
+    app: novnc
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  redirectRegex:
+    regex: "^https?://([^/]+)/?$"
+    replacement: "https://${1}/vnc.html"
+    permanent: true
