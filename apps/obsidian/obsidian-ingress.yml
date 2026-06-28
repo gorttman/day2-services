@@ -9,18 +9,14 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
   - hosts:
-    - obsidian.pilab.local
+    - obsidian.i3sec.com.au
     secretName: obsidian-tls
   rules:
-  - host: obsidian.pilab.local
+  - host: obsidian.i3sec.com.au
     http:
       paths:
       - path: /
