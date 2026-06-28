@@ -7,17 +7,10 @@ metadata:
     app: pihole
     app.kubernetes.io/name: pihole
     argocd.argoproj.io/managed-by: argocd
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
 spec:
-  ingressClassName: nginx
-  tls:
-  - hosts:
-    - pihole.pilab.local
-    secretName: pihole-tls
+  ingressClassName: traefik
   rules:
-  - host: pihole.pilab.local
+  - host: pihole.i3sec.com.au
     http:
       paths:
       - path: /
@@ -26,5 +19,4 @@ spec:
           service:
             name: pihole-web
             port:
-              number: 80
-
+              number: 8080

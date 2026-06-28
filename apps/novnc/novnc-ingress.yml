@@ -7,16 +7,11 @@ metadata:
     app: novnc
     app.kubernetes.io/name: novnc
     argocd.argoproj.io/managed-by: argocd
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 spec:
-  ingressClassName: nginx
-  tls:
-  - secretName: novnc-tls
+  ingressClassName: traefik
   rules:
-  - http:
+  - host: novnc.i3sec.com.au
+    http:
       paths:
       - path: /
         pathType: Prefix
