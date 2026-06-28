@@ -8,6 +8,6 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
 spec:
   redirectRegex:
-    regex: "^https?://([^/]+)/?$"
-    replacement: "https://${1}/vnc.html"
+    regex: "^(https?://[^/]+)/?$"
+    replacement: "${1}/vnc.html"
     permanent: true
