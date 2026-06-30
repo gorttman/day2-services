@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vscode-server
+  namespace: vscode-server
+  labels:
+    app: vscode-server
+    app.kubernetes.io/name: vscode-server
+    app.kubernetes.io/component: dev-tools
+    app.kubernetes.io/part-of: day2-services
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vscode-server
+  template:
+    metadata:
+      labels:
+        app: vscode-server
+        app.kubernetes.io/name: vscode-server
+        app.kubernetes.io/component: dev-tools
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: lane
+                operator: In
+                values:
+                - applications
+
+      containers:
+      - name: vscode-server
+        image: ghcr.io/gorttman/vscode-server:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vscode-server-secret
+              key: password
+        volumeMounts:
+        - name: data
+          mountPath: /home/coder
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: vscode-server-data
