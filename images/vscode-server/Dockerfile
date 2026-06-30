@@ -7,4 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ansible jq unzip openssh-client iputils-ping dnsutils \
   && rm -rf /var/lib/apt/lists/*
 
-USER 1000
+RUN usermod -l gorttman coder \
+    && usermod -d /home/gorttman -m gorttman \
+    && groupmod -n gorttman coder
+
+USER gorttman
