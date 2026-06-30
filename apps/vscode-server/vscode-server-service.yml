@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vscode-server
+  namespace: vscode-server
+  labels:
+    app: vscode-server
+    app.kubernetes.io/name: vscode-server
+    app.kubernetes.io/component: dev-tools
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: vscode-server
