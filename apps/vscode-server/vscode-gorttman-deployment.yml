@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vscode-server
+  name: vscode-gorttman
   namespace: vscode-server
   labels:
-    app: vscode-server
+    app: vscode-gorttman
     app.kubernetes.io/name: vscode-server
     app.kubernetes.io/component: dev-tools
     app.kubernetes.io/part-of: day2-services
@@ -15,42 +15,48 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: vscode-server
+      app: vscode-gorttman
   template:
     metadata:
       labels:
-        app: vscode-server
+        app: vscode-gorttman
         app.kubernetes.io/name: vscode-server
         app.kubernetes.io/component: dev-tools
     spec:
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 1
-            preference:
-              matchExpressions:
-              - key: lane
-                operator: In
-                values:
-                - applications
-
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
       containers:
       - name: vscode-server
         image: ghcr.io/gorttman/vscode-server:latest
         imagePullPolicy: Always
+        args:
+        - --bind-addr=0.0.0.0:8080
+        - --auth=pam
+        - --allow-root
+        - --base-path=/gorttman
+        - /home/gorttman
         ports:
         - name: http
           containerPort: 8080
           protocol: TCP
         env:
-        - name: PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: vscode-server-secret
-              key: password
+        - name: HOME
+          value: /home/gorttman
+        - name: USER
+          value: gorttman
         volumeMounts:
-        - name: data
+        - name: home
           mountPath: /home/gorttman
+        - name: shadow
+          mountPath: /etc/shadow
+          readOnly: true
+        - name: passwd
+          mountPath: /etc/passwd
+          readOnly: true
+        - name: pam-config
+          mountPath: /etc/pam.d/code-server
+          subPath: code-server
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -60,7 +66,7 @@ spec:
             cpu: "2000m"
         livenessProbe:
           httpGet:
-            path: /healthz
+            path: /gorttman/healthz
             port: 8080
           initialDelaySeconds: 30
           periodSeconds: 30
@@ -68,14 +74,25 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /healthz
+            path: /gorttman/healthz
             port: 8080
           initialDelaySeconds: 15
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
-
       volumes:
-      - name: data
-        persistentVolumeClaim:
-          claimName: vscode-server-data
+      - name: home
+        hostPath:
+          path: /home/gorttman
+          type: Directory
+      - name: shadow
+        hostPath:
+          path: /etc/shadow
+          type: File
+      - name: passwd
+        hostPath:
+          path: /etc/passwd
+          type: File
+      - name: pam-config
+        configMap:
+          name: pam-gorttman

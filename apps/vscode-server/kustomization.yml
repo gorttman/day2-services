@@ -3,8 +3,7 @@ kind: Kustomization
 
 resources:
   - vscode-server-namespace.yml
-  - vscode-server-pvc.yml
-  - vscode-server-secret.yml
-  - vscode-server-deployment.yml
-  - vscode-server-service.yml
+  - vscode-gorttman-pam-cm.yml
+  - vscode-gorttman-deployment.yml
+  - vscode-gorttman-service.yml
   - vscode-server-ingress.yml

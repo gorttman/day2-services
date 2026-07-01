@@ -19,10 +19,10 @@ spec:
   - host: vscode.i3sec.com.au
     http:
       paths:
-      - path: /
+      - path: /gorttman
         pathType: Prefix
         backend:
           service:
-            name: vscode-server
+            name: vscode-gorttman
             port:
               number: 80

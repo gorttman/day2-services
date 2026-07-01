@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pam-gorttman
+  namespace: vscode-server
+  labels:
+    app: vscode-gorttman
+    argocd.argoproj.io/managed-by: argocd
+data:
+  code-server: |
+    auth required pam_unix.so shadow
+    auth required pam_succeed_if.so user = gorttman
+    account required pam_unix.so
