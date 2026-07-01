@@ -31,7 +31,7 @@ spec:
         imagePullPolicy: Always
         args:
         - --bind-addr=0.0.0.0:8080
-        - --auth=pam
+        - --auth=none
         - --allow-root
         - --base-path=/gorttman
         - /home/gorttman
@@ -47,16 +47,6 @@ spec:
         volumeMounts:
         - name: home
           mountPath: /home/gorttman
-        - name: shadow
-          mountPath: /etc/shadow
-          readOnly: true
-        - name: passwd
-          mountPath: /etc/passwd
-          readOnly: true
-        - name: pam-config
-          mountPath: /etc/pam.d/code-server
-          subPath: code-server
-          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -85,14 +75,3 @@ spec:
         hostPath:
           path: /home/gorttman
           type: Directory
-      - name: shadow
-        hostPath:
-          path: /etc/shadow
-          type: File
-      - name: passwd
-        hostPath:
-          path: /etc/passwd
-          type: File
-      - name: pam-config
-        configMap:
-          name: pam-gorttman

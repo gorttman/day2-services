@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vscode-gorttman-auth
+  namespace: vscode-server
+  labels:
+    app: vscode-gorttman-auth
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  selector:
+    app: vscode-gorttman-auth

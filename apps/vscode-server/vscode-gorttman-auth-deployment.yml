@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vscode-gorttman-auth
+  namespace: vscode-server
+  labels:
+    app: vscode-gorttman-auth
+    app.kubernetes.io/name: vscode-server
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: day2-services
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vscode-gorttman-auth
+  template:
+    metadata:
+      labels:
+        app: vscode-gorttman-auth
+        app.kubernetes.io/name: vscode-server
+        app.kubernetes.io/component: auth
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
+      containers:
+      - name: vscode-auth
+        image: ghcr.io/gorttman/vscode-auth:latest
+        imagePullPolicy: Always
+        env:
+        - name: ALLOWED_USER
+          value: gorttman
+        - name: PAM_SERVICE
+          value: code-server
+        ports:
+        - name: http
+          containerPort: 8081
+          protocol: TCP
+        volumeMounts:
+        - name: shadow
+          mountPath: /etc/shadow
+          readOnly: true
+        - name: passwd
+          mountPath: /etc/passwd
+          readOnly: true
+        - name: pam-config
+          mountPath: /etc/pam.d/code-server
+          subPath: code-server
+          readOnly: true
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      volumes:
+      - name: shadow
+        hostPath:
+          path: /etc/shadow
+          type: File
+      - name: passwd
+        hostPath:
+          path: /etc/passwd
+          type: File
+      - name: pam-config
+        configMap:
+          name: pam-gorttman

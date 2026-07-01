@@ -1,0 +1,13 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: vscode-gorttman-auth
+  namespace: vscode-server
+  labels:
+    app: vscode-gorttman
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  forwardAuth:
+    address: http://vscode-gorttman-auth.vscode-server.svc.cluster.local:8081/
+    authResponseHeaders:
+      - Remote-User

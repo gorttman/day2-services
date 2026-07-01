@@ -9,6 +9,7 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "private-ca"
+    traefik.ingress.kubernetes.io/router.middlewares: vscode-server-vscode-gorttman-auth@kubernetescrd
 spec:
   ingressClassName: traefik
   tls:
