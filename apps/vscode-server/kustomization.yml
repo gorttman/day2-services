@@ -9,4 +9,6 @@ resources:
   - vscode-gorttman-auth-deployment.yml
   - vscode-gorttman-auth-service.yml
   - vscode-gorttman-middleware.yml
+  - vscode-gorttman-stripprefix-middleware.yml
+  - vscode-gorttman-trailingslash-middleware.yml
   - vscode-server-ingress.yml

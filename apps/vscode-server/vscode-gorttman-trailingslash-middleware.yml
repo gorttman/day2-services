@@ -1,0 +1,13 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: vscode-gorttman-trailing-slash
+  namespace: vscode-server
+  labels:
+    app: vscode-gorttman
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  redirectRegex:
+    regex: "^(https?://[^/]+)/gorttman$"
+    replacement: "${1}/gorttman/"
+    permanent: false
