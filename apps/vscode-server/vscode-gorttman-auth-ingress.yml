@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vscode-gorttman-auth
+  namespace: vscode-server
+  labels:
+    app: vscode-gorttman-auth
+    app.kubernetes.io/name: vscode-server
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - vscode.i3sec.com.au
+    secretName: vscode-server-tls
+  rules:
+  - host: vscode.i3sec.com.au
+    http:
+      paths:
+      - path: /gorttman/auth
+        pathType: Prefix
+        backend:
+          service:
+            name: vscode-gorttman-auth
+            port:
+              number: 8081

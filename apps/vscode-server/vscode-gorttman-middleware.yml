@@ -8,6 +8,6 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
 spec:
   forwardAuth:
-    address: http://vscode-gorttman-auth.vscode-server.svc.cluster.local:8081/
+    address: http://vscode-gorttman-auth.vscode-server.svc.cluster.local:8081/verify
     authResponseHeaders:
       - Remote-User
