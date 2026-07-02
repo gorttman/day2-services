@@ -32,7 +32,7 @@ spec:
         args:
         - --bind-addr=0.0.0.0:8080
         - --auth=none
-        - /home/gorttman
+        - /home/gorttman/.vscode-blank
         ports:
         - name: http
           containerPort: 8080
