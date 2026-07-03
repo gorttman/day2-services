@@ -15,7 +15,7 @@ spec:
   # IP. Now that MetalLB is the sole LoadBalancer controller, that value
   # fails allocation outright (outside the configured pool) and blocks this
   # Service forever. Pinned to what MetalLB already assigned in practice.
-  loadBalancerIP: 192.168.2.242
+  loadBalancerIP: 192.168.2.245
   ports:
   - name: dns-tcp
     port: 53
