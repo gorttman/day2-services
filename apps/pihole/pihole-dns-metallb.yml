@@ -1,0 +1,31 @@
+# Temporary parallel Service for the MetalLB cutover. Same pihole pods as
+# pihole-dns (in pihole-service.yml), served by MetalLB instead of k3s's
+# ServiceLB, so the new floating IP can be tested and DNS clients migrated
+# gradually with zero downtime. Once devices are pointed at 192.168.2.241
+# and it's confirmed stable, pihole-dns (ServiceLB) gets removed and this
+# Service takes over the name/role - see day1-foundation apps/metallb/README.md.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-dns-metallb
+  namespace: pihole
+  labels:
+    app: pihole
+    app.kubernetes.io/name: pihole
+    app.kubernetes.io/component: dns
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    metallb.io/loadBalancerIPs: 192.168.2.241
+spec:
+  type: LoadBalancer
+  ports:
+  - name: dns-tcp
+    port: 53
+    targetPort: 53
+    protocol: TCP
+  - name: dns-udp
+    port: 53
+    targetPort: 53
+    protocol: UDP
+  selector:
+    app: pihole

@@ -7,4 +7,5 @@ resources:
   - pihole-pvc.yml
   - pihole-deployment.yml
   - pihole-service.yml
+  - pihole-dns-metallb.yml
   - pihole-ingress.yml
