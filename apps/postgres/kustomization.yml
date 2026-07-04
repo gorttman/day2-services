@@ -7,3 +7,4 @@ resources:
   - postgres-init-cm.yml
   - postgres-statefulset.yml
   - postgres-service.yml
+  - postgres-adminer.yml

@@ -14,9 +14,19 @@ spec:
     repoURL: https://github.com/gorttman/day2-services.git
     targetRevision: main
     path: apps/postgres
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: adminer
+      namespace: postgres
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      # Without this, selfHeal re-applies replicas:0 from git on every sync
+      # despite ignoreDifferences, defeating manual scale-up
+      - RespectIgnoreDifferences=true
