@@ -13,7 +13,9 @@ data:
   TZ: "America/New_York"
   WEBPASSWORD: "changeme123"
   PIHOLE_DNS_: "1.1.1.1;1.0.0.1"
-  DNSSEC: "true"
+  # DNSSEC off: upstream 1.1.1.1/1.0.0.1 already validate, and dnsmasq's own
+  # validation breaks on truncated UDP DNSKEY replies (returns empty NOERROR)
+  DNSSEC: "false"
   DNSMASQ_LISTENING: "all"
   FTLCONF_LOCAL_IPV4: "192.168.2.245"
 

@@ -41,10 +41,23 @@ spec:
         - |
           grep -v '^GRAVITYDB=' /etc/pihole/pihole-FTL.conf > /tmp/ftl.conf || true
           cat /tmp/ftl.conf > /etc/pihole/pihole-FTL.conf
+          # /db is a fresh 1777 tmpfs on every pod start; fs.protected_regular
+          # then blocks root from writing pihole-owned files there, which
+          # breaks `pihole -g`. Normalize ownership/mode before FTL starts.
+          chown 999:1000 /db
+          chmod 0775 /db
+          # gravity.db lives on tmpfs (SQLite unsafe on NFS) and is lost on
+          # restart; restore the last backup or blocking silently becomes a no-op
+          if [ -s /etc/pihole/gravity-backup.db ]; then
+            cp /etc/pihole/gravity-backup.db /db/gravity.db
+            chown 999:1000 /db/gravity.db
+          fi
         volumeMounts:
         - name: pihole-data
           mountPath: /etc/pihole
           subPath: pihole
+        - name: pihole-db
+          mountPath: /db
       containers:
       - name: pihole
         image: pihole/pihole:2024.07.0
@@ -139,6 +152,36 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
+      - name: gravity-backup
+        image: busybox:1.36
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Daily copy of the tmpfs gravity.db to NFS so the init container can
+          # restore it after a restart. Plain file copy is NFS-safe (it is live
+          # SQLite writes that are not). Size guard avoids clobbering a good
+          # backup with a fresh empty db.
+          while true; do
+            sleep 86400
+            if [ "$(stat -c %s /db/gravity.db 2>/dev/null || echo 0)" -gt 1000000 ]; then
+              cp /db/gravity.db /etc/pihole/gravity-backup.db.tmp &&
+              mv /etc/pihole/gravity-backup.db.tmp /etc/pihole/gravity-backup.db
+            fi
+          done
+        volumeMounts:
+        - name: pihole-data
+          mountPath: /etc/pihole
+          subPath: pihole
+        - name: pihole-db
+          mountPath: /db
+        resources:
+          requests:
+            memory: 8Mi
+            cpu: 5m
+          limits:
+            memory: 32Mi
+            cpu: 50m
       volumes:
       - name: pihole-data
         persistentVolumeClaim:
