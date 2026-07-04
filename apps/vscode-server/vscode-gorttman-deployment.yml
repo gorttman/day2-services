@@ -32,6 +32,9 @@ spec:
         args:
         - --bind-addr=0.0.0.0:8080
         - --auth=none
+        # Single-user server over the user's own home dir - the Workspace
+        # Trust prompt only blocks extensions without adding any security.
+        - --disable-workspace-trust
         - /home/gorttman/.vscode-blank
         ports:
         - name: http
