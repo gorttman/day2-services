@@ -22,6 +22,10 @@ spec:
         app: paperless
         app.kubernetes.io/name: paperless
     spec:
+      # The 'paperless' Service otherwise injects PAPERLESS_PORT=tcp://...
+      # (legacy Docker service links), which Paperless misreads as its own
+      # port config and crashes granian on boot
+      enableServiceLinks: false
       containers:
       - name: paperless
         image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15
