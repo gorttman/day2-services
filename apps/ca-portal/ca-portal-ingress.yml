@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ca-portal
+  namespace: ca-portal
+  labels:
+    app: ca-portal
+    app.kubernetes.io/name: ca-portal
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  # Deliberately plain HTTP, no tls block: devices fetch this page BEFORE
+  # they trust the CA, so an https version would only show warnings.
+  # The cert is public data; verify via the SHA-256 fingerprint on the page.
+  ingressClassName: traefik
+  rules:
+  - host: ca.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ca-portal
+            port:
+              number: 80

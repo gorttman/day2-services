@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ca-portal-content
+  namespace: ca-portal
+  labels:
+    app: ca-portal
+    app.kubernetes.io/name: ca-portal
+    app.kubernetes.io/part-of: day2-services
+    argocd.argoproj.io/managed-by: argocd
+data:
+  # Public CA certificate only — the private key never leaves the
+  # cert-manager namespace. Re-embed here if the CA is ever rotated
+  # (kubectl get secret -n cert-manager private-ca-tls -o jsonpath='{.data.tls\.crt}' | base64 -d)
+  i3sec-ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIBdjCCARygAwIBAgIQZhP9I4/cptzGevjF/APPWTAKBggqhkjOPQQDAjAbMRkw
+    FwYDVQQDExBpM3NlYy1wcml2YXRlLWNhMB4XDTI2MDYyODEyMjY0NloXDTM2MDYy
+    NTEyMjY0NlowGzEZMBcGA1UEAxMQaTNzZWMtcHJpdmF0ZS1jYTBZMBMGByqGSM49
+    AgEGCCqGSM49AwEHA0IABD7GhswgM/YqFQ2374TvRDp4EXRlmqnXfVUFCBRObNTz
+    YtTr0U47JvFfsOL9MdUkeiimYgNio0xmniU4/YvocJ6jQjBAMA4GA1UdDwEB/wQE
+    AwICpDAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBQsNgPwrSKSrkKBxWQgmT+r
+    +a4laDAKBggqhkjOPQQDAgNIADBFAiBf3ft3/k9HEMnSEy2bDM6fF/1tgpwYfgLh
+    DC71yxwkHwIhALJHRzUB6dHV2j3S/wUGjKsHe62QEHlrgMj+/gwUrKlc
+    -----END CERTIFICATE-----
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>i3sec Lab CA</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+      code { background: #eee; padding: 0.1em 0.3em; border-radius: 3px; word-break: break-all; }
+      .dl { display: inline-block; padding: 0.6em 1.2em; background: #2563eb; color: #fff; border-radius: 6px; text-decoration: none; font-weight: 600; }
+      h2 { margin-top: 1.6em; }
+      @media (prefers-color-scheme: dark) { body { background: #111; color: #ddd; } code { background: #222; } }
+    </style>
+    </head>
+    <body>
+    <h1>i3sec Lab Certificate Authority</h1>
+    <p>Install this CA certificate once per device and every lab service
+    (argocd, pihole, novnc, obsidian, vscode) gets a green padlock.
+    Valid until June 2036.</p>
+    <p><a class="dl" href="/i3sec-ca.crt" download>Download i3sec-ca.crt</a></p>
+    <p>SHA-256 fingerprint — verify it matches after install:<br>
+    <code>22:C6:CB:B4:ED:A7:0E:74:7B:A8:A3:C6:C9:AD:40:8E:3B:CE:44:D4:68:68:03:53:85:AE:CC:5C:EE:CC:C4:94</code></p>
+
+    <h2>iPhone / iPad</h2>
+    <p>Download in Safari &rarr; Settings &rarr; <b>Profile Downloaded</b> &rarr; Install.
+    Then Settings &rarr; General &rarr; About &rarr; Certificate Trust Settings &rarr;
+    enable full trust for <b>i3sec-private-ca</b> (this second step is required).</p>
+
+    <h2>Android</h2>
+    <p>Download, then Settings &rarr; Security &rarr; More / Encryption &amp; credentials &rarr;
+    Install a certificate &rarr; <b>CA certificate</b> &rarr; select the file.</p>
+
+    <h2>Windows</h2>
+    <p>Double-click the file &rarr; Install Certificate &rarr; Local Machine &rarr;
+    Place in <b>Trusted Root Certification Authorities</b>.</p>
+
+    <h2>macOS</h2>
+    <p>Double-click to add to Keychain, then in Keychain Access find
+    <b>i3sec-private-ca</b> &rarr; Get Info &rarr; Trust &rarr; Always Trust.</p>
+
+    <h2>Linux (Debian/Ubuntu)</h2>
+    <p><code>sudo cp i3sec-ca.crt /usr/local/share/ca-certificates/ &amp;&amp; sudo update-ca-certificates</code></p>
+
+    <h2>Firefox (any OS)</h2>
+    <p>Firefox uses its own store: Settings &rarr; Privacy &amp; Security &rarr;
+    Certificates &rarr; View Certificates &rarr; Authorities &rarr; Import,
+    tick "identify websites".</p>
+    </body>
+    </html>

@@ -7,3 +7,4 @@ resources:
   - cert-manager/cert-manager-app.yml
   - obsidian/obsidian-app.yml
   - vscode-server/vscode-server-app.yml
+  - ca-portal/ca-portal-app.yml

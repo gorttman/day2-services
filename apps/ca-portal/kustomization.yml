@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ca-portal-content-cm.yml
+  - ca-portal-deployment.yml
+  - ca-portal-service.yml
+  - ca-portal-ingress.yml
