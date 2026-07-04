@@ -9,7 +9,10 @@ metadata:
     app.kubernetes.io/part-of: day2-services
     argocd.argoproj.io/managed-by: argocd
 spec:
-  replicas: 1
+  # Off by default; the Application ignores replica drift, so switch on with
+  #   sudo kubectl scale deploy ca-portal -n ca-portal --replicas=1
+  # and back to 0 when done - ArgoCD will not fight either direction.
+  replicas: 0
   selector:
     matchLabels:
       app: ca-portal
