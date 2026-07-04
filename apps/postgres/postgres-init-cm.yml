@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initdb
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+data:
+  # Runs only on FIRST initialization of an empty PGDATA. Adding a new
+  # logical DB here does NOT create it on an already-initialized instance -
+  # for that, run the same statements via psql against the running pod
+  # (see README.md), then add them here so a from-scratch rebuild matches.
+  01-app-databases.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" <<-SQL
+      CREATE ROLE paperless LOGIN PASSWORD '$PAPERLESS_DB_PASSWORD';
+      CREATE DATABASE paperless OWNER paperless;
+    SQL
