@@ -61,8 +61,13 @@ data:
     Place in <b>Trusted Root Certification Authorities</b>.</p>
 
     <h2>macOS</h2>
-    <p>Double-click to add to Keychain, then in Keychain Access find
-    <b>i3sec-private-ca</b> &rarr; Get Info &rarr; Trust &rarr; Always Trust.</p>
+    <p>Easiest: paste this in Terminal (imports and trusts in one step,
+    asks for your Mac password):</p>
+    <pre><code>sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ~/Downloads/i3sec-ca.crt</code></pre>
+    <p>Or via the GUI: double-click to add to Keychain, then in Keychain
+    Access find <b>i3sec-private-ca</b> &rarr; Get Info &rarr; Trust &rarr;
+    Always Trust. If double-click gives error -25294, use Keychain Access
+    &rarr; File &rarr; Import Items and pick the <b>System</b> keychain.</p>
 
     <h2>Linux (Debian/Ubuntu)</h2>
     <p><code>sudo cp i3sec-ca.crt /usr/local/share/ca-certificates/ &amp;&amp; sudo update-ca-certificates</code></p>
