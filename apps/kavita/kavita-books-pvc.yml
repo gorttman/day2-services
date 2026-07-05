@@ -1,0 +1,21 @@
+# Claims the static qnap-books PV (day1-foundation apps/qnap-storage):
+# the books library on the QNAP, mounted by kubelet on whichever node
+# runs the pod. Library content only - Kavita's config/SQLite stays on
+# its local-path PVC.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kavita-books
+  namespace: kavita
+  labels:
+    app: kavita
+    app.kubernetes.io/name: kavita
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: qnap-static
+  volumeName: qnap-books
+  resources:
+    requests:
+      storage: 1Ti

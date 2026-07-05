@@ -47,6 +47,11 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /kavita/config
+        # QNAP books library (static NFS PV, day1 apps/qnap-storage).
+        # readOnly for now - flip if Kavita should manage files itself.
+        - name: books
+          mountPath: /books
+          readOnly: true
         resources:
           requests:
             memory: "256Mi"
@@ -74,3 +79,6 @@ spec:
       - name: config
         persistentVolumeClaim:
           claimName: kavita-config
+      - name: books
+        persistentVolumeClaim:
+          claimName: kavita-books
