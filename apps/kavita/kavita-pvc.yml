@@ -1,17 +1,13 @@
-# PLACEHOLDER STORAGE: local-path (k3s default) is node-local and
-# non-durable - same caveat as apps/jellyfin. Swap storageClassName to an
-# NFS-backed class once real storage exists; the swap requires recreating
-# the PVC (delete + resync), and Kavita's internal SQLite DB lives here,
-# so it must never sit directly on NFS (pihole gravity.db lesson).
-#
-# NOTE: only k8smaster has real disk. On diskless pinode-01,
-# /var/lib/rancher/k3s (including local-path volumes) is a 4G RAM tmpfs
-# wiped on reboot - never bind local-path PVCs there. Hence the
-# nodeSelector in the deployment.
+# Kavita config now runs in a RAM emptyDir (pihole gravity.db pattern -
+# SQLite must never sit on NFS, and only k8smaster has real local disk).
+# This PVC holds the periodic tar backups the sidecar writes; the init
+# container restores the newest one on pod start. nfs-client is safe
+# here because the backups are plain tar files, not a live SQLite DB -
+# and it is reachable from any node, so the pod can float.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: kavita-config
+  name: kavita-config-backup
   namespace: kavita
   labels:
     app: kavita
@@ -20,7 +16,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: local-path
+  storageClassName: nfs-client
   resources:
     requests:
       storage: 2Gi
