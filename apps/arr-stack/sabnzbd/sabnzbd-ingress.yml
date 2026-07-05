@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sabnzbd
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: sabnzbd
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+spec:
+  # Internal-only: no Cloudflare Tunnel annotation; DNS in dns-conf.
+  # Backend is the shared arr-stack pod, i.e. traffic enters through
+  # Gluetun's network namespace and firewall (FIREWALL_INPUT_PORTS).
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - sabnzbd.i3sec.com.au
+    secretName: sabnzbd-tls
+  rules:
+  - host: sabnzbd.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: sabnzbd
+            port:
+              number: 8080

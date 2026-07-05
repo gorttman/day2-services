@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sabnzbd
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: sabnzbd
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  # The shared pod is NotReady while gluetun CrashLoops on the sealed
+  # placeholder VPN creds; keep the UIs reachable regardless.
+  publishNotReadyAddresses: true
+  selector:
+    app: arr-stack
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP

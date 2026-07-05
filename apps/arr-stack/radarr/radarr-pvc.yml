@@ -1,0 +1,21 @@
+# PLACEHOLDER STORAGE: local-path is node-local and non-durable - same
+# caveats and the same temporary k8smaster nodeSelector as apps/jellyfin
+# (see the arr-stack deployment). The internal SQLite DB lives here, so
+# it must never sit directly on NFS. No shared media PVC yet - that is a
+# configuration-time decision, out of scope for the install pass.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: radarr-config
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: radarr
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi

@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bazarr
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: bazarr
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+spec:
+  # Internal-only: no Cloudflare Tunnel annotation; DNS in dns-conf.
+  # Backend is the shared arr-stack pod, i.e. traffic enters through
+  # Gluetun's network namespace and firewall (FIREWALL_INPUT_PORTS).
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - bazarr.i3sec.com.au
+    secretName: bazarr-tls
+  rules:
+  - host: bazarr.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: bazarr
+            port:
+              number: 6767
