@@ -26,9 +26,16 @@ spec:
     spec:
       # workload-affinity: when Jellyfin gets a preferred home, wire in the
       # patch template from components/workload-affinity/ and add jellyfin
-      # to day1-foundation/ansible/label-nodes.yml. Until the local-path
-      # placeholder storage is swapped for NFS, affinity is moot anyway:
-      # the PVC pins the pod to the node it first binds on.
+      # to day1-foundation/ansible/label-nodes.yml.
+      #
+      # TEMPORARY hard pin to k8smaster, tied to the local-path placeholder:
+      # on the diskless pinode-01 the whole k3s agent dir (containerd
+      # images AND local-path volumes) is a 4G RAM tmpfs - the jellyfin
+      # image doesn't fit (repeating disk-pressure evictions) and any PVC
+      # data there would be lost on reboot. k8smaster has the real disk.
+      # Remove this together with the storage swap.
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
       enableServiceLinks: false  # avoid injected <SVC>_PORT env vars (bit paperless)
       containers:
       - name: jellyfin

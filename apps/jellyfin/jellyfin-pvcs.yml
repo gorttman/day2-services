@@ -5,6 +5,11 @@
 # class once real storage exists; that swap requires recreating the PVCs
 # (delete + resync), not just editing them in place.
 #
+# NOTE: only k8smaster has real disk. On the diskless pinode-01,
+# /var/lib/rancher/k3s (including local-path volumes) is a 4G RAM tmpfs
+# wiped on reboot - never bind local-path PVCs there. Hence the
+# nodeSelector in the deployment.
+#
 # Jellyfin's internal SQLite DB lives on the config volume, which is the
 # other reason this is NOT on nfs-client today: SQLite on NFS corrupts
 # (see the pihole gravity.db incident, day2-services apps/pihole).
