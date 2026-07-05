@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyfin
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/component: media-server
+    app.kubernetes.io/part-of: day2-services
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  # RWO local-path volume: old pod must release it before the new one starts
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jellyfin
+  template:
+    metadata:
+      labels:
+        app: jellyfin
+        app.kubernetes.io/name: jellyfin
+        app.kubernetes.io/component: media-server
+    spec:
+      # workload-affinity: when Jellyfin gets a preferred home, wire in the
+      # patch template from components/workload-affinity/ and add jellyfin
+      # to day1-foundation/ansible/label-nodes.yml. Until the local-path
+      # placeholder storage is swapped for NFS, affinity is moot anyway:
+      # the PVC pins the pod to the node it first binds on.
+      enableServiceLinks: false  # avoid injected <SVC>_PORT env vars (bit paperless)
+      containers:
+      - name: jellyfin
+        image: jellyfin/jellyfin:10.11.11
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8096
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: cache
+          mountPath: /cache
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8096
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8096
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: jellyfin-config
+      - name: cache
+        persistentVolumeClaim:
+          claimName: jellyfin-cache

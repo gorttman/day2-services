@@ -10,3 +10,4 @@ resources:
   - ca-portal/ca-portal-app.yml
   - postgres/postgres-app.yml
   - paperless/paperless-app.yml
+  - jellyfin/jellyfin-app.yml
