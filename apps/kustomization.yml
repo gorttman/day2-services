@@ -11,3 +11,4 @@ resources:
   - postgres/postgres-app.yml
   - paperless/paperless-app.yml
   - jellyfin/jellyfin-app.yml
+  - arr-stack/arr-stack-app.yml

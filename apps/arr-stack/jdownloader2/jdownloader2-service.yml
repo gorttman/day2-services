@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jdownloader2
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: jdownloader2
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  # The shared pod is NotReady while gluetun CrashLoops on the sealed
+  # placeholder VPN creds; keep the UIs reachable regardless.
+  publishNotReadyAddresses: true
+  selector:
+    app: arr-stack
+  ports:
+  - name: http
+    port: 5800
+    targetPort: 5800
+    protocol: TCP

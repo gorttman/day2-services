@@ -1,0 +1,209 @@
+# One shared pod: containers in a pod share a network namespace, which is
+# the Kubernetes equivalent of docker-compose `network_mode:
+# service:gluetun`. Every arr app's traffic - inbound (Services/Ingress
+# target this pod) and outbound - passes through Gluetun's namespace;
+# Gluetun's firewall only admits the UI ports listed in
+# FIREWALL_INPUT_PORTS and only routes egress via the VPN tunnel.
+#
+# EXPECTED-DEGRADED UNTIL VPN CREDS EXIST: gluetun/gluetun-sealed-secret
+# holds sealed PLACEHOLDER values, so the gluetun container CrashLoops by
+# design until real Mullvad credentials are sealed over it. The app UIs
+# stay reachable meanwhile (publishNotReadyAddresses on the Services).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arr-stack
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: arr-stack
+    app.kubernetes.io/component: media-automation
+    app.kubernetes.io/part-of: day2-services
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  # RWO local-path volumes: old pod must release them before the new one starts
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: arr-stack
+  template:
+    metadata:
+      labels:
+        app: arr-stack
+        app.kubernetes.io/name: arr-stack
+        app.kubernetes.io/component: media-automation
+    spec:
+      # workload-affinity: when the arr stack gets a preferred home, wire
+      # in the patch template from components/workload-affinity/ and add
+      # arr-stack to day1-foundation/ansible/label-nodes.yml.
+      #
+      # TEMPORARY hard pin to k8smaster, tied to the local-path
+      # placeholder (same reasoning as apps/jellyfin): on diskless
+      # pinode-01 the k3s agent dir is a 4G RAM tmpfs - seven images
+      # would evict-loop and PVC data would be lost on reboot. Remove
+      # together with the storage swap.
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
+      enableServiceLinks: false  # SONARR_PORT etc. would collide with app config
+      containers:
+      - name: gluetun
+        image: qmcgaw/gluetun:v3.41.1
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            add: ["NET_ADMIN"]
+        envFrom:
+        - secretRef:
+            name: gluetun-vpn   # sealed placeholder - see gluetun/README note
+        env:
+        - name: TZ
+          value: Australia/Sydney
+        # Admit the arr UIs through gluetun's firewall (inbound)
+        - name: FIREWALL_INPUT_PORTS
+          value: "8989,7878,9696,8080,6767,5800"
+        # Keep cluster traffic (DNS, kubelet probes, pod/svc CIDRs) off the VPN
+        - name: FIREWALL_OUTBOUND_SUBNETS
+          value: "10.42.0.0/16,10.43.0.0/16"
+        volumeMounts:
+        - name: dev-net-tun
+          mountPath: /dev/net/tun
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+      - name: sonarr
+        image: lscr.io/linuxserver/sonarr:4.0.19
+        imagePullPolicy: IfNotPresent
+        env:
+        - {name: PUID, value: "1000"}
+        - {name: PGID, value: "1000"}
+        - {name: TZ, value: Australia/Sydney}
+        ports:
+        - {name: sonarr, containerPort: 8989, protocol: TCP}
+        volumeMounts:
+        - name: sonarr-config
+          mountPath: /config
+        readinessProbe:
+          tcpSocket: {port: 8989}
+          initialDelaySeconds: 20
+          periodSeconds: 15
+        resources:
+          requests: {memory: "128Mi", cpu: "50m"}
+          limits: {memory: "1Gi", cpu: "1000m"}
+      - name: radarr
+        image: lscr.io/linuxserver/radarr:6.2.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - {name: PUID, value: "1000"}
+        - {name: PGID, value: "1000"}
+        - {name: TZ, value: Australia/Sydney}
+        ports:
+        - {name: radarr, containerPort: 7878, protocol: TCP}
+        volumeMounts:
+        - name: radarr-config
+          mountPath: /config
+        readinessProbe:
+          tcpSocket: {port: 7878}
+          initialDelaySeconds: 20
+          periodSeconds: 15
+        resources:
+          requests: {memory: "128Mi", cpu: "50m"}
+          limits: {memory: "1Gi", cpu: "1000m"}
+      - name: prowlarr
+        image: lscr.io/linuxserver/prowlarr:2.4.0
+        imagePullPolicy: IfNotPresent
+        env:
+        - {name: PUID, value: "1000"}
+        - {name: PGID, value: "1000"}
+        - {name: TZ, value: Australia/Sydney}
+        ports:
+        - {name: prowlarr, containerPort: 9696, protocol: TCP}
+        volumeMounts:
+        - name: prowlarr-config
+          mountPath: /config
+        readinessProbe:
+          tcpSocket: {port: 9696}
+          initialDelaySeconds: 20
+          periodSeconds: 15
+        resources:
+          requests: {memory: "128Mi", cpu: "50m"}
+          limits: {memory: "512Mi", cpu: "1000m"}
+      - name: sabnzbd
+        image: lscr.io/linuxserver/sabnzbd:5.0.4
+        imagePullPolicy: IfNotPresent
+        env:
+        - {name: PUID, value: "1000"}
+        - {name: PGID, value: "1000"}
+        - {name: TZ, value: Australia/Sydney}
+        ports:
+        - {name: sabnzbd, containerPort: 8080, protocol: TCP}
+        volumeMounts:
+        - name: sabnzbd-config
+          mountPath: /config
+        readinessProbe:
+          tcpSocket: {port: 8080}
+          initialDelaySeconds: 20
+          periodSeconds: 15
+        resources:
+          requests: {memory: "128Mi", cpu: "50m"}
+          limits: {memory: "1Gi", cpu: "1500m"}
+      - name: bazarr
+        image: lscr.io/linuxserver/bazarr:1.6.0
+        imagePullPolicy: IfNotPresent
+        env:
+        - {name: PUID, value: "1000"}
+        - {name: PGID, value: "1000"}
+        - {name: TZ, value: Australia/Sydney}
+        ports:
+        - {name: bazarr, containerPort: 6767, protocol: TCP}
+        volumeMounts:
+        - name: bazarr-config
+          mountPath: /config
+        readinessProbe:
+          tcpSocket: {port: 6767}
+          initialDelaySeconds: 20
+          periodSeconds: 15
+        resources:
+          requests: {memory: "128Mi", cpu: "50m"}
+          limits: {memory: "512Mi", cpu: "1000m"}
+      - name: jdownloader2
+        image: jlesage/jdownloader-2:v26.03.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - {name: USER_ID, value: "1000"}
+        - {name: GROUP_ID, value: "1000"}
+        - {name: TZ, value: Australia/Sydney}
+        ports:
+        - {name: jdownloader2, containerPort: 5800, protocol: TCP}
+        volumeMounts:
+        - name: jdownloader2-config
+          mountPath: /config
+        readinessProbe:
+          tcpSocket: {port: 5800}
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+          requests: {memory: "256Mi", cpu: "50m"}
+          limits: {memory: "1Gi", cpu: "1000m"}
+      volumes:
+      - name: dev-net-tun
+        hostPath:
+          path: /dev/net/tun
+          type: CharDevice
+      - name: sonarr-config
+        persistentVolumeClaim: {claimName: sonarr-config}
+      - name: radarr-config
+        persistentVolumeClaim: {claimName: radarr-config}
+      - name: prowlarr-config
+        persistentVolumeClaim: {claimName: prowlarr-config}
+      - name: sabnzbd-config
+        persistentVolumeClaim: {claimName: sabnzbd-config}
+      - name: bazarr-config
+        persistentVolumeClaim: {claimName: bazarr-config}
+      - name: jdownloader2-config
+        persistentVolumeClaim: {claimName: jdownloader2-config}
