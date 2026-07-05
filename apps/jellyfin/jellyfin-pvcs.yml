@@ -1,0 +1,43 @@
+# PLACEHOLDER STORAGE: local-path (k3s default) is node-local and
+# non-durable - data lives in /var/lib/rancher/k3s/storage on whichever
+# node the pod first schedules to, and the pod is pinned there from then
+# on (WaitForFirstConsumer + RWO). Swap storageClassName to an NFS-backed
+# class once real storage exists; that swap requires recreating the PVCs
+# (delete + resync), not just editing them in place.
+#
+# Jellyfin's internal SQLite DB lives on the config volume, which is the
+# other reason this is NOT on nfs-client today: SQLite on NFS corrupts
+# (see the pihole gravity.db incident, day2-services apps/pihole).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-config
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+    app.kubernetes.io/name: jellyfin
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-cache
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+    app.kubernetes.io/name: jellyfin
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
