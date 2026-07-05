@@ -16,13 +16,17 @@ library at `/books` in the UI. Config/SQLite stays on local-path.
 - No node affinity yet - see the marker comment in the deployment and
   `components/workload-affinity/`
 
-## Storage - PLACEHOLDER
-Single config PVC (2Gi, holds Kavita's internal SQLite DB) on k3s's
-default `local-path` class: **node-local and non-durable**. Same caveats
-and the same temporary k8smaster nodeSelector as apps/jellyfin - see that
-README for the full explanation (pinode-01's k3s dir is a 4G RAM tmpfs).
-Remove the nodeSelector together with the storage swap, and never put the
-SQLite config volume directly on NFS.
+## Storage - RAM config + NFS backups (pihole pattern)
+Kavita's config (internal SQLite DB, ~a few MB plus covers) runs in a
+**RAM emptyDir** (1Gi limit). A sidecar tars it to the
+`kavita-config-backup` nfs-client PVC hourly (with one-generation
+rotation) and again at pod shutdown via preStop; an init container
+restores the newest readable backup on start. This keeps SQLite off NFS
+without needing local disk, so **the pod is free to float between
+nodes** - no nodeSelector. Worst case after an unclean node death: up
+to an hour of reading progress lost, falling back to the previous
+backup if the newest is torn. (The kavita image still has to fit
+pinode-01's 4G tmpfs image store to actually run there.)
 
 ## Dependencies
 None: no database (SQLite internal), no Redis, no secrets.
