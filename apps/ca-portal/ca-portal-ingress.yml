@@ -7,6 +7,10 @@ metadata:
     app: ca-portal
     app.kubernetes.io/name: ca-portal
     argocd.argoproj.io/managed-by: argocd
+  annotations:
+    # Outrank the global http->https redirect router (priority 1000, see
+    # day0-bootstrap apps/traefik/traefik-config.yml) so this stays HTTP.
+    traefik.ingress.kubernetes.io/router.priority: "2000"
 spec:
   # Deliberately plain HTTP, no tls block: devices fetch this page BEFORE
   # they trust the CA, so an https version would only show warnings.
