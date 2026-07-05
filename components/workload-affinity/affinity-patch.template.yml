@@ -1,0 +1,37 @@
+# Workload-affinity patch TEMPLATE - do not reference this file directly.
+# Copy it into your app's directory as `affinity-patch.yml`, replace every
+# APPNAME with the app's name, and register it in the app's kustomization:
+#
+#   patches:
+#     - path: affinity-patch.yml
+#       target:
+#         kind: Deployment        # or StatefulSet
+#         name: <deployment-name>
+#
+# See components/workload-affinity/README.md for the full convention.
+#
+# Deliberately preferredDuringScheduling (soft), never
+# requiredDuringScheduling: if the preferred node is down the pod must
+# still schedule on whatever node is available.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unused-set-by-kustomize-target
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/APPNAME
+                    operator: In
+                    values: ["primary"]
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/APPNAME
+                    operator: In
+                    values: ["secondary"]
