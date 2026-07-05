@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kavita
+  namespace: kavita
+  labels:
+    app: kavita
+    app.kubernetes.io/name: kavita
+    app.kubernetes.io/component: reading-server
+    app.kubernetes.io/part-of: day2-services
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  # RWO local-path volume: old pod must release it before the new one starts
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kavita
+  template:
+    metadata:
+      labels:
+        app: kavita
+        app.kubernetes.io/name: kavita
+        app.kubernetes.io/component: reading-server
+    spec:
+      # workload-affinity: when Kavita gets a preferred home, wire in the
+      # patch template from components/workload-affinity/ and add kavita
+      # to day1-foundation/ansible/label-nodes.yml.
+      #
+      # TEMPORARY hard pin to k8smaster, tied to the local-path placeholder
+      # (same reasoning as apps/jellyfin): on diskless pinode-01 the k3s
+      # agent dir - containerd images and local-path volumes - is a 4G RAM
+      # tmpfs, so images this size evict-loop and PVC data would be lost
+      # on reboot. Remove together with the storage swap.
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
+      enableServiceLinks: false  # avoid injected <SVC>_PORT env vars (bit paperless)
+      containers:
+      - name: kavita
+        image: jvmilazz0/kavita:0.8.9
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 5000
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /kavita/config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 45
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: kavita-config

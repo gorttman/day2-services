@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kavita
+  namespace: kavita
+  labels:
+    app: kavita
+    app.kubernetes.io/name: kavita
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+spec:
+  # Internal-only: no Cloudflare Tunnel annotation; DNS for this host
+  # lives in dns-conf. http->https redirect is global (see day0-bootstrap
+  # apps/traefik/traefik-config.yml).
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - kavita.i3sec.com.au
+    secretName: kavita-tls
+  rules:
+  - host: kavita.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kavita
+            port:
+              number: 5000
