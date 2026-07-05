@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - kavita-namespace.yml
   - kavita-pvc.yml
+  - kavita-books-pvc.yml
   - kavita-deployment.yml
   - kavita-service.yml
   - kavita-ingress.yml
