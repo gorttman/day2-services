@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - n8n-namespace.yml
+  - n8n-sealed-secret.yml
+  - n8n-pvc.yml
+  - n8n-deployment.yml
+  - n8n-service.yml
+  - n8n-ingress.yml

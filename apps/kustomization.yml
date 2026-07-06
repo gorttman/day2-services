@@ -14,3 +14,4 @@ resources:
   - kavita/kavita-app.yml
   - arr-stack/arr-stack-app.yml
   - homeassistant/homeassistant-app.yml
+  - n8n/n8n-app.yml

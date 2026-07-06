@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: n8n
+  namespace: n8n
+  labels:
+    app: n8n
+    app.kubernetes.io/name: n8n
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+spec:
+  # Internal-only: no Cloudflare Tunnel annotation; DNS for this host
+  # lives in dns-conf. http->https redirect is global (see day0-bootstrap
+  # apps/traefik/traefik-config.yml). Traefik handles n8n's websockets
+  # (editor live updates) natively - no extra annotations needed.
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - n8n.i3sec.com.au
+    secretName: n8n-tls
+  rules:
+  - host: n8n.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: n8n
+            port:
+              number: 5678

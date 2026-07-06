@@ -1,0 +1,21 @@
+# /home/node/.n8n holds the encryption key file, local settings cache,
+# and (if ever used) filesystem-mode binary data - NOT the SQLite path,
+# since DB_TYPE=postgresdb moves workflows/credentials/executions to the
+# shared Postgres instance. Low write volume, no locking concerns, so a
+# plain nfs-client PVC is fine here (no RAM+backup trick needed).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-data
+  namespace: n8n
+  labels:
+    app: n8n
+    app.kubernetes.io/name: n8n
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 2Gi

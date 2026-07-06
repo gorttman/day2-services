@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  namespace: n8n
+  labels:
+    app: n8n
+    app.kubernetes.io/name: n8n
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+        app.kubernetes.io/name: n8n
+    spec:
+      # workload-affinity: if n8n ever gets a preferred home, wire in the
+      # patch template from components/workload-affinity/ and add it to
+      # day1-foundation ansible/label-nodes.yml.
+      #
+      # No hard node pin: workflows/credentials/executions live in the
+      # shared Postgres, and /home/node/.n8n is a plain nfs-client PVC,
+      # so nothing needs local disk. Soft preference for the
+      # infrastructure lane because the n8n image (~360MB compressed,
+      # likely 700MB+ extracted - bundles every integration node) is the
+      # same order of size that ENOSPC'd on pinode-01's 4G tmpfs for
+      # grafana. Soft only: still schedulable elsewhere if k8smaster is
+      # down.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: lane
+                operator: In
+                values: ["infrastructure"]
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 1000  # n8n runs as uid/gid 1000 (node)
+      containers:
+      - name: n8n
+        image: n8nio/n8n:2.29.6
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 5678
+          protocol: TCP
+        env:
+        - name: DB_TYPE
+          value: postgresdb
+        - name: DB_POSTGRESDB_HOST
+          value: postgres.postgres.svc.cluster.local
+        - name: DB_POSTGRESDB_PORT
+          value: "5432"
+        - name: DB_POSTGRESDB_DATABASE
+          value: n8n
+        - name: DB_POSTGRESDB_USER
+          value: n8n
+        - name: DB_POSTGRESDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: DB_POSTGRESDB_PASSWORD
+        - name: N8N_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: N8N_ENCRYPTION_KEY
+        - name: N8N_HOST
+          value: n8n.i3sec.com.au
+        - name: N8N_PROTOCOL
+          value: https
+        - name: N8N_PORT
+          value: "5678"
+        - name: N8N_EDITOR_BASE_URL
+          value: https://n8n.i3sec.com.au/
+        - name: WEBHOOK_URL
+          value: https://n8n.i3sec.com.au/
+        # Single reverse-proxy hop (traefik) between clients and n8n -
+        # trust one layer of X-Forwarded-* so client IP/proto are read
+        # correctly instead of always seeing the proxy.
+        - name: N8N_PROXY_HOPS
+          value: "1"
+        - name: GENERIC_TIMEZONE
+          value: Australia/Sydney
+        - name: TZ
+          value: Australia/Sydney
+        volumeMounts:
+        - name: data
+          mountPath: /home/node/.n8n
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "150m"
+          limits:
+            memory: "1024Mi"
+            cpu: "1000m"
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          periodSeconds: 5
+          failureThreshold: 24
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: n8n-data
