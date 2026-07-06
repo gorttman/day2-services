@@ -27,6 +27,12 @@ spec:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
+      # Hard pin, not a soft preference: metallb-config's wlan-l2adv only
+      # proxy-ARPs the DNS VIP (192.168.2.245) from pinode-01. If this pod
+      # ever scheduled elsewhere, the VIP would go silently unreachable -
+      # not a performance problem, an outage.
+      nodeSelector:
+        kubernetes.io/hostname: pinode-01
       dnsPolicy: None
       dnsConfig:
         nameservers:
@@ -129,13 +135,21 @@ spec:
           subPath: 02-i3sec-custom-dns.conf
         - name: pihole-db
           mountPath: /db
+        # Previous 100m/500m limit was measurably throttling FTL even
+        # under light load (17 throttled periods / 1.56s throttled_usec
+        # in the first ~16 minutes after a restart, per
+        # /sys/fs/cgroup/cpu.stat) - every throttle event is DNS latency
+        # a client feels. pinode-01 has 4 full cores and nothing else
+        # competes for them at this pod's priority, so give FTL real
+        # headroom instead of rationing a resolver that's on the
+        # critical path for every request on the network.
         resources:
           requests:
             memory: 256Mi
-            cpu: 100m
+            cpu: 250m
           limits:
             memory: 512Mi
-            cpu: 500m
+            cpu: 2000m
         livenessProbe:
           httpGet:
             path: /admin/
