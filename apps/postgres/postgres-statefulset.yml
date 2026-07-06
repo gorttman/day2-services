@@ -44,6 +44,11 @@ spec:
             secretKeyRef:
               name: postgres-superuser
               key: HOMEASSISTANT_DB_PASSWORD
+        - name: N8N_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-superuser
+              key: N8N_DB_PASSWORD
         # subdir keeps initdb happy when the volume root already exists
         # (nfs-subdir provisioner pre-creates the directory)
         - name: PGDATA

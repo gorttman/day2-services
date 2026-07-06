@@ -20,4 +20,6 @@ data:
       CREATE DATABASE paperless OWNER paperless;
       CREATE ROLE homeassistant LOGIN PASSWORD '$HOMEASSISTANT_DB_PASSWORD';
       CREATE DATABASE homeassistant OWNER homeassistant;
+      CREATE ROLE n8n LOGIN PASSWORD '$N8N_DB_PASSWORD';
+      CREATE DATABASE n8n OWNER n8n;
     SQL
