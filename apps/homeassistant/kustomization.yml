@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - homeassistant-namespace.yml
+  - homeassistant-configmap.yml
+  - homeassistant-sealed-secret.yml
+  - homeassistant-pvc.yml
+  - homeassistant-deployment.yml
+  - homeassistant-service.yml
+  - homeassistant-ingress.yml
+  - mosquitto/mosquitto-configmap.yml
+  - mosquitto/mosquitto-sealed-secret.yml
+  - mosquitto/mosquitto-pvc.yml
+  - mosquitto/mosquitto-deployment.yml
+  - mosquitto/mosquitto-service.yml

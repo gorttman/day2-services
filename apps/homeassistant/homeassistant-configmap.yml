@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homeassistant-config
+  namespace: homeassistant
+  labels:
+    app: homeassistant
+    app.kubernetes.io/name: homeassistant
+    argocd.argoproj.io/managed-by: argocd
+data:
+  # Git-owned core config: the init container copies this over
+  # /config/configuration.yaml on every pod start, so this file is the
+  # source of truth. UI-driven state lives in automations.yaml /
+  # scripts.yaml / scenes.yaml and .storage/, which persist via the
+  # backup sidecar.
+  configuration.yaml: |
+    default_config:
+
+    # HA rejects reverse-proxied requests unless the proxy is trusted;
+    # 10.42.0.0/16 is the pod network (traefik).
+    http:
+      use_x_forwarded_for: true
+      trusted_proxies:
+        - 10.42.0.0/16
+
+    # History/statistics go to the shared Postgres instance - keeps the
+    # hot, write-heavy state off local disk so the pod can float.
+    # URL (with credentials) comes from the homeassistant-recorder
+    # SealedSecret via env var.
+    recorder:
+      db_url: !env_var HA_RECORDER_DB_URL
+      purge_keep_days: 30
+
+    automation: !include automations.yaml
+    script: !include scripts.yaml
+    scene: !include scenes.yaml

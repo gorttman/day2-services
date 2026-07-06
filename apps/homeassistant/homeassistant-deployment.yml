@@ -1,0 +1,179 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homeassistant
+  namespace: homeassistant
+  labels:
+    app: homeassistant
+    app.kubernetes.io/name: homeassistant
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  # Single-writer config volume semantics: old pod must fully stop
+  # (final preStop backup) before the new one restores.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: homeassistant
+  template:
+    metadata:
+      labels:
+        app: homeassistant
+        app.kubernetes.io/name: homeassistant
+    spec:
+      # workload-affinity: if HA ever gets a preferred home (e.g. a node
+      # with a Zigbee stick), wire in the patch template from
+      # components/workload-affinity/ and add it to
+      # day1-foundation ansible/label-nodes.yml.
+      #
+      # No hard node pin: recorder DB lives in the shared Postgres and
+      # /config is RAM + tar backups, so nothing needs local disk. Soft
+      # preference for the infrastructure lane because the HA image
+      # (~1.5GB) does not fit pinode-01's 4G tmpfs image store (same
+      # reasoning as grafana). Soft only: if k8smaster is down,
+      # scheduling elsewhere is still allowed.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: lane
+                operator: In
+                values: ["infrastructure"]
+      enableServiceLinks: false  # avoid injected <SVC>_PORT env vars
+      initContainers:
+      # Restore the newest config backup into the RAM volume (fall back
+      # a generation if the newest tar is torn), then lay down the
+      # git-owned configuration.yaml over whatever was restored.
+      - name: config-restore
+        image: busybox:1.36
+        command: ["sh", "-c"]
+        args:
+        - |
+          set -e
+          if [ -f /backup/ha-config.tar ] && tar -xf /backup/ha-config.tar -C /config 2>/dev/null; then
+            echo "restored ha-config.tar"
+          elif [ -f /backup/ha-config.prev.tar ] && tar -xf /backup/ha-config.prev.tar -C /config 2>/dev/null; then
+            echo "restored ha-config.prev.tar (newest was unreadable)"
+          else
+            echo "no backup found - starting fresh"
+          fi
+          cp /seed/configuration.yaml /config/configuration.yaml
+          for f in automations.yaml scripts.yaml scenes.yaml; do
+            [ -f "/config/$f" ] || touch "/config/$f"
+          done
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: seed
+          mountPath: /seed
+          readOnly: true
+        - name: backup
+          mountPath: /backup
+      containers:
+      - name: homeassistant
+        image: ghcr.io/home-assistant/home-assistant:2026.6.4
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8123
+          protocol: TCP
+        env:
+        # postgresql://... with credentials; referenced by
+        # `db_url: !env_var HA_RECORDER_DB_URL` in configuration.yaml
+        - name: HA_RECORDER_DB_URL
+          valueFrom:
+            secretKeyRef:
+              name: homeassistant-recorder
+              key: HA_RECORDER_DB_URL
+        - name: TZ
+          value: Australia/Sydney
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1536Mi"
+            cpu: "2000m"
+        # First boot installs recorder deps (psycopg2) before the web UI
+        # answers - give startup a generous budget, then probe normally.
+        startupProbe:
+          httpGet:
+            path: /
+            port: 8123
+          periodSeconds: 10
+          failureThreshold: 36
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8123
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8123
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+      # Hourly tar of the RAM config dir to the backup PVC with
+      # one-generation rotation + size guard; final backup on shutdown
+      # (preStop). Recorder history is in Postgres and never at risk;
+      # worst case after an unclean node death is <=1h of config/UI
+      # edits lost.
+      - name: config-backup
+        image: busybox:1.36
+        command: ["sh", "-c"]
+        args:
+        - |
+          backup() {
+            tar -cf /backup/.tmp.tar -C /config \
+              --exclude='home-assistant.log*' --exclude='backups' \
+              --exclude='__pycache__' . || return 1
+            sz=$(stat -c %s /backup/.tmp.tar 2>/dev/null || echo 0)
+            if [ "$sz" -gt 10240 ]; then
+              [ -f /backup/ha-config.tar ] && cp /backup/ha-config.tar /backup/ha-config.prev.tar
+              mv /backup/.tmp.tar /backup/ha-config.tar
+              echo "backup ok ($sz bytes) $(date)"
+            else
+              echo "backup skipped - suspiciously small ($sz bytes)"
+              rm -f /backup/.tmp.tar
+            fi
+          }
+          while true; do sleep 3600; backup; done
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sh", "-c", "tar -cf /backup/.tmp.tar -C /config --exclude='home-assistant.log*' --exclude='backups' --exclude='__pycache__' . && sz=$(stat -c %s /backup/.tmp.tar) && [ \"$sz\" -gt 10240 ] && { [ -f /backup/ha-config.tar ] && cp /backup/ha-config.tar /backup/ha-config.prev.tar; mv /backup/.tmp.tar /backup/ha-config.tar; } || rm -f /backup/.tmp.tar"]
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+        - name: backup
+          mountPath: /backup
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "200m"
+      volumes:
+      # RAM-backed; persisted via the sidecar/preStop backups above.
+      # Sized for .storage/, UI yaml, and pip-installed deps (psycopg2).
+      - name: config
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+      - name: backup
+        persistentVolumeClaim:
+          claimName: homeassistant-config-backup
+      - name: seed
+        configMap:
+          name: homeassistant-config

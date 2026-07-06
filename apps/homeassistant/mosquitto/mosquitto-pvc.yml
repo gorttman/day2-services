@@ -1,0 +1,18 @@
+# Retained messages / persistence db. Plain files, low write rate -
+# NFS-safe, so the broker can float between nodes.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mosquitto-data
+  namespace: homeassistant
+  labels:
+    app: mosquitto
+    app.kubernetes.io/name: mosquitto
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 1Gi
