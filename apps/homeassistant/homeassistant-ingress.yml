@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: homeassistant
+  namespace: homeassistant
+  labels:
+    app: homeassistant
+    app.kubernetes.io/name: homeassistant
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+spec:
+  # Internal-only: no Cloudflare Tunnel annotation; DNS for this host
+  # lives in dns-conf. http->https redirect is global (see day0-bootstrap
+  # apps/traefik/traefik-config.yml). Traefik handles HA's websockets
+  # natively - no extra annotations needed.
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - homeassistant.i3sec.com.au
+    secretName: homeassistant-tls
+  rules:
+  - host: homeassistant.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: homeassistant
+            port:
+              number: 8123

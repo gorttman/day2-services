@@ -1,0 +1,22 @@
+# ClusterIP is enough while all MQTT clients are in-cluster (HA, future
+# zigbee2mqtt). If LAN devices ever need to publish directly (Tasmota,
+# ESPHome-via-MQTT), give this a MetalLB LoadBalancer IP + dns-conf
+# record at that point.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  namespace: homeassistant
+  labels:
+    app: mosquitto
+    app.kubernetes.io/name: mosquitto
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  ports:
+  - name: mqtt
+    port: 1883
+    targetPort: 1883
+    protocol: TCP
+  selector:
+    app: mosquitto

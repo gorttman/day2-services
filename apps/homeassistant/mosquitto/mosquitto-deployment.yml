@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: homeassistant
+  labels:
+    app: mosquitto
+    app.kubernetes.io/name: mosquitto
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+        app.kubernetes.io/name: mosquitto
+    spec:
+      enableServiceLinks: false
+      initContainers:
+      # Build the hashed password_file from the mosquitto-users
+      # SealedSecret. Two accounts: homeassistant (in use) and
+      # zigbee2mqtt (reserved for when a Zigbee coordinator arrives).
+      - name: passwd-gen
+        image: eclipse-mosquitto:2.0.22
+        command: ["sh", "-c"]
+        args:
+        - |
+          set -e
+          mosquitto_passwd -c -b /etc-mosq/passwd homeassistant "$MQTT_HA_PASSWORD"
+          mosquitto_passwd -b /etc-mosq/passwd zigbee2mqtt "$MQTT_Z2M_PASSWORD"
+          chown 1883:1883 /etc-mosq/passwd
+          chmod 0600 /etc-mosq/passwd
+        env:
+        - name: MQTT_HA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mosquitto-users
+              key: MQTT_HA_PASSWORD
+        - name: MQTT_Z2M_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mosquitto-users
+              key: MQTT_Z2M_PASSWORD
+        volumeMounts:
+        - name: passwd
+          mountPath: /etc-mosq
+      containers:
+      - name: mosquitto
+        image: eclipse-mosquitto:2.0.22
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: mqtt
+          containerPort: 1883
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /mosquitto/config/mosquitto.conf
+          subPath: mosquitto.conf
+          readOnly: true
+        - name: passwd
+          mountPath: /mosquitto/etc
+          readOnly: true
+        - name: data
+          mountPath: /mosquitto/data
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
+        readinessProbe:
+          tcpSocket:
+            port: 1883
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 1883
+          initialDelaySeconds: 15
+          periodSeconds: 30
+      volumes:
+      - name: config
+        configMap:
+          name: mosquitto-config
+      - name: passwd
+        emptyDir: {}
+      - name: data
+        persistentVolumeClaim:
+          claimName: mosquitto-data

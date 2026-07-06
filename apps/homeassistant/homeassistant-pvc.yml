@@ -1,0 +1,21 @@
+# HA's /config runs in a RAM emptyDir (pihole/kavita/grafana pattern):
+# the recorder DB is externalized to the shared Postgres, so what's left
+# in /config is small, infrequently written state (.storage/, UI-edited
+# automations, installed deps). This PVC holds the sidecar's hourly tar
+# backups; the init container restores the newest readable one on start.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: homeassistant-config-backup
+  namespace: homeassistant
+  labels:
+    app: homeassistant
+    app.kubernetes.io/name: homeassistant
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 2Gi
