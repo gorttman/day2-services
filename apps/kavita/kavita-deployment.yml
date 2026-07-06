@@ -25,14 +25,15 @@ spec:
         app.kubernetes.io/name: kavita
         app.kubernetes.io/component: reading-server
     spec:
-      # workload-affinity: when Kavita gets a preferred home, wire in the
-      # patch template from components/workload-affinity/ and add kavita
-      # to day1-foundation/ansible/label-nodes.yml.
-      #
-      # No node pin anymore: config runs in a RAM emptyDir with tar
-      # backups on nfs-client (pihole gravity.db pattern), so nothing
-      # requires k8smaster's local disk. The pod can float; note the
-      # kavita image still has to fit pinode-01's 4G tmpfs image store.
+      # Hard pin to k8smaster: unpinned, this repeatedly landed on
+      # pinode-01 and hit the same tmpfs landmine as jellyfin - 56
+      # Evicted pods accumulated there (DiskPressure on the 4G RAM image
+      # store) before this was caught. Config itself is RAM+backup and
+      # node-agnostic, but the container image doesn't reliably fit
+      # pinode-01's tmpfs alongside everything else that floats there,
+      # so this isn't a soft preference - the pod must not go there.
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
       enableServiceLinks: false  # avoid injected <SVC>_PORT env vars (bit paperless)
       initContainers:
       # Restore the newest config backup into the RAM volume. Falls back
