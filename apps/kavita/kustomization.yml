@@ -8,3 +8,4 @@ resources:
   - kavita-deployment.yml
   - kavita-service.yml
   - kavita-ingress.yml
+  - kavita-books-ingress.yml

@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kavita-books
+  namespace: kavita
+  labels:
+    app: kavita
+    app.kubernetes.io/name: kavita
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+    # cloudflared's Public Hostname (dashboard-managed) forwards here as
+    # plain HTTP, not HTTPS - without this, nginx's default ssl-redirect
+    # would 308 that request to https and loop.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  # Public, via Cloudflare Tunnel: cloudflared has no cluster-side Service
+  # of its own, it dials out to Cloudflare's edge and the dashboard's
+  # Public Hostname points straight at this ingress-nginx controller.
+  # mTLS enforcement is a separate WAF rule (not yet created).
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - books.i3sec.com.au
+    secretName: books-tls
+  rules:
+  - host: books.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kavita
+            port:
+              number: 5000
