@@ -35,6 +35,7 @@ data volume.
 ingress. Superuser password in the `postgres-superuser` sealed secret.
 
 ## Current databases
-| database  | owner     | used by                |
-|-----------|-----------|------------------------|
-| paperless | paperless | apps/paperless (day2)  |
+| database      | owner         | used by                                  |
+|----------------|---------------|-------------------------------------------|
+| paperless      | paperless     | apps/paperless (day2)                     |
+| cloudflare_tf  | cloudflare_tf | day1-foundation apps/cloudflare-tf (Terraform state, `pg` backend) |

@@ -22,4 +22,6 @@ data:
       CREATE DATABASE homeassistant OWNER homeassistant;
       CREATE ROLE n8n LOGIN PASSWORD '$N8N_DB_PASSWORD';
       CREATE DATABASE n8n OWNER n8n;
+      CREATE ROLE cloudflare_tf LOGIN PASSWORD '$CLOUDFLARE_TF_DB_PASSWORD';
+      CREATE DATABASE cloudflare_tf OWNER cloudflare_tf;
     SQL
