@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: homeassistant-public
+  namespace: homeassistant
+  labels:
+    app: homeassistant
+    app.kubernetes.io/name: homeassistant
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+    # cloudflared's Public Hostname (Terraform-managed, day1-foundation
+    # apps/cloudflare-tf) forwards here as plain HTTP, not HTTPS - without
+    # this, nginx's default ssl-redirect would 308 that request to https
+    # and loop.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # No auth-url/auth-signin annotations here, unlike vscode - Home
+    # Assistant handles its own login entirely (own username/password,
+    # own session), no separate forward-auth service in front of it.
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - homeassistant.i3sec.com.au
+    secretName: homeassistant-public-tls
+  rules:
+  - host: homeassistant.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: homeassistant
+            port:
+              number: 8123

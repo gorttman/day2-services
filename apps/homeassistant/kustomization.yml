@@ -9,6 +9,7 @@ resources:
   - homeassistant-deployment.yml
   - homeassistant-service.yml
   - homeassistant-ingress.yml
+  - homeassistant-public-ingress.yml
   - mosquitto/mosquitto-configmap.yml
   - mosquitto/mosquitto-sealed-secret.yml
   - mosquitto/mosquitto-pvc.yml
