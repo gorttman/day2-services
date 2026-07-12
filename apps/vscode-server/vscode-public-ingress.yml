@@ -46,7 +46,16 @@ spec:
   - host: vscode.i3sec.com.au
     http:
       paths:
-      - path: /gorttman(/|$)(.*)
+      # (?!/auth(?:/|$)) excludes the login page's own path from this
+      # auth-required regex. Without it, nginx's location matching prefers
+      # a matching regex location over a plain prefix one (like
+      # vscode-public-auth's /gorttman/auth), even though the prefix path
+      # is more specific - so the login page was also being sent through
+      # this same auth check, creating an infinite redirect loop (401 ->
+      # login page -> 401 -> ...) that grew the URL every hop until nginx
+      # rejected it with 414. The lookahead is non-capturing so $1/$2 in
+      # rewrite-target still refer to the same groups as before.
+      - path: /gorttman(?!/auth(?:/|$))(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:
