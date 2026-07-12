@@ -21,6 +21,12 @@ metadata:
     # separate, second app-level gate - both are intentionally kept.
     nginx.ingress.kubernetes.io/auth-url: "http://vscode-gorttman-auth.vscode-server.svc.cluster.local:8081/verify"
     nginx.ingress.kubernetes.io/auth-response-headers: "Remote-User"
+    # /verify returns 401 (not 302) when unauthenticated - nginx's
+    # auth_request only understands 2xx/401/403, and builds this redirect
+    # itself on a 401 rather than relying on anything from the subrequest's
+    # own response. Must match the login page's expected query param name
+    # ("redirect", see images/vscode-auth/auth_server.py).
+    nginx.ingress.kubernetes.io/auth-signin: "https://$host/gorttman/auth?redirect=$escaped_request_uri"
     # Equivalent to the internal ingress's Traefik stripPrefix middleware.
     # NOTE: unlike Traefik's redirectRegex middleware, this does not issue
     # a browser redirect to add a trailing slash for a bare /gorttman

@@ -1,4 +1,5 @@
 import html
+import json
 import os
 import secrets
 import subprocess
@@ -106,10 +107,26 @@ class Handler(BaseHTTPRequestHandler):
         host = self.headers.get("X-Forwarded-Host", "vscode.i3sec.com.au")
         uri = self.headers.get("X-Forwarded-Uri", DEFAULT_REDIRECT)
         login_url = f"{proto}://{host}{COOKIE_PATH}/auth?redirect={quote(uri, safe='')}"
-        self.send_response(302)
-        self.send_header("Location", login_url)
-        self.send_header("Content-Length", "0")
+        # 401, not 302: nginx's auth_request module only accepts 2xx/401/403
+        # from the auth subrequest - anything else (including 302) is treated
+        # as an internal error, since nginx expects to build the redirect
+        # itself via its own auth-signin annotation on a 401. Traefik's
+        # forwardAuth passes a non-2xx response through unaltered (status,
+        # headers, and body), so the client-side redirect below keeps the
+        # internal (Traefik) path working exactly as it did with a 302.
+        body = (
+            "<!doctype html><html><head>"
+            f'<meta http-equiv="refresh" content="0; url={html.escape(login_url)}">'
+            f"<script>window.location.replace({json.dumps(login_url)});</script>"
+            "</head><body>Redirecting to login&hellip; "
+            f'<a href="{html.escape(login_url)}">click here if not redirected</a>.'
+            "</body></html>"
+        ).encode()
+        self.send_response(401)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
+        self.wfile.write(body)
 
     def handle_login_get(self):
         query = parse_qs(urlparse(self.path).query)
