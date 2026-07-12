@@ -13,5 +13,3 @@ resources:
   - vscode-gorttman-stripprefix-middleware.yml
   - vscode-gorttman-trailingslash-middleware.yml
   - vscode-server-ingress.yml
-  - vscode-public-ingress.yml
-  - vscode-public-auth-ingress.yml
