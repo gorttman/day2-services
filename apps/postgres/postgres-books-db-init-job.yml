@@ -1,0 +1,49 @@
+# Runs once via the normal Argo CD sync - no kubectl exec, no hand-typed
+# psql. Jobs are immutable once created, so if this ever needs to
+# re-run for real (e.g. after a full from-scratch Postgres rebuild),
+# delete the completed Job (`kubectl delete job postgres-books-db-init
+# -n postgres`) and let Argo CD recreate it - the script itself is
+# idempotent either way, this is the one residual manual action and
+# it's a delete, not a SQL session.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-books-db-init
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: init-books-db
+          image: postgres:16.9-alpine
+          command: ["/bin/sh", "/scripts/init-books-db.sh"]
+          env:
+            - name: PGHOST
+              value: postgres.postgres.svc.cluster.local
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-superuser
+                  key: POSTGRES_PASSWORD
+            - name: BOOKS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-superuser
+                  key: BOOKS_DB_PASSWORD
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: postgres-books-db-init
+            defaultMode: 0555

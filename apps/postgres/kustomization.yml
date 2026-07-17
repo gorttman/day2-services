@@ -8,3 +8,5 @@ resources:
   - postgres-statefulset.yml
   - postgres-service.yml
   - postgres-adminer.yml
+  - postgres-books-db-init-configmap.yml
+  - postgres-books-db-init-job.yml

@@ -1,0 +1,62 @@
+# Idempotent - safe to leave in place and re-run (e.g. after deleting
+# the completed Job to force a re-check). Every statement either checks
+# existence first (role, database) or uses IF NOT EXISTS (extension,
+# table, indexes), so this behaves the same whether the books database
+# was never created, or already exists and just needs the migration
+# applied, or both already exist and there's nothing to do.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-books-db-init
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+data:
+  init-books-db.sh: |
+    #!/bin/sh
+    set -eu
+
+    echo "[*] Ensuring role 'books' exists"
+    # $BOOKS_DB_PASSWORD comes from openssl rand -base64 32 - its
+    # charset (A-Za-z0-9+/=) can't contain a literal single quote, so
+    # direct interpolation into this SQL string is safe. A
+    # hand-supplied password containing a quote would break this.
+    psql -v ON_ERROR_STOP=1 -d postgres <<-SQL
+      DO \$\$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'books') THEN
+          CREATE ROLE books LOGIN PASSWORD '${BOOKS_DB_PASSWORD}';
+        END IF;
+      END
+      \$\$;
+    SQL
+
+    echo "[*] Ensuring database 'books' exists"
+    if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'books'" | grep -q 1; then
+      psql -v ON_ERROR_STOP=1 -d postgres -c "CREATE DATABASE books OWNER books;"
+    fi
+
+    echo "[*] Applying fingerprints migration (idempotent)"
+    psql -v ON_ERROR_STOP=1 -d books <<-SQL
+      CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+      CREATE TABLE IF NOT EXISTS fingerprints (
+        id           bigserial PRIMARY KEY,
+        title_norm   text NOT NULL,
+        author_norm  text NOT NULL,
+        isbn13       text,
+        format       text NOT NULL,
+        path         text NOT NULL UNIQUE,
+        added_at     timestamptz NOT NULL DEFAULT now()
+      );
+
+      CREATE INDEX IF NOT EXISTS fingerprints_title_norm_idx
+        ON fingerprints (title_norm);
+
+      CREATE INDEX IF NOT EXISTS fingerprints_title_norm_trgm_idx
+        ON fingerprints USING gin (title_norm gin_trgm_ops);
+    SQL
+
+    echo "[*] Done - books database and fingerprints table ready"
