@@ -1,0 +1,87 @@
+# Lives in the EXISTING books-pipeline namespace, not a new one - it
+# needs the exact same Postgres credentials and library mount as
+# books_pipeline.py, and Secrets are namespace-scoped, so co-locating
+# is what makes direct secret reuse possible at all (confirmed in
+# prompt 6: a Secret can't be referenced across namespaces).
+#
+# Schedule: Sunday 03:00 - a genuine low-traffic window for a homelab
+# (weekend, early morning, unlikely anyone's actively uploading or
+# reading), and there's no reason for this to run more often than
+# weekly - it's a drift check, not a processing pipeline.
+#
+# This CronJob's pod mounts the SAME books-pipeline-script ConfigMap
+# used by the main pipeline CronJob (now three files:
+# books_pipeline.py, bookutils.py, reconcile_fingerprints.py) rather
+# than a separate one - avoids a third copy of bookutils.py, and the
+# unused files are harmless since only reconcile_fingerprints.py is
+# invoked here.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: books-fingerprint-reconcile
+  namespace: books-pipeline
+spec:
+  schedule: "0 3 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: k8smaster
+          containers:
+            - name: books-fingerprint-reconcile
+              image: ghcr.io/gorttman/books-pipeline:0.1.0
+              command: ["python3", "/app/reconcile_fingerprints.py"]
+              env:
+                - name: PIPELINE_CONFIG
+                  value: /etc/books-pipeline/config.yaml
+                - name: BOOKS_DB_HOST
+                  value: postgres.postgres.svc.cluster.local
+                - name: BOOKS_DB_PORT
+                  value: "5432"
+                - name: BOOKS_DB_NAME
+                  value: books
+                - name: BOOKS_DB_USER
+                  value: books
+                - name: BOOKS_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: books-pipeline-secret
+                      key: BOOKS_DB_PASSWORD
+                - name: N8N_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: books-pipeline-secret
+                      key: N8N_WEBHOOK_URL
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                - name: config
+                  mountPath: /etc/books-pipeline
+                - name: books
+                  mountPath: /mnt/books
+              resources:
+                requests:
+                  memory: 128Mi
+                  cpu: 50m
+                limits:
+                  memory: 512Mi
+                  cpu: 500m
+          volumes:
+            - name: script
+              configMap:
+                name: books-pipeline-script
+                defaultMode: 0555
+            - name: config
+              configMap:
+                name: books-pipeline-config
+            - name: books
+              nfs:
+                server: qnap.i3sec.com.au
+                path: /books

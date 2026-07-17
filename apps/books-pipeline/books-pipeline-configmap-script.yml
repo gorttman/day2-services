@@ -1,0 +1,755 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: books-pipeline-script
+  namespace: books-pipeline
+data:
+  books_pipeline.py: |
+    #!/usr/bin/env python3
+    import html.parser
+    import os
+    import re
+    import shutil
+    import subprocess
+    import sys
+    import tempfile
+    import time
+    import zipfile
+    
+    import psycopg2
+    import requests
+    import yaml
+    
+    import bookutils
+    
+    CONFIG_PATH = os.environ["PIPELINE_CONFIG"]
+    WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL")
+    
+    COMIC_FORMATS = {"cbz", "cbr"}
+    INCOMING_PREFIX = ".incoming-"
+    
+    DB_ENV = dict(
+        host=os.environ.get("BOOKS_DB_HOST", "postgres.postgres.svc.cluster.local"),
+        port=os.environ.get("BOOKS_DB_PORT", "5432"),
+        dbname=os.environ.get("BOOKS_DB_NAME", "books"),
+        user=os.environ.get("BOOKS_DB_USER", "books"),
+        password=os.environ.get("BOOKS_DB_PASSWORD"),
+    )
+    
+    
+    def log(level, msg):
+        ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+        print(f"[{ts}] {level:5} {msg}", flush=True)
+    
+    
+    def load_config(path):
+        with open(path) as f:
+            return yaml.safe_load(f)
+    
+    
+    def is_settled(path, settle_seconds):
+        st = os.stat(path)
+        return (time.time() - st.st_mtime) >= settle_seconds
+    
+    
+    # ---------------------------------------------------------------------------
+    # Stage 1: metadata extraction (no conversion)
+    # ---------------------------------------------------------------------------
+    
+    def extract_metadata(path):
+        result = bookutils.extract_ebook_metadata(path)
+        if result["error"]:
+            log("WARN", f"ebook-meta failed for {os.path.basename(path)}: {result['error']}")
+        return {k: v for k, v in result.items() if k != "error"}
+    
+    
+    # ---------------------------------------------------------------------------
+    # Stage 2: dedup check
+    # ---------------------------------------------------------------------------
+    
+    def dedup_check(conn, meta, config):
+        title_norm = bookutils.normalize_title(meta["title"] or "")
+    
+        with conn.cursor() as cur:
+            if meta["isbn13"]:
+                cur.execute(
+                    "SELECT path, format FROM fingerprints WHERE isbn13 = %s LIMIT 1",
+                    (meta["isbn13"],),
+                )
+                row = cur.fetchone()
+                if row:
+                    matched_path, matched_format = row
+                    kind = "duplicate" if matched_format == meta["format"] else "format_upgrade"
+                    return kind, matched_path
+    
+            if not title_norm:
+                return None, None
+    
+            # pg_trgm's similarity operator is a literal `%`, which collides
+            # with psycopg2's %s parameter placeholders - escaped as %% here.
+            # title_norm is selected here too (not just used for the WHERE
+            # filter) so the confidence score below compares against the
+            # candidate's actual title, not the incoming title reused on
+            # both sides - that would only be scoring author similarity,
+            # since the WHERE clause already guarantees title similarity.
+            cur.execute(
+                """
+                SELECT path, format, title_norm, author_norm,
+                       similarity(title_norm, %s) AS sim
+                FROM fingerprints
+                WHERE title_norm %% %s
+                ORDER BY sim DESC
+                LIMIT 10
+                """,
+                (title_norm, title_norm),
+            )
+            candidates = cur.fetchall()
+    
+        threshold = config.get("fuzzy", {}).get("confident_score", 90)
+        for matched_path, matched_format, matched_title_norm, matched_author_norm, _sim in candidates:
+            # matched_title_norm/matched_author_norm are already normalized
+            # (that's what's stored) - confident_match re-normalizes them,
+            # which is a harmless no-op on already-normalized text.
+            if bookutils.confident_match(meta["title"], meta["author"], matched_title_norm, matched_author_norm, threshold):
+                kind = "duplicate" if matched_format == meta["format"] else "format_upgrade"
+                return kind, matched_path
+    
+        return None, None
+    
+    
+    # ---------------------------------------------------------------------------
+    # Stage 3: convert to EPUB (comics and already-EPUB bypass entirely)
+    # ---------------------------------------------------------------------------
+    
+    def convert_to_epub(path, meta, workdir):
+        if meta["format"] == "epub" or meta["format"] in COMIC_FORMATS:
+            return path, None
+    
+        dest = os.path.join(workdir, "converted.epub")
+        try:
+            result = subprocess.run(
+                ["ebook-convert", path, dest],
+                capture_output=True, text=True, timeout=600,
+            )
+        except (subprocess.SubprocessError, OSError) as e:
+            return None, str(e)
+    
+        if result.returncode != 0 or not os.path.exists(dest):
+            return None, result.stderr.strip()[:2000] or "ebook-convert failed, no output produced"
+    
+        return dest, None
+    
+    
+    # ---------------------------------------------------------------------------
+    # Stage 4: quality checks on the resulting EPUB
+    # ---------------------------------------------------------------------------
+    
+    class _TextCollector(html.parser.HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.text_parts = []
+            self.paragraph_count = 0
+    
+        def handle_starttag(self, tag, attrs):
+            if tag in ("p", "div"):
+                self.paragraph_count += 1
+    
+        def handle_data(self, data):
+            self.text_parts.append(data)
+    
+    
+    _RAW_TAG_RE = re.compile(r"<[a-zA-Z!/][^<>]{0,50}>")
+    
+    
+    def quality_check(epub_path, config):
+        quality_cfg = config.get("quality", {})
+        max_raw_tag_matches = quality_cfg.get("max_raw_tag_matches", 3)
+        max_avg_paragraph_len = quality_cfg.get("max_avg_paragraph_len", 4000)
+    
+        try:
+            with zipfile.ZipFile(epub_path) as zf:
+                content_files = [
+                    n for n in zf.namelist()
+                    if n.lower().endswith((".xhtml", ".html", ".htm"))
+                ]
+                if not content_files:
+                    return False, "no readable content files found in EPUB"
+    
+                total_text_len = 0
+                total_paragraphs = 0
+                raw_tag_matches = 0
+    
+                for name in content_files:
+                    raw = zf.read(name).decode("utf-8", errors="replace")
+                    collector = _TextCollector()
+                    collector.feed(raw)
+                    text = "".join(collector.text_parts)
+                    total_text_len += len(text)
+                    total_paragraphs += collector.paragraph_count
+                    raw_tag_matches += len(_RAW_TAG_RE.findall(text))
+        except (zipfile.BadZipFile, OSError) as e:
+            return False, f"could not open EPUB for quality check: {e}"
+    
+        if raw_tag_matches > max_raw_tag_matches:
+            return False, f"raw HTML detected in extracted text ({raw_tag_matches} matches)"
+    
+        if total_paragraphs == 0:
+            return False, "no paragraph structure found - likely a broken conversion"
+    
+        avg_paragraph_len = total_text_len / total_paragraphs
+        if avg_paragraph_len > max_avg_paragraph_len:
+            return False, f"low paragraph density (avg {int(avg_paragraph_len)} chars/paragraph) - likely a broken conversion"
+    
+        return True, None
+    
+    
+    # ---------------------------------------------------------------------------
+    # Stage 5: metadata backfill
+    # ---------------------------------------------------------------------------
+    
+    def backfill_metadata(meta, config):
+        if meta["title"] and meta["author"] and meta["isbn13"]:
+            return meta
+    
+        plugins = config.get("metadata_plugins", ["Open Library", "Google Books"])
+        candidate = bookutils.fetch_metadata_candidate(
+            title=meta["title"], author=meta["author"], isbn13=meta["isbn13"], plugins=plugins,
+        )
+        if candidate is None:
+            return meta
+    
+        if not meta["title"] and candidate["title"]:
+            meta["title"] = candidate["title"]
+        if not meta["author"] and candidate["author"]:
+            meta["author"] = candidate["author"]
+        if not meta["isbn13"] and candidate["isbn13"]:
+            meta["isbn13"] = candidate["isbn13"]
+    
+        return meta
+    
+    
+    # ---------------------------------------------------------------------------
+    # Quarantine + safe move (duplicated from inbox-router's pattern - no
+    # shared runtime between the two separate CronJob containers/images)
+    # ---------------------------------------------------------------------------
+    
+    def quarantine(path, reason, quarantine_dir, counters):
+        name = os.path.basename(path)
+        if not os.path.isdir(quarantine_dir):
+            log("CRIT", f"quarantine dir unreachable ({quarantine_dir}) - leaving {name} in place: {reason}")
+            return
+    
+        final_path = os.path.join(quarantine_dir, name)
+        if os.path.exists(final_path):
+            log("CRIT", f"quarantine collision for {name} - leaving original in place: {reason}")
+            return
+    
+        incoming_path = os.path.join(quarantine_dir, f"{INCOMING_PREFIX}{name}")
+        try:
+            shutil.copy2(path, incoming_path)
+            if os.path.getsize(path) != os.path.getsize(incoming_path):
+                raise OSError("size mismatch after copy")
+            os.rename(incoming_path, final_path)
+            os.remove(path)
+        except OSError as e:
+            if os.path.exists(incoming_path):
+                os.remove(incoming_path)
+            log("CRIT", f"failed to quarantine {name}: {e}")
+            return
+    
+        try:
+            with open(os.path.join(quarantine_dir, f"{name}.quarantine-reason.txt"), "w") as f:
+                f.write(reason + "\n")
+        except OSError as e:
+            log("CRIT", f"quarantined {name} but failed to write reason sidecar: {e}")
+    
+        counters["quarantined"].append({"file": name, "reason": reason})
+    
+    
+    def promote(conn, meta, src_path, config, counters):
+        """DB insert happens in the same transaction as the file move, and is
+        only committed after the move succeeds - but a crash between the
+        filesystem rename and the commit can still leave a file in the
+        library with no fingerprint row. That specific drift shape (file
+        exists, no row) is exactly what prompt 5's weekly reconcile job is
+        built to detect and report - true cross-system atomicity between a
+        filesystem and a database isn't achievable here, so this is an
+        accepted, monitored gap rather than an ignored one."""
+        is_comic = meta["format"] in COMIC_FORMATS
+        library_dir = config["library_comics_dir"] if is_comic else config["library_books_dir"]
+    
+        author_display = bookutils.safe_filename_component(meta["author"], "Unknown Author")
+        title_display = bookutils.safe_filename_component(meta["title"], None)
+        if title_display is None:
+            return False, "insufficient metadata to compute canonical path (no title after backfill)"
+    
+        dest_dir = os.path.join(library_dir, author_display)
+        name = f"{title_display}.{meta['format']}"
+        final_path = os.path.join(dest_dir, name)
+    
+        if os.path.exists(final_path):
+            return False, f"destination filename collision: {final_path} already exists"
+    
+        try:
+            os.makedirs(dest_dir, exist_ok=True)
+        except OSError as e:
+            return False, f"could not create library directory {dest_dir}: {e}"
+    
+        incoming_path = os.path.join(dest_dir, f"{INCOMING_PREFIX}{name}")
+    
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO fingerprints (title_norm, author_norm, isbn13, format, path)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (path) DO NOTHING
+                """,
+                (
+                    bookutils.normalize_title(meta["title"]),
+                    bookutils.normalize_author(meta["author"] or ""),
+                    meta["isbn13"],
+                    meta["format"],
+                    final_path,
+                ),
+            )
+    
+            try:
+                shutil.copy2(src_path, incoming_path)
+                if os.path.getsize(src_path) != os.path.getsize(incoming_path):
+                    raise OSError("size mismatch after copy")
+                os.rename(incoming_path, final_path)
+            except OSError as e:
+                conn.rollback()
+                if os.path.exists(incoming_path):
+                    os.remove(incoming_path)
+                return False, f"move to library failed: {e}"
+    
+            os.remove(src_path)
+            conn.commit()
+    
+        counters["routes"]["promoted"] = counters["routes"].get("promoted", 0) + 1
+        log("INFO", f"promoted {os.path.basename(src_path)} -> {final_path}")
+        return True, None
+    
+    
+    # ---------------------------------------------------------------------------
+    # Per-file pipeline
+    # ---------------------------------------------------------------------------
+    
+    def process_file(conn, path, config, counters):
+        name = os.path.basename(path)
+    
+        # Stage 1
+        meta = extract_metadata(path)
+        log("INFO", f"stage1 metadata: {name} title={meta['title']!r} author={meta['author']!r} isbn13={meta['isbn13']!r} format={meta['format']}")
+    
+        # Stage 2
+        dedup_kind, matched_path = dedup_check(conn, meta, config)
+        if dedup_kind == "duplicate":
+            quarantine(path, f"plain duplicate of existing {matched_path}", config["quarantine_dir"], counters)
+            counters["duplicates"] = counters.get("duplicates", 0) + 1
+            return
+        if dedup_kind == "format_upgrade":
+            quarantine(path, f"format-upgrade candidate for existing {matched_path} (different format, high-confidence content match)", config["quarantine_dir"], counters)
+            counters["format_upgrade_candidates"] = counters.get("format_upgrade_candidates", 0) + 1
+            return
+    
+        is_pdf_source = meta["format"] == "pdf"
+    
+        with tempfile.TemporaryDirectory() as workdir:
+            # Stage 3
+            converted_path, convert_error = convert_to_epub(path, meta, workdir)
+    
+            if converted_path is None:
+                reason = f"conversion failed: {convert_error}"
+                if is_pdf_source:
+                    reason += " - original PDF may be promotable as-is after human review (library policy: EPUB-preferred, PDF-tolerated), but requires manual confirmation, not automatic promotion"
+                quarantine(path, reason, config["quarantine_dir"], counters)
+                return
+    
+            # Stage 4 (skipped for comics - nothing to quality-check, they
+            # bypassed conversion entirely and stay in their original format)
+            if meta["format"] not in COMIC_FORMATS:
+                passed, quality_reason = quality_check(converted_path, config)
+                if not passed:
+                    reason = f"quality check failed: {quality_reason}"
+                    if is_pdf_source:
+                        reason += " - original PDF may be promotable as-is after human review, requires manual confirmation"
+                    quarantine(path, reason, config["quarantine_dir"], counters)
+                    return
+                meta["format"] = "epub"
+                promote_src = converted_path
+            else:
+                promote_src = path
+    
+            # Stage 5
+            meta = backfill_metadata(meta, config)
+    
+            # Stage 6
+            ok, promote_reason = promote(conn, meta, path if promote_src == path else promote_src, config, counters)
+            if not ok:
+                quarantine(path if promote_src == path else promote_src, promote_reason, config["quarantine_dir"], counters)
+    
+    
+    # ---------------------------------------------------------------------------
+    # Webhook summary
+    # ---------------------------------------------------------------------------
+    
+    def post_summary(counters):
+        summary = {
+            "promoted": counters["routes"].get("promoted", 0),
+            "duplicates": counters.get("duplicates", 0),
+            "format_upgrade_candidates": counters.get("format_upgrade_candidates", 0),
+            "quarantined": counters["quarantined"],
+        }
+        log("INFO", f"run summary: {summary}")
+    
+        if not WEBHOOK_URL:
+            log("INFO", "N8N_WEBHOOK_URL not set, skipping notification")
+            return
+    
+        try:
+            resp = requests.post(WEBHOOK_URL, json=summary, timeout=10)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            log("WARN", f"failed to post run summary to webhook: {e}")
+    
+    
+    def main():
+        config = load_config(CONFIG_PATH)
+    
+        conn = psycopg2.connect(**DB_ENV)
+        counters = {"routes": {}, "quarantined": [], "duplicates": 0, "format_upgrade_candidates": 0}
+    
+        try:
+            import_dir = config["import_dir"]
+            for entry in sorted(os.listdir(import_dir)):
+                path = os.path.join(import_dir, entry)
+                if os.path.isdir(path) or entry.startswith(INCOMING_PREFIX) or entry.startswith("."):
+                    continue
+                if not is_settled(path, config["settle_seconds"]):
+                    continue
+                try:
+                    process_file(conn, path, config, counters)
+                except Exception as e:
+                    log("CRIT", f"unhandled error processing {entry}: {e}")
+                    conn.rollback()
+                    quarantine(path, f"unhandled pipeline error: {e}", config["quarantine_dir"], counters)
+        finally:
+            conn.close()
+    
+        post_summary(counters)
+    
+    
+    if __name__ == "__main__":
+        main()
+  bookutils.py: |
+    import os
+    import re
+    import subprocess
+    import tempfile
+    import xml.etree.ElementTree as ET
+    
+    from rapidfuzz import fuzz
+    
+    _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
+    _WS_RE = re.compile(r"\s+")
+    _META_LINE_RE = re.compile(r"^([A-Za-z][A-Za-z()\s]*?)\s*:\s*(.*)$")
+    _ISBN_IDENTIFIER_RE = re.compile(r"isbn:([0-9Xx]{10,13})")
+    
+    
+    def extract_ebook_metadata(path, timeout=60):
+        """Runs ebook-meta and parses title/author/isbn13 from its output.
+        Shared by books_pipeline.py's stage 1 and seed_fingerprints.py's
+        library scan - the one place this invocation and its output
+        parsing should exist.
+    
+        Returns a dict {title, author, isbn13, format, error}. `error` is
+        None on a clean subprocess run - even if title/author end up empty,
+        that's a legitimate "ebook-meta ran but found no metadata" case,
+        distinct from the subprocess itself failing to run at all (missing
+        binary, timeout, non-zero exit), which is what `error` reports."""
+        ext = os.path.splitext(path)[1].lstrip(".").lower()
+        result = {"title": None, "author": None, "isbn13": None, "format": ext, "error": None}
+    
+        try:
+            proc = subprocess.run(["ebook-meta", path], capture_output=True, text=True, timeout=timeout)
+        except (subprocess.SubprocessError, OSError) as e:
+            result["error"] = f"ebook-meta failed to run: {e}"
+            return result
+    
+        if proc.returncode != 0:
+            result["error"] = f"ebook-meta exited {proc.returncode}: {proc.stderr.strip()[:500]}"
+            return result
+    
+        for line in proc.stdout.splitlines():
+            m = _META_LINE_RE.match(line)
+            if not m:
+                continue
+            label, value = m.group(1).strip().lower(), m.group(2).strip()
+            if label == "title" and value:
+                result["title"] = value
+            elif label.startswith("author") and value:
+                # "Jane Doe [Doe, Jane]" - the bracketed part is the sort name
+                result["author"] = value.split(" [")[0].strip()
+            elif label == "identifiers" and value:
+                isbn_match = _ISBN_IDENTIFIER_RE.search(value)
+                if isbn_match:
+                    result["isbn13"] = normalize_isbn(isbn_match.group(1))
+    
+        return result
+    
+    
+    def normalize_title(title):
+        return _normalize_text(title)
+    
+    
+    def normalize_author(author):
+        return _normalize_text(author)
+    
+    
+    def _normalize_text(value):
+        value = value.lower()
+        value = _PUNCT_RE.sub(" ", value)
+        value = _WS_RE.sub(" ", value).strip()
+        return value
+    
+    
+    def normalize_isbn(raw):
+        """Strip formatting, validate checksum, return a bare ISBN-13 digit
+        string (converting ISBN-10 if needed) or None if invalid/unparseable.
+        Never guesses - an invalid or ambiguous input returns None."""
+        if not raw:
+            return None
+        digits = re.sub(r"[^0-9Xx]", "", raw)
+    
+        if len(digits) == 13:
+            return digits if _isbn13_checksum_ok(digits) else None
+    
+        if len(digits) == 10:
+            if not _isbn10_checksum_ok(digits):
+                return None
+            return _isbn10_to_isbn13(digits)
+    
+        return None
+    
+    
+    def _isbn13_checksum_ok(digits):
+        if not digits.isdigit():
+            return False
+        total = sum((1 if i % 2 == 0 else 3) * int(d) for i, d in enumerate(digits[:12]))
+        check = (10 - (total % 10)) % 10
+        return check == int(digits[12])
+    
+    
+    def _isbn10_checksum_ok(digits):
+        total = 0
+        for i, ch in enumerate(digits[:9]):
+            if not ch.isdigit():
+                return False
+            total += (10 - i) * int(ch)
+        last = digits[9]
+        check_value = 10 if last in ("X", "x") else (int(last) if last.isdigit() else None)
+        if check_value is None:
+            return False
+        total += check_value
+        return total % 11 == 0
+    
+    
+    def _isbn10_to_isbn13(digits):
+        core = "978" + digits[:9]
+        total = sum((1 if i % 2 == 0 else 3) * int(d) for i, d in enumerate(core))
+        check = (10 - (total % 10)) % 10
+        return core + str(check)
+    
+    
+    def safe_filename_component(value, fallback):
+        """Sanitize a display-text (title/author) for use as a path segment.
+        Not the same as normalize_title/_author - this keeps case and spacing
+        for a readable folder name, only strips characters a filesystem/NFS
+        export can't handle."""
+        value = (value or "").strip()
+        if not value:
+            return fallback
+        value = re.sub(r'[\/:*?"<>|]', "_", value)
+        value = _WS_RE.sub(" ", value).strip()
+        return value or fallback
+    
+    
+    _OPF_NS = {"opf": "http://www.idpf.org/2007/opf", "dc": "http://purl.org/dc/elements/1.1/"}
+    
+    
+    def fetch_metadata_candidate(title=None, author=None, isbn13=None, plugins=None, timeout=30):
+        """Query fetch-ebook-metadata and parse its OPF output. Returns a
+        dict with title/author/isbn13 keys (any may be None if not found),
+        or None if there was nothing to search on or the lookup produced no
+        usable result. Shared by books_pipeline.py's backfill stage and
+        pdf_triage.py's stage 2 lookup - the one place this invocation and
+        its OPF parsing should exist.
+    
+        UNVERIFIED: assumes -o/--opf takes a destination path, based on
+        Calibre docs' description ("Output metadata in OPF format") without
+        a real image to test --help/behavior against. Confirm on first real
+        run; if it instead prints OPF to stdout, redirect that instead of
+        using -o here.
+        """
+        if not title and not author and not isbn13:
+            return None
+    
+        plugins = plugins or ["Open Library", "Google Books"]
+        args = ["fetch-ebook-metadata"]
+        for p in plugins:
+            args += ["--allowed-plugin", p]
+        if title:
+            args += ["-t", title]
+        if author:
+            args += ["-a", author]
+        if isbn13:
+            args += ["-i", isbn13]
+    
+        with tempfile.NamedTemporaryFile(suffix=".opf", delete=False) as tmp:
+            opf_path = tmp.name
+        args += ["-o", opf_path]
+    
+        result = {"title": None, "author": None, "isbn13": None}
+        try:
+            subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+            tree = ET.parse(opf_path)
+            root = tree.getroot()
+    
+            title_el = root.find(".//dc:title", _OPF_NS)
+            if title_el is not None and title_el.text:
+                result["title"] = title_el.text.strip()
+    
+            creator_el = root.find(".//dc:creator", _OPF_NS)
+            if creator_el is not None and creator_el.text:
+                result["author"] = creator_el.text.strip()
+    
+            for id_el in root.findall(".//dc:identifier", _OPF_NS):
+                scheme = id_el.attrib.get(f"{{{_OPF_NS['opf']}}}scheme", "").lower()
+                if scheme == "isbn" and id_el.text:
+                    result["isbn13"] = normalize_isbn(id_el.text)
+                    break
+        except (subprocess.SubprocessError, ET.ParseError, OSError):
+            return None
+        finally:
+            if os.path.exists(opf_path):
+                os.remove(opf_path)
+    
+        if not result["title"] and not result["author"] and not result["isbn13"]:
+            return None
+        return result
+    
+    
+    def match_score(query_title, query_author, candidate_title, candidate_author):
+        """Raw rapidfuzz WRatio score (0-100) over normalized title+author.
+        Split out from confident_match so callers that need the borderline
+        band (pdf_triage.py's stage 2/3 tiebreak), not just a yes/no, don't
+        have to reimplement the scoring itself - only the threshold
+        comparison differs."""
+        query_combined = f"{normalize_title(query_title or '')} {normalize_author(query_author or '')}"
+        candidate_combined = f"{normalize_title(candidate_title or '')} {normalize_author(candidate_author or '')}"
+        return fuzz.WRatio(query_combined, candidate_combined)
+    
+    
+    def confident_match(query_title, query_author, candidate_title, candidate_author, threshold=90):
+        """rapidfuzz WRatio comparison over normalized title+author, same
+        scoring pattern as books_pipeline.dedup_check() - shared so a
+        'confident match' means the same thing everywhere it's used
+        (dedup against the fingerprint table, or a metadata-lookup result
+        in pdf_triage.py)."""
+        score = match_score(query_title, query_author, candidate_title, candidate_author)
+        return score >= threshold
+  reconcile_fingerprints.py: |
+    #!/usr/bin/env python3
+    """Recurring weekly job. Read-only against both the filesystem and the
+    database - never inserts, deletes, or modifies anything. Reports drift
+    between books/library/ and the fingerprints table for manual review."""
+    import os
+    import time
+    
+    import psycopg2
+    import requests
+    import yaml
+    
+    CONFIG_PATH = os.environ["PIPELINE_CONFIG"]
+    WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL")
+    
+    DB_ENV = dict(
+        host=os.environ.get("BOOKS_DB_HOST", "postgres.postgres.svc.cluster.local"),
+        port=os.environ.get("BOOKS_DB_PORT", "5432"),
+        dbname=os.environ.get("BOOKS_DB_NAME", "books"),
+        user=os.environ.get("BOOKS_DB_USER", "books"),
+        password=os.environ.get("BOOKS_DB_PASSWORD"),
+    )
+    
+    
+    def log(level, msg):
+        ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+        print(f"[{ts}] {level:5} {msg}", flush=True)
+    
+    
+    def load_config(path):
+        with open(path) as f:
+            return yaml.safe_load(f)
+    
+    
+    def walk_library_paths(*library_dirs):
+        paths = set()
+        for library_dir in library_dirs:
+            if not os.path.isdir(library_dir):
+                log("WARN", f"library dir does not exist, skipping: {library_dir}")
+                continue
+            for root, _dirs, files in os.walk(library_dir):
+                for fname in files:
+                    if fname.startswith(".") or fname.endswith(".quarantine-reason.txt"):
+                        continue
+                    paths.add(os.path.join(root, fname))
+        return paths
+    
+    
+    def main():
+        config = load_config(CONFIG_PATH)
+    
+        actual_paths = walk_library_paths(config["library_books_dir"], config["library_comics_dir"])
+        log("INFO", f"found {len(actual_paths)} actual files in library")
+    
+        conn = psycopg2.connect(**DB_ENV)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT path FROM fingerprints")
+                db_paths = {row[0] for row in cur.fetchall()}
+        finally:
+            conn.close()
+        log("INFO", f"found {len(db_paths)} rows in fingerprints")
+    
+        # stale: a row exists but the file doesn't - book was deleted or
+        # moved outside the pipeline.
+        stale = sorted(db_paths - actual_paths)
+        # untracked: a file exists but there's no row - arrived outside the
+        # pipeline (manually copied in), or is the exact crash-window gap
+        # documented in books_pipeline.py's promote() (file renamed, DB
+        # commit never happened).
+        untracked = sorted(actual_paths - db_paths)
+    
+        for p in stale:
+            log("WARN", f"stale row (no file): {p}")
+        for p in untracked:
+            log("WARN", f"untracked file (no row): {p}")
+    
+        log("INFO", f"reconcile summary: stale={len(stale)} untracked={len(untracked)}")
+    
+        summary = {"stale": stale, "untracked": untracked}
+        if not WEBHOOK_URL:
+            log("INFO", "N8N_WEBHOOK_URL not set, skipping notification")
+            return
+    
+        try:
+            resp = requests.post(WEBHOOK_URL, json=summary, timeout=10)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            log("WARN", f"failed to post reconcile summary to webhook: {e}")
+    
+    
+    if __name__ == "__main__":
+        main()

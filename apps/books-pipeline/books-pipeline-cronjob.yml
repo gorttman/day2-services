@@ -1,0 +1,86 @@
+# import/, library/{books,comics}/, and quarantine/ are all
+# subdirectories of the single qnap.i3sec.com.au:/books export - one nfs
+# volume covers all of them, same as inbox-router's /mnt/books mount.
+#
+# Resources and activeDeadlineSeconds are a first estimate, not backed by
+# CronJob precedent in this repo (Phase 1 found none) - anchored instead
+# to the closest real precedent available, the postgres/homeassistant
+# Deployments' resource blocks, scaled up for Calibre conversion +
+# network metadata lookups being the two genuinely variable-cost
+# operations here. Revisit after real runs.
+#
+# nodeSelector: pinned to k8smaster preemptively, matching the
+# precautionary note in the prompt-3 image README - Calibre-bundled
+# images are in the same weight class as n8n/homeassistant/grafana,
+# which all needed this same pin after landing on pinode-01's tmpfs
+# image store the hard way.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: books-pipeline
+  namespace: books-pipeline
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: k8smaster
+          containers:
+            - name: books-pipeline
+              image: ghcr.io/gorttman/books-pipeline:0.1.0
+              command: ["python3", "/app/books_pipeline.py"]
+              env:
+                - name: PIPELINE_CONFIG
+                  value: /etc/books-pipeline/config.yaml
+                - name: BOOKS_DB_HOST
+                  value: postgres.postgres.svc.cluster.local
+                - name: BOOKS_DB_PORT
+                  value: "5432"
+                - name: BOOKS_DB_NAME
+                  value: books
+                - name: BOOKS_DB_USER
+                  value: books
+                - name: BOOKS_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: books-pipeline-secret
+                      key: BOOKS_DB_PASSWORD
+                - name: N8N_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: books-pipeline-secret
+                      key: N8N_WEBHOOK_URL
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                - name: config
+                  mountPath: /etc/books-pipeline
+                - name: books
+                  mountPath: /mnt/books
+              resources:
+                requests:
+                  memory: 512Mi
+                  cpu: 250m
+                limits:
+                  memory: 2Gi
+                  cpu: 2000m
+          volumes:
+            - name: script
+              configMap:
+                name: books-pipeline-script
+                defaultMode: 0555
+            - name: config
+              configMap:
+                name: books-pipeline-config
+            - name: books
+              nfs:
+                server: qnap.i3sec.com.au
+                path: /books

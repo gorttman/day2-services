@@ -1,0 +1,27 @@
+settle_seconds: 120   # same convention as the inbox-router, single stat check
+
+import_dir: /mnt/books/import
+library_books_dir: /mnt/books/library/books
+library_comics_dir: /mnt/books/library/comics
+quarantine_dir: /mnt/books/quarantine
+
+# Restricts fetch-ebook-metadata to these sources only (stage 5 backfill) -
+# excludes Amazon.com and other default plugins with their own
+# reliability/ToS considerations, per Phase 1 findings.
+metadata_plugins:
+  - Open Library
+  - Google Books
+
+fuzzy:
+  # rapidfuzz WRatio threshold (0-100) for a "confident" dedup match once
+  # narrowed by pg_trgm title similarity. Not tuned against real data yet -
+  # first value to revisit if dedup produces false positives/negatives.
+  confident_score: 90
+
+quality:
+  # Stage 4 heuristics - starting guesses, meant to be tuned against a
+  # real dataset (copy in, run, inspect quarantine, adjust, delete and
+  # rerun). Kept here rather than as script constants so tuning is a
+  # config edit, not a script/ConfigMap regeneration.
+  max_raw_tag_matches: 3
+  max_avg_paragraph_len: 4000

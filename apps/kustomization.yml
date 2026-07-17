@@ -21,3 +21,4 @@ resources:
   - homeassistant/homeassistant-app.yml
   - n8n/n8n-app.yml
   - inbox-router/inbox-router-app.yml
+  - books-pipeline/books-pipeline-app.yml
