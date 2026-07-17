@@ -1,0 +1,75 @@
+settle_seconds: 120   # skip files where (now - mtime) < this; stateless, single stat check
+
+hold_flag: /mnt/inbox/.hold
+quarantine: /mnt/inbox/quarantine
+
+# Evaluated first, in order, for files inside these inbox subdirectories.
+# Presence in the directory IS the declaration - no MIME check performed.
+# For bulk/pre-sorted uploads (e.g. a batch of ebooks) - normal day-to-day
+# activity is a single file dropped straight into the bare inbox root,
+# which mime_defaults below handles instead.
+explicit_dirs:
+  - source: inbox/books
+    dest: /mnt/books/import
+
+  # Dormant until the paperless/records consumer is enabled (a later
+  # prompt): /mnt/paperless is not mounted by this CronJob, so any file
+  # landing in inbox/records today will quarantine with reason
+  # "destination unreachable" rather than being silently dropped. Also
+  # flagged in Phase 1: /mnt/paperless/consume is the raw QNAP export,
+  # NOT the same storage the actual Paperless-ngx app consumes from
+  # (that's a separate dynamically-provisioned volume) - this path needs
+  # re-verifying against the app's real consume location before this
+  # route goes live, not just un-commenting the mount.
+  - source: inbox/records
+    dest: /mnt/paperless/consume
+
+  # Dormant, out of scope for this deployment - vault is reserved for
+  # the Obsidian vault mount when that gets built. Not mounted here.
+  - source: inbox/working
+    dest: /mnt/vault/incoming        # TBD - path unconfirmed, deliberately not resolved yet
+
+# Evaluated only for files sitting in the bare inbox root.
+mime_defaults:
+  - name: books-ebook
+    mime:
+      - application/epub+zip
+      - application/x-mobipocket-ebook
+      - application/vnd.amazon.ebook
+      - application/x-fictionbook+xml
+      - image/vnd.djvu
+    dest: /mnt/books/import
+
+  - name: books-comic
+    mime: [application/vnd.comicbook+zip, application/vnd.comicbook-rar]
+    dest: /mnt/books/import
+
+  # Dormant - same /mnt/paperless caveat as inbox/records above.
+  - name: office-to-records
+    mime:
+      - application/msword
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/vnd.oasis.opendocument.text
+      - application/rtf
+      - text/plain
+      - application/vnd.ms-excel
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.oasis.opendocument.spreadsheet
+      - application/vnd.ms-powerpoint
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - application/vnd.oasis.opendocument.presentation
+    dest: /mnt/paperless/consume
+
+  # Re-added 2026-07-17 (prompt 6 landed): a bare-root PDF is ambiguous
+  # (could be a book or a Paperless document), so it goes to the PDF
+  # triage subagent rather than either destination directly. Note
+  # inbox/records above already bypasses this entirely - a PDF placed
+  # there by directory convention goes straight to Paperless, no
+  # triage. This rule only ever catches undeclared PDFs.
+  - name: pdf-to-triage
+    mime: [application/pdf]
+    dest: /mnt/inbox/triage
+
+# No match on any explicit_dir or mime_default rule -> quarantine.
+# Includes photos/video/audio/archives - no subagent exists yet for
+# those, so quarantine is correct, not a gap.

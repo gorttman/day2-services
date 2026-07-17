@@ -1,0 +1,65 @@
+# NFS volumes are mounted directly (nfs: volume type), not via PV/PVC.
+# qnap-books is already bound 1:1 to kavita's PVC (day1-foundation's
+# qnap-storage app) - a second static PV for the same export would work,
+# but a direct pod-level nfs: volume gets the same result without adding
+# a PV object, and fits a single-workload, non-shared-claim use case
+# better. See day1-foundation/apps/qnap-storage/README.md for the
+# reasoning, documented alongside that app's PV conventions.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: inbox-router
+  namespace: inbox-router
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 240
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: inbox-router
+              image: ghcr.io/gorttman/inbox-router:0.1.0
+              command: ["python3", "/app/inbox_router.py"]
+              env:
+                - name: ROUTER_CONFIG
+                  value: /etc/inbox-router/routes.yaml
+                - name: N8N_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: inbox-router-secret
+                      key: N8N_WEBHOOK_URL
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                - name: routes-config
+                  mountPath: /etc/inbox-router
+                - name: inbox
+                  mountPath: /mnt/inbox
+                - name: books
+                  mountPath: /mnt/books
+              # No resources block: no precedent exists anywhere in this
+              # repo for CronJob resource requests/limits (log-archiver
+              # and sealed-secrets-backup both omit it too) - flagged in
+              # Phase 1, not silently invented here.
+          volumes:
+            - name: script
+              configMap:
+                name: inbox-router-script
+                defaultMode: 0555
+            - name: routes-config
+              configMap:
+                name: inbox-router-routes
+            - name: inbox
+              nfs:
+                server: qnap.i3sec.com.au
+                path: /inbox
+            - name: books
+              nfs:
+                server: qnap.i3sec.com.au
+                path: /books

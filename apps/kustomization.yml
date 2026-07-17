@@ -20,3 +20,4 @@ resources:
   # - arr-stack/arr-stack-app.yml
   - homeassistant/homeassistant-app.yml
   - n8n/n8n-app.yml
+  - inbox-router/inbox-router-app.yml

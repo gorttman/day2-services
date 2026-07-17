@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+import json
+import os
+import shutil
+import sys
+import time
+from urllib.parse import urlparse
+
+import magic
+import requests
+import yaml
+
+CONFIG_PATH = os.environ["ROUTER_CONFIG"]
+WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL")
+
+INCOMING_PREFIX = ".incoming-"
+
+
+def log(level, msg):
+    ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+    print(f"[{ts}] {level:5} {msg}", flush=True)
+
+
+def load_config(path):
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def resolve_explicit_source(source):
+    # routes.yaml writes these as "inbox/books" etc, matching the
+    # dest paths' /mnt/<export> convention minus the /mnt/ prefix.
+    return os.path.join("/mnt", source)
+
+
+def is_settled(path, settle_seconds):
+    st = os.stat(path)
+    return (time.time() - st.st_mtime) >= settle_seconds
+
+
+def quarantine(path, reason, quarantine_dir, counters):
+    name = os.path.basename(path)
+    if not os.path.isdir(quarantine_dir):
+        log("CRIT", f"quarantine dir unreachable ({quarantine_dir}) - leaving {name} in place: {reason}")
+        return
+
+    ok = move_file(path, quarantine_dir, counters, is_quarantine=True)
+    if not ok:
+        log("CRIT", f"failed to quarantine {name} - left in place: {reason}")
+        return
+
+    reason_path = os.path.join(quarantine_dir, f"{name}.quarantine-reason.txt")
+    try:
+        with open(reason_path, "w") as f:
+            f.write(reason + "\n")
+    except OSError as e:
+        log("CRIT", f"quarantined {name} but failed to write reason sidecar: {e}")
+
+    counters["quarantined"].append({"file": name, "reason": reason})
+
+
+def move_file(src, dest_dir, counters, route_name=None, is_quarantine=False):
+    name = os.path.basename(src)
+
+    if not os.path.isdir(dest_dir):
+        if not is_quarantine:
+            quarantine(src, f"destination unreachable: {dest_dir} not mounted", counters["quarantine_dir"], counters)
+        return False
+
+    final_path = os.path.join(dest_dir, name)
+    if os.path.exists(final_path):
+        if not is_quarantine:
+            quarantine(src, f"destination filename collision: {final_path} already exists", counters["quarantine_dir"], counters)
+        return False
+
+    incoming_path = os.path.join(dest_dir, f"{INCOMING_PREFIX}{name}")
+    try:
+        shutil.copy2(src, incoming_path)
+        src_size = os.path.getsize(src)
+        dest_size = os.path.getsize(incoming_path)
+        if src_size != dest_size:
+            os.remove(incoming_path)
+            raise OSError(f"size mismatch after copy: src={src_size} dest={dest_size}")
+        os.rename(incoming_path, final_path)
+        os.remove(src)
+    except OSError as e:
+        try:
+            if os.path.exists(incoming_path):
+                os.remove(incoming_path)
+        except OSError:
+            pass
+        if not is_quarantine:
+            quarantine(src, f"move failed: {e}", counters["quarantine_dir"], counters)
+        else:
+            log("CRIT", f"move to quarantine failed for {name}: {e}")
+        return False
+
+    if route_name:
+        counters["routes"][route_name] = counters["routes"].get(route_name, 0) + 1
+    log("INFO", f"moved {name} -> {final_path}" + (f" ({route_name})" if route_name else ""))
+    return True
+
+
+def process_explicit_dirs(config, counters):
+    for entry in config.get("explicit_dirs", []):
+        source_dir = resolve_explicit_source(entry["source"])
+        dest_dir = entry["dest"]
+        route_name = f"explicit:{entry['source']}"
+
+        if not os.path.isdir(source_dir):
+            log("INFO", f"explicit source not provisioned yet, skipping: {source_dir}")
+            continue
+
+        for root, _dirs, files in os.walk(source_dir):
+            for fname in files:
+                if fname.startswith(INCOMING_PREFIX):
+                    continue
+                fpath = os.path.join(root, fname)
+                if not is_settled(fpath, config["settle_seconds"]):
+                    continue
+                move_file(fpath, dest_dir, counters, route_name=route_name)
+
+
+def process_bare_inbox(config, counters, inbox_root):
+    explicit_source_dirs = {
+        os.path.basename(resolve_explicit_source(e["source"])) for e in config.get("explicit_dirs", [])
+    }
+    quarantine_dirname = os.path.basename(config["quarantine"])
+    hold_flag_name = os.path.basename(config["hold_flag"])
+
+    for entry in sorted(os.listdir(inbox_root)):
+        fpath = os.path.join(inbox_root, entry)
+
+        if os.path.isdir(fpath):
+            continue
+        if entry.startswith(INCOMING_PREFIX) or entry.startswith("."):
+            continue
+        if entry == hold_flag_name:
+            continue
+        if os.path.dirname(fpath) == inbox_root and entry in explicit_source_dirs:
+            continue
+        if entry == quarantine_dirname:
+            continue
+
+        if not is_settled(fpath, config["settle_seconds"]):
+            continue
+
+        try:
+            mime = magic.from_file(fpath, mime=True)
+        except Exception as e:
+            quarantine(fpath, f"could not determine mime type: {e}", config["quarantine"], counters)
+            continue
+
+        matched = False
+        for rule in config.get("mime_defaults", []):
+            if mime in rule["mime"]:
+                move_file(fpath, rule["dest"], counters, route_name=rule["name"])
+                matched = True
+                break
+
+        if not matched:
+            quarantine(fpath, f"no match: mime type {mime} has no configured route", config["quarantine"], counters)
+
+
+def post_summary(counters):
+    summary = {
+        "routes": counters["routes"],
+        "quarantined": counters["quarantined"],
+    }
+    log("INFO", f"run summary: {json.dumps(summary)}")
+
+    if not WEBHOOK_URL:
+        log("INFO", "N8N_WEBHOOK_URL not set, skipping notification")
+        return
+
+    try:
+        resp = requests.post(WEBHOOK_URL, json=summary, timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        log("WARN", f"failed to post run summary to webhook: {e}")
+
+
+def main():
+    config = load_config(CONFIG_PATH)
+    hold_flag = config["hold_flag"]
+
+    if os.path.exists(hold_flag):
+        log("INFO", "held, skipping run")
+        sys.exit(0)
+
+    inbox_root = os.path.dirname(hold_flag)
+
+    counters = {"routes": {}, "quarantined": [], "quarantine_dir": config["quarantine"]}
+
+    process_explicit_dirs(config, counters)
+    process_bare_inbox(config, counters, inbox_root)
+    post_summary(counters)
+
+
+if __name__ == "__main__":
+    main()

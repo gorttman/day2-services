@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inbox-router
+  labels:
+    app.kubernetes.io/name: inbox-router
+    app.kubernetes.io/part-of: day2-services
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
