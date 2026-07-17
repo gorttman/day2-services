@@ -85,8 +85,36 @@ possibly empty).
 Kavita was genuinely install-only - no library ever configured, no
 user accounts, no reading history (confirmed via its own README and a
 live cluster check immediately before removal). Nothing was migrated
-because there was nothing to migrate. `qnap-books` (the static PV) is
-reused directly - its `Retain` reclaim policy meant it survived
-kavita's PVC deletion as `Released`, requiring one manual
-`kubectl patch pv qnap-books -p '{"spec":{"claimRef": null}}'` to clear
-the stale claim reference before `calibre-web-books` could bind to it.
+because there was nothing to migrate.
+
+**Two real gotchas hit during the actual teardown, not just anticipated
+ones - recorded here since they'll recur for any future app removal in
+this repo:**
+
+1. **`qnap-books`'s `Retain` reclaim policy** meant kavita's PVC
+   deletion left the PV as `Released`, not `Available` - it still
+   carried a `claimRef` pointing at the deleted PVC. A patch
+   (`kubectl patch pv qnap-books --type merge -p '{"spec":{"claimRef": null}}'`)
+   was needed before `calibre-web-books` could bind to it. Anticipated
+   in planning, confirmed exactly as expected in practice.
+2. **Not anticipated**: removing `kavita/kavita-app.yml` from
+   `apps/kustomization.yml` deleted the `kavita` Argo CD `Application`
+   object itself (via the parent app-of-apps' own sync), but kavita's
+   `Application` had never been given the
+   `resources-finalizer.argocd.argoproj.io` finalizer. That finalizer
+   is what makes Argo CD cascade-delete an Application's own managed
+   resources when the Application object is deleted - without it,
+   deleting the Application just **orphans** everything it created.
+   Result: kavita's namespace, pod, PVCs, and both Ingresses were all
+   still live and serving traffic well after the "removal" had merged
+   and synced - including its `books-ingress`, which briefly coexisted
+   with calibre-web's own Ingress claiming the identical
+   `books.i3sec.com.au` host. Fixed with a direct
+   `kubectl delete namespace kavita`, which cascades properly on its
+   own. Worth remembering for next time: `prune: true` only prunes
+   resources *removed from an Application's own manifest set* while
+   the Application itself survives - it does not cover the Application
+   object being deleted out from under its own resources. Any future
+   app-removal in this repo should add the cascade finalizer to the
+   `Application` *before* relying on deleting it to clean up, not
+   discover the gap afterward.
