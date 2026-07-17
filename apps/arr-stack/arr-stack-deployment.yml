@@ -9,6 +9,9 @@
 # holds sealed PLACEHOLDER values, so the gluetun container CrashLoops by
 # design until real Mullvad credentials are sealed over it. The app UIs
 # stay reachable meanwhile (publishNotReadyAddresses on the Services).
+#
+# DISABLED 2026-07-17: replicas set to 0 pending fix of the above. Flip
+# back to 1 once real VPN creds are sealed over gluetun-vpn.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,7 +24,7 @@ metadata:
     app.kubernetes.io/part-of: day2-services
     argocd.argoproj.io/managed-by: argocd
 spec:
-  replicas: 1
+  replicas: 0
   # RWO local-path volumes: old pod must release them before the new one starts
   strategy:
     type: Recreate
