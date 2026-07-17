@@ -12,6 +12,11 @@ resources:
   - paperless/paperless-app.yml
   - jellyfin/jellyfin-app.yml
   - kavita/kavita-app.yml
-  - arr-stack/arr-stack-app.yml
+  # arr-stack disabled 2026-07-17: gluetun CrashLoopBackOff on placeholder
+  # VPN secret. Deployment already scaled to 0 (see arr-stack-deployment.yml)
+  # so the orphaned Application resources stay stopped, not crash-looping,
+  # once Argo CD prunes the Application object below. Re-add this line and
+  # flip replicas back to 1 once real Mullvad creds are sealed.
+  # - arr-stack/arr-stack-app.yml
   - homeassistant/homeassistant-app.yml
   - n8n/n8n-app.yml
