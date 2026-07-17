@@ -57,6 +57,17 @@ data:
 
       CREATE INDEX IF NOT EXISTS fingerprints_title_norm_trgm_idx
         ON fingerprints USING gin (title_norm gin_trgm_ops);
+
+      -- This script connects as the postgres superuser, so CREATE
+      -- TABLE above made postgres the owner, not books - which means
+      -- the books-pipeline CronJob (connecting as the books role)
+      -- would get "permission denied for table fingerprints" on its
+      -- very first INSERT. Found this the hard way on the first real
+      -- run of this Job (2026-07-17), not caught in review beforehand.
+      -- ALTER TABLE ... OWNER TO also transfers ownership of the
+      -- linked bigserial sequence, so one statement covers both.
+      -- Idempotent - safe to re-run even if already owned by books.
+      ALTER TABLE fingerprints OWNER TO books;
     SQL
 
     echo "[*] Done - books database and fingerprints table ready"
