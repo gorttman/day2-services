@@ -11,7 +11,7 @@ resources:
   - postgres/postgres-app.yml
   - paperless/paperless-app.yml
   - jellyfin/jellyfin-app.yml
-  - kavita/kavita-app.yml
+  - calibre-web/calibre-web-app.yml   # replaces kavita 2026-07-17 - see homelab-book chapter 002
   # arr-stack disabled 2026-07-17: gluetun CrashLoopBackOff on placeholder
   # VPN secret. Deployment already scaled to 0 (see arr-stack-deployment.yml)
   # so the orphaned Application resources stay stopped, not crash-looping,

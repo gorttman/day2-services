@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: kavita
+  name: calibre-web
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "1"
@@ -9,11 +9,11 @@ spec:
   project: default
   destination:
     server: https://kubernetes.default.svc
-    namespace: kavita
+    namespace: calibre-web
   source:
     repoURL: https://github.com/gorttman/day2-services.git
     targetRevision: main
-    path: apps/kavita
+    path: apps/calibre-web
   syncPolicy:
     automated:
       prune: true

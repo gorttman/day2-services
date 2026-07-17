@@ -1,31 +1,32 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: kavita
-  namespace: kavita
+  name: calibre-web
+  namespace: calibre-web
   labels:
-    app: kavita
-    app.kubernetes.io/name: kavita
+    app: calibre-web
+    app.kubernetes.io/name: calibre-web
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "private-ca"
 spec:
   # Internal-only: no Cloudflare Tunnel annotation; DNS for this host
-  # lives in dns-conf. http->https redirect is global (see day0-bootstrap
-  # apps/traefik/traefik-config.yml).
+  # lives in dns-conf. http->https redirect is global (day0-bootstrap
+  # apps/traefik/traefik-config.yml). Same pattern as kavita's internal
+  # ingress.
   ingressClassName: traefik
   tls:
   - hosts:
-    - kavita.i3sec.com.au
-    secretName: kavita-tls
+    - calibre-web.i3sec.com.au
+    secretName: calibre-web-tls
   rules:
-  - host: kavita.i3sec.com.au
+  - host: calibre-web.i3sec.com.au
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: kavita
+            name: calibre-web
             port:
-              number: 5000
+              number: 8083

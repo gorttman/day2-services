@@ -1,0 +1,20 @@
+# calibre-web's own config/database runs in a RAM emptyDir (same
+# pihole/kavita/grafana pattern - SQLite must never sit on NFS). This
+# PVC holds the periodic tar backups; nfs-client is safe here since
+# these are plain tar files, not a live SQLite DB.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: calibre-web-config-backup
+  namespace: calibre-web
+  labels:
+    app: calibre-web
+    app.kubernetes.io/name: calibre-web
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 2Gi

@@ -1,23 +1,25 @@
+# Claims books.i3sec.com.au - the same public hostname kavita used.
+# Must only be applied AFTER kavita's own books-ingress is removed;
+# two Ingress objects claiming the same host is undefined/conflicting
+# behavior in ingress-nginx, not a clean handoff. See README teardown
+# sequence.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: kavita-books
-  namespace: kavita
+  name: calibre-web-books
+  namespace: calibre-web
   labels:
-    app: kavita
-    app.kubernetes.io/name: kavita
+    app: calibre-web
+    app.kubernetes.io/name: calibre-web
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "private-ca"
     # cloudflared's Public Hostname (dashboard-managed) forwards here as
     # plain HTTP, not HTTPS - without this, nginx's default ssl-redirect
-    # would 308 that request to https and loop.
+    # would 308 that request to https and loop. Same as kavita's.
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
-  # Public, via Cloudflare Tunnel: cloudflared has no cluster-side Service
-  # of its own, it dials out to Cloudflare's edge and the dashboard's
-  # Public Hostname points straight at this ingress-nginx controller.
-  # mTLS enforcement is a separate WAF rule (not yet created).
+  # Public, via Cloudflare Tunnel - same setup as kavita had.
   ingressClassName: nginx
   tls:
   - hosts:
@@ -31,6 +33,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: kavita
+            name: calibre-web
             port:
-              number: 5000
+              number: 8083

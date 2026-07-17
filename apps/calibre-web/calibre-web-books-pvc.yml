@@ -1,0 +1,28 @@
+# Claims the same static qnap-books PV kavita used (day1-foundation
+# apps/qnap-storage) - a PV binds 1:1 to a single PVC, so kavita's own
+# PVC must be deleted (and the PV's claimRef cleared, since Retain
+# policy keeps it around as "Released" rather than freeing it
+# automatically) before this one can bind. See the teardown plan in
+# README.md - this is real live-cluster sequencing, not just a
+# manifest swap.
+#
+# Read-write, unlike kavita's read-only mount: calibre-web writes back
+# to metadata.db (tags, read status, etc.), not just reads library
+# content.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: calibre-web-books
+  namespace: calibre-web
+  labels:
+    app: calibre-web
+    app.kubernetes.io/name: calibre-web
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: qnap-static
+  volumeName: qnap-books
+  resources:
+    requests:
+      storage: 1Ti

@@ -1,18 +1,18 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: kavita
-  namespace: kavita
+  name: calibre-web
+  namespace: calibre-web
   labels:
-    app: kavita
-    app.kubernetes.io/name: kavita
+    app: calibre-web
+    app.kubernetes.io/name: calibre-web
     argocd.argoproj.io/managed-by: argocd
 spec:
   type: ClusterIP
   selector:
-    app: kavita
+    app: calibre-web
   ports:
   - name: http
-    port: 5000
-    targetPort: 5000
+    port: 8083
+    targetPort: 8083
     protocol: TCP
