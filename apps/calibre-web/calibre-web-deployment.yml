@@ -46,9 +46,16 @@ spec:
       # image, which has it. calibredb has no dedicated "create empty
       # library" command; restore_database --really-do-it is the
       # documented non-interactive workaround for producing a fresh,
-      # valid, empty metadata.db. Idempotent - skips if metadata.db is
-      # already there, safe on every pod restart including the
-      # self-triggered one below.
+      # empty metadata.db - but it works by SCANNING the target
+      # directory for existing .opf files to rebuild from, which is
+      # wrong here: /books/import can (and, found live on 2026-07-18,
+      # does) hold tens of thousands of real files, and one corrupt
+      # .opf anywhere in that scan crashes the whole command. Fixed by
+      # running restore_database against an empty scratch directory
+      # inside this init container's own throwaway filesystem (never
+      # touches the mounted /books content at all), then copying only
+      # the resulting metadata.db file into /books. Idempotent - skips
+      # entirely if metadata.db is already there.
       - name: library-init
         image: ghcr.io/gorttman/books-pipeline:0.1.0
         command: ["sh", "-c"]
@@ -58,8 +65,11 @@ spec:
           if [ -f /books/metadata.db ]; then
             echo "metadata.db already exists, skipping"
           else
-            echo "no metadata.db at /books - creating a fresh empty library"
-            calibredb restore_database --really-do-it --with-library /books
+            echo "no metadata.db at /books - building one in an isolated scratch dir, not scanning /books"
+            mkdir -p /tmp/empty-library
+            calibredb restore_database --really-do-it --with-library /tmp/empty-library
+            cp /tmp/empty-library/metadata.db /books/metadata.db
+            echo "metadata.db created at /books/metadata.db"
           fi
         volumeMounts:
         - name: books
