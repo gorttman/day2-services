@@ -379,9 +379,16 @@ def process_file(conn, path, config, counters):
         meta = backfill_metadata(meta, config)
 
         # Stage 6
-        ok, promote_reason = promote(conn, meta, path if promote_src == path else promote_src, config, counters)
+        ok, promote_reason = promote(conn, meta, promote_src, config, counters)
         if not ok:
-            quarantine(path if promote_src == path else promote_src, promote_reason, config["quarantine_dir"], counters)
+            # Quarantine the original file, not promote_src - if conversion
+            # happened, promote_src is a tempfile.TemporaryDirectory() path
+            # named generically "converted.epub" for every book, which both
+            # loses the original filename for human review and guarantees a
+            # quarantine collision on the second such failure. The original
+            # is guaranteed to still exist here: promote() only os.remove()s
+            # it on success.
+            quarantine(path, promote_reason, config["quarantine_dir"], counters)
 
 
 # ---------------------------------------------------------------------------
