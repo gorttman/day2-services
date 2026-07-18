@@ -147,12 +147,48 @@ UI step.
    creates a real Calibre library (`metadata.db`) at `/books` if one
    doesn't exist yet. Borrows the `books-pipeline` image for this,
    since calibre-web's own image is pure Python with no Calibre CLI at
-   all. `calibredb` has no dedicated "create empty library" command;
-   `calibredb restore_database --really-do-it --with-library /books` is
-   the documented non-interactive workaround. Idempotent - skips if
-   `metadata.db` is already there.
+   all. Idempotent - skips if `metadata.db` is already there.
 2. **`seed_users.py` (extended)** - after seeding accounts, checks
    `settings.config_calibre_dir`; if still blank, sets it to `/books`.
+
+**How `library-init` actually creates the database - two wrong attempts
+first, recorded because both are genuine calibredb gotchas, not just
+"it worked eventually":**
+- First attempt: `calibredb restore_database --really-do-it --with-library /books`
+  directly against the mounted export. This is a **recovery** command -
+  it scans the target directory for existing `.opf` files to rebuild
+  from. `/books/import` turned out to already hold a real, independently
+  copied-in ~43,000-file personal library, and one pre-existing corrupt
+  (0-byte) `metadata.opf` in that tree crashed the command outright
+  before it wrote anything. No data was affected - confirmed no files
+  modified anywhere under `/books/import` in the incident window, and
+  `restore_database` only ever reads `.opf` files, never writes book
+  files - but the lesson holds regardless: never point a recovery/scan
+  tool at a live directory with unknown real content.
+- Second attempt: same command against an isolated, genuinely empty
+  scratch directory instead. Still failed - `restore_database` expects
+  pre-existing library scaffolding (a `.calnotes` directory) to restore
+  *from*; it's a recovery tool in both modes, never a from-scratch init
+  tool.
+- **What actually works**: any `calibredb` subcommand opens the library
+  database first, and Calibre's own DB-opening code creates a fresh,
+  valid, empty `metadata.db` automatically if none exists at the given
+  path - the same thing the desktop GUI does pointed at an empty
+  folder. `calibredb list --library-path <scratch-dir>` is the command
+  used; tested locally against the real image (confirmed via direct
+  `sqlite3` inspection - real Calibre schema, `books` table, 0 rows)
+  before it went anywhere near the cluster again.
+- Runs against the init container's own throwaway filesystem either
+  way, then copies only the resulting `metadata.db` into `/books` -
+  never scans the real mounted content, in any version of this fix.
+
+**One more real thing hit during this same rollout**: `/mnt/books`'s
+root directory ownership had changed to the user's own login account
+(from copying that real library in directly), leaving the container's
+group (`10001`) with read+execute only - `library-init` failed with a
+plain `Permission denied` writing `metadata.db` until the export root
+was `chmod 775`'d so both the human's direct copies and the
+containers' writes work going forward.
 
 **Why this needs a pod restart, and how that's automated too**:
 calibre-web reads `config_calibre_dir` into memory once at process
