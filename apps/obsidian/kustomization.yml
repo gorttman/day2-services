@@ -7,3 +7,4 @@ resources:
   - obsidian-deploy.yml
   - obsidian-service.yml
   - obsidian-ingress.yml
+  - obsidian-public-ingress.yml

@@ -1,0 +1,44 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: obsidian-public
+  namespace: obsidian
+  labels:
+    app: obsidian
+    app.kubernetes.io/name: obsidian
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+    # cloudflared's Public Hostname (Terraform-managed, day1-foundation
+    # apps/cloudflare-tf) forwards here as plain HTTP, not HTTPS - without
+    # this, nginx's default ssl-redirect would 308 that request to https
+    # and loop.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # nginx equivalent of the internal ingress's Traefik redirectRegex
+    # middleware (obsidian-to-novnc): any request here bounces straight to
+    # novnc's public hostname with the "obsidian" websockify token,
+    # matching the internal path's behavior. permanent-redirect-code is
+    # set to 302 (nginx's annotation defaults to 308) to match the
+    # internal middleware's non-permanent redirect.
+    nginx.ingress.kubernetes.io/permanent-redirect: "https://novnc.i3sec.com.au/vnc.html?autoconnect=true&path=websockify%3Ftoken%3Dobsidian"
+    nginx.ingress.kubernetes.io/permanent-redirect-code: "302"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - obsidian.i3sec.com.au
+    secretName: obsidian-public-tls
+  rules:
+  - host: obsidian.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          # Never actually reached - permanent-redirect above short-circuits
+          # before nginx proxies to any upstream. Kept for schema
+          # completeness, same as the internal ingress's own dummy backend.
+          service:
+            name: obsidian
+            port:
+              number: 5900

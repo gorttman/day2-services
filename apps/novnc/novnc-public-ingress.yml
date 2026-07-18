@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: novnc-public
+  namespace: remote-access
+  labels:
+    app: novnc
+    app.kubernetes.io/name: novnc
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+    # cloudflared's Public Hostname (Terraform-managed, day1-foundation
+    # apps/cloudflare-tf) forwards here as plain HTTP, not HTTPS - without
+    # this, nginx's default ssl-redirect would 308 that request to https
+    # and loop.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # First nginx-fronted websocket app in this repo (Traefik has handled
+    # the others - homeassistant, n8n - which needed no extra annotation).
+    # ingress-nginx proxies websockets fine by default, but its default
+    # 60s proxy-read/send-timeout would silently kill an idle noVNC
+    # session mid-use. Bumped to 1h; not scientifically tuned, just long
+    # enough that a normal remote-desktop session won't get cut off.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - novnc.i3sec.com.au
+    secretName: novnc-public-tls
+  rules:
+  - host: novnc.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: novnc
+            port:
+              number: 80

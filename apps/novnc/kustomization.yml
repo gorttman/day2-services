@@ -8,3 +8,4 @@ resources:
   - novnc-service.yml
   - novnc-middleware.yml
   - novnc-ingress.yml
+  - novnc-public-ingress.yml
