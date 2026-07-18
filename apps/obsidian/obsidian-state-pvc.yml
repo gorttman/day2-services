@@ -1,0 +1,28 @@
+# obsidian-headless's only real dependency is better-sqlite3 - its local
+# sync bookkeeping and account session almost certainly live in SQLite-backed
+# files. This project already learned the hard way that SQLite and NFS
+# don't mix (pihole gravity.db corruption incident, see
+# day1-foundation/apps/qnap-storage/README.md's rules). The vault content
+# itself stays on the NFS QNAP share (obsidian-vault PVC) by design, but
+# this local state gets its own small local-path volume instead.
+#
+# local-path is node-local (WaitForFirstConsumer) - the pod mounting this
+# MUST be pinned to a node with real persistent disk. pinode-01's k3s data
+# dir is RAM tmpfs; k8smaster is the only safe choice. See obsidian-deploy.yml's
+# nodeSelector.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: obsidian-headless-state
+  namespace: obsidian
+  labels:
+    app: obsidian
+    app.kubernetes.io/name: obsidian
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi

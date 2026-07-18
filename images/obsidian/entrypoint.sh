@@ -1,31 +1,49 @@
-#!/bin/bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-# Clean up any stale X lock files from previous runs
-rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
+VAULT_PATH=/vault
+CONFIG_DIR=.obsidian-headless-sync
 
-# Start virtual display
-Xvfb :1 -screen 0 1280x800x24 -nolisten tcp &
+# Account-level: log in if we're not already. sync-list-remote is a cheap,
+# account-scoped call that fails cleanly if unauthenticated - used as the
+# "am I logged in" check since `ob login` with no args wasn't verifiable
+# without real credentials at proposal time.
+if ! ob sync-list-remote >/tmp/remotes.log 2>&1; then
+  echo "[*] Not logged in - logging in"
+  ob login --email "$OBSIDIAN_EMAIL" --password "$OBSIDIAN_PASSWORD"
+  ob sync-list-remote >/tmp/remotes.log
+fi
 
-export DISPLAY=:1
+# Vault-level: create the remote vault if it doesn't exist yet. The
+# encryption password is set here, at creation time - not something that
+# pre-exists to look up.
+if ! grep -q "$OBSIDIAN_VAULT_NAME" /tmp/remotes.log; then
+  echo "[*] Remote vault '$OBSIDIAN_VAULT_NAME' doesn't exist yet - creating it"
+  ob sync-create-remote \
+    --name "$OBSIDIAN_VAULT_NAME" \
+    --encryption e2ee \
+    --password "$OBSIDIAN_SYNC_PASSWORD"
+fi
 
-# Wait for the display socket to appear
-until [ -S /tmp/.X11-unix/X1 ]; do sleep 0.1; done
+# Local-level: link this local path to the remote vault if not already
+# linked. sync-status succeeding is the signal a link already exists -
+# this is what makes re-running login/sync-create-remote/sync-setup safe
+# on every pod restart rather than just on first boot.
+if ! ob sync-status --path "$VAULT_PATH" >/tmp/sync-status.log 2>&1; then
+  echo "[*] Local vault not yet linked - running sync-setup"
+  ob sync-setup \
+    --vault "$OBSIDIAN_VAULT_NAME" \
+    --path "$VAULT_PATH" \
+    --password "$OBSIDIAN_SYNC_PASSWORD" \
+    --device-name "$OBSIDIAN_DEVICE_NAME" \
+    --config-dir "$CONFIG_DIR"
+  ob sync-config \
+    --path "$VAULT_PATH" \
+    --mode bidirectional \
+    --excluded-folders .git
+else
+  echo "[*] Vault already linked, skipping setup"
+  cat /tmp/sync-status.log
+fi
 
-# Start minimal window manager
-openbox &
-
-# Start VNC server — no password, internal cluster access only
-x11vnc \
-    -display :1 \
-    -rfbport 5900 \
-    -nopw \
-    -listen 0.0.0.0 \
-    -xkb \
-    -forever \
-    -shared \
-    -quiet \
-    -bg
-
-# Start Obsidian
-exec /opt/obsidian/obsidian --no-sandbox --disable-gpu
+exec ob sync --path "$VAULT_PATH" --continuous
