@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: calibre-web-user-seed-script
+  namespace: calibre-web
+data:
+  seed_users.py: |
+    #!/usr/bin/env python3
+    # Creates real calibre-web accounts for this homelab's actual people
+    # (day1-foundation/apps/cloudflare-tf's warp_authorized_emails - the
+    # only place this repo enumerates who's allowed to use it) by writing
+    # directly into app.db's `user` table with the same scrypt hash format
+    # calibre-web itself uses (werkzeug.security, method="scrypt"), rather
+    # than going through the setup wizard by hand.
+    #
+    # Idempotent and safe to leave running forever: only INSERTs a row
+    # when no user with that name exists yet, so it never overwrites a
+    # password someone has since changed via the calibre-web UI. Runs as
+    # a plain extra container in the calibre-web pod (not an init
+    # container) because app.db doesn't exist until calibre-web itself
+    # creates it on first boot - this waits that out instead of racing it.
+    #
+    # Role bitmask (from the image's own cps/constants.py, confirmed
+    # 2026-07-17 against lscr.io/linuxserver/calibre-web:0.6.26-ls391):
+    #   ROLE_ADMIN=1 ROLE_DOWNLOAD=2 ROLE_UPLOAD=4 ROLE_EDIT=8
+    #   ROLE_PASSWD=16 ROLE_ANONYMOUS=32 ROLE_EDIT_SHELFS=64
+    #   ROLE_DELETE_BOOKS=128 ROLE_VIEWER=256
+    # ROLE_READER (350) = DOWNLOAD+UPLOAD+EDIT+PASSWD+EDIT_SHELFS+VIEWER -
+    # a full reader/curator account (can change their own password) but
+    # not ROLE_ADMIN (server settings/user management) or
+    # ROLE_DELETE_BOOKS. Promote via the calibre-web UI (Admin > Edit
+    # User) if that's ever not enough.
+    import os
+    import sqlite3
+    import time
+
+    from werkzeug.security import generate_password_hash
+
+    DB_PATH = "/config/app.db"
+    ROLE_READER = 2 + 4 + 8 + 16 + 64 + 256
+
+    USERS = [
+        {"name": "gorttman", "email": "gorttman@i3sec.com.au", "password_env": "CALIBRE_PW_GORTTMAN"},
+        {"name": "brett", "email": "brett@i3sec.com.au", "password_env": "CALIBRE_PW_BRETT"},
+    ]
+
+
+    def wait_for_schema():
+        while True:
+            if os.path.exists(DB_PATH):
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    conn.execute("SELECT 1 FROM user LIMIT 1")
+                    conn.close()
+                    return
+                except sqlite3.Error:
+                    pass
+            print("waiting for calibre-web to create app.db...", flush=True)
+            time.sleep(5)
+
+
+    def seed():
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        for u in USERS:
+            cur.execute("SELECT id FROM user WHERE name = ?", (u["name"],))
+            if cur.fetchone():
+                print(f"{u['name']}: already exists, skipping", flush=True)
+                continue
+            password = os.environ.get(u["password_env"])
+            if not password:
+                print(f"{u['name']}: {u['password_env']} not set, skipping", flush=True)
+                continue
+            pw_hash = generate_password_hash(password, method="scrypt")
+            cur.execute(
+                """
+                INSERT INTO user
+                    (name, email, role, password, kindle_mail, locale,
+                     sidebar_view, default_language, denied_tags,
+                     allowed_tags, denied_column_value, allowed_column_value,
+                     view_settings, kobo_only_shelves_sync)
+                VALUES (?, ?, ?, ?, '', 'en', 262143, 'all', '', '', '', '', '{}', 0)
+                """,
+                (u["name"], u["email"], ROLE_READER, pw_hash),
+            )
+            conn.commit()
+            print(f"{u['name']}: created", flush=True)
+        conn.close()
+
+
+    wait_for_schema()
+    seed()
+    print("user-seed: done, idling", flush=True)
+    while True:
+        time.sleep(3600)

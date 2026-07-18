@@ -80,6 +80,59 @@ Worth resolving before this deployment is actually useful for reading
 - not before it's safe to apply (it's harmless either way, just
 possibly empty).
 
+## User accounts: seeded automatically, not the setup wizard (2026-07-18)
+
+`admin` (role 479, all bits except `ROLE_ANONYMOUS`) was created by hand
+through calibre-web's own first-run wizard when this was first deployed -
+that account and its password are untouched by anything below.
+
+Two more accounts - `gorttman` and `brett` - are created automatically by
+a `user-seed` container in the same pod, sourced from
+`day1-foundation/apps/cloudflare-tf`'s `warp_authorized_emails` (the only
+place in this homelab's code that enumerates actual people; there's no
+shared variable between the Terraform and Kubernetes repos, so if that
+list ever changes, `calibre-web-user-seed-script.yml`'s `USERS` list has
+to be updated by hand to match). No manual account creation, no wizard
+click-through.
+
+**How it works**: `calibre-web-user-seed-script.yml`'s `seed_users.py`
+runs as a plain long-running container (not an `initContainer` -
+`/config/app.db` doesn't exist until calibre-web itself creates it on
+first boot, so an init container would just race it). It polls until the
+`user` table exists, then `INSERT`s a row per configured user with a
+`werkzeug.security.generate_password_hash(pw, method="scrypt")` hash -
+confirmed byte-format-identical to what calibre-web's own login checks
+against, since it's the same image and the same library calibre-web
+itself uses. Idempotent: skips any name that already has a row, so it
+never overwrites a password someone's changed since via the UI, and
+restarting the pod is harmless.
+
+**Passwords**: randomly generated once (2026-07-18), sealed into
+`calibre-web-user-passwords-sealedsecret.yml`. This is intentionally
+**password-based login, not passwordless SSO** - `books.i3sec.com.au` is
+gated by Cloudflare's mTLS WAF rule (any valid device cert under this
+account's CA), not Cloudflare Access, so there's no per-person identity
+assertion available to hand calibre-web today. (calibre-web does support
+trusting a reverse-proxy identity header for passwordless login -
+`config_allow_reverse_proxy_header_login` in `settings` - but wiring that
+up would mean adding a Cloudflare Access policy plus a JWT-verifying
+proxy in front, similar in shape to `vscode-server`'s PAM-based
+`vscode-auth` but Access-based instead. Not built here - out of scope,
+deliberately deferred, not an oversight.) To rotate a password: reseal
+just that key (`kubeseal --raw --scope strict --namespace calibre-web
+--name calibre-web-user-passwords`), and either delete the user's row
+from `app.db` first (the seed script won't touch an existing row) or
+just change it via the calibre-web UI directly - the sealed value only
+matters for the account's *first* creation.
+
+**Roles**: both get `ROLE_READER` (350 = `DOWNLOAD+UPLOAD+EDIT+PASSWD
++EDIT_SHELFS+VIEWER`) - full reader/curator access including changing
+their own password, but not `ROLE_ADMIN` (server settings, user
+management) or `ROLE_DELETE_BOOKS`. Promote either account via the
+calibre-web UI (Admin > Edit User) if that's ever not enough - the seed
+script only creates missing rows, so it won't fight a manual role change
+on next pod restart.
+
 ## Migration from kavita (2026-07-17)
 
 Kavita was genuinely install-only - no library ever configured, no

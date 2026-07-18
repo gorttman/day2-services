@@ -5,6 +5,8 @@ resources:
   - calibre-web-namespace.yml
   - calibre-web-pvc.yml
   - calibre-web-books-pvc.yml
+  - calibre-web-user-passwords-sealedsecret.yml
+  - calibre-web-user-seed-script.yml
   - calibre-web-deployment.yml
   - calibre-web-service.yml
   - calibre-web-ingress.yml

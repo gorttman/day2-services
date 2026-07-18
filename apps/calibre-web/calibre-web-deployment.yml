@@ -103,6 +103,38 @@ spec:
           periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
+      # Seeds real accounts (gorttman, brett - see calibre-web-user-seed-script.yml
+      # for the full reasoning) directly into app.db, so no one has to click
+      # through the setup wizard by hand. Can't be an initContainer: app.db
+      # doesn't exist until calibre-web itself creates it on first boot, so
+      # this waits that out as a plain long-running container instead of
+      # racing it. Idempotent - only creates rows that don't exist yet.
+      - name: user-seed
+        image: lscr.io/linuxserver/calibre-web:0.6.26-ls391
+        imagePullPolicy: IfNotPresent
+        command: ["python3", "/app/seed_users.py"]
+        securityContext:
+          runAsUser: 10001
+          runAsGroup: 10001
+        env:
+        - name: CALIBRE_PW_GORTTMAN
+          valueFrom:
+            secretKeyRef:
+              name: calibre-web-user-passwords
+              key: gorttman
+        - name: CALIBRE_PW_BRETT
+          valueFrom:
+            secretKeyRef:
+              name: calibre-web-user-passwords
+              key: brett
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: user-seed-script
+          mountPath: /app
+        resources:
+          requests: {memory: "32Mi", cpu: "10m"}
+          limits: {memory: "128Mi", cpu: "200m"}
       - name: config-backup
         image: busybox:1.36
         command: ["sh", "-c"]
@@ -146,6 +178,9 @@ spec:
       - name: backup
         persistentVolumeClaim:
           claimName: calibre-web-config-backup
+      - name: user-seed-script
+        configMap:
+          name: calibre-web-user-seed-script
       - name: books
         persistentVolumeClaim:
           claimName: calibre-web-books
