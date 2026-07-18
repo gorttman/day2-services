@@ -72,11 +72,15 @@ RUN pip install --no-cache-dir \
       rapidfuzz==3.14.5 \
       pypdf==6.14.2
 
-RUN groupadd --gid 10001 books-pipeline \
-    && useradd --uid 10001 --gid books-pipeline --create-home \
+# UID 1000 / GID 100 (users), not the invented 10001 from the original
+# build - matches the pre-existing day0/day1 convention (every
+# linuxserver-based app in this cluster already runs PUID=1000) and
+# gorttman's own real supplementary group on the QNAP host. GID 100
+# "users" already exists in the base image, no groupadd needed.
+RUN useradd --uid 1000 --gid 100 --create-home \
        --home-dir /home/books-pipeline --shell /usr/sbin/nologin books-pipeline \
     && mkdir -p /home/books-pipeline/.cache /home/books-pipeline/.config \
-    && chown -R books-pipeline:books-pipeline /home/books-pipeline
+    && chown -R 1000:100 /home/books-pipeline
 
 ENV HOME=/home/books-pipeline \
     XDG_CACHE_HOME=/home/books-pipeline/.cache \
@@ -85,7 +89,7 @@ ENV HOME=/home/books-pipeline \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-USER 10001:10001
+USER 1000:100
 
 # No pipeline script, ENTRYPOINT, or CMD is baked in: matching the
 # inbox-router image's pattern, the script is mounted from a ConfigMap

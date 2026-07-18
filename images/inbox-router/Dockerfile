@@ -9,10 +9,17 @@ RUN pip install --no-cache-dir \
       PyYAML==6.0.3 \
       requests==2.34.2
 
-RUN groupadd --gid 10001 router \
-    && useradd --uid 10001 --gid router --no-create-home --shell /usr/sbin/nologin router
+# UID 1000 / GID 100 (users) - matches the pre-existing day0/day1
+# convention (every linuxserver-based app in this cluster already runs
+# PUID=1000), not an invented UID. GID 100 "users" already exists in
+# the base image (standard Debian default, confirmed empty) - no
+# groupadd needed, just reuse it, matching gorttman's own real
+# supplementary group on the QNAP host. Lets a human's direct file
+# copy and this container's writes coexist via shared group
+# permissions instead of exclusive single-UID ownership.
+RUN useradd --uid 1000 --gid 100 --no-create-home --shell /usr/sbin/nologin router
 
-USER 10001:10001
+USER 1000:100
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
