@@ -50,12 +50,24 @@ spec:
       # directory for existing .opf files to rebuild from, which is
       # wrong here: /books/import can (and, found live on 2026-07-18,
       # does) hold tens of thousands of real files, and one corrupt
-      # .opf anywhere in that scan crashes the whole command. Fixed by
-      # running restore_database against an empty scratch directory
-      # inside this init container's own throwaway filesystem (never
-      # touches the mounted /books content at all), then copying only
-      # the resulting metadata.db file into /books. Idempotent - skips
-      # entirely if metadata.db is already there.
+      # .opf anywhere in that scan crashes the whole command.
+      #
+      # Also tried and also wrong: restore_database against a truly
+      # empty scratch directory - it still failed, expecting
+      # pre-existing library scaffolding (a .calnotes dir) to restore
+      # *from*, not to bootstrap one from nothing. restore_database is
+      # a recovery tool, not an init tool, in either mode.
+      #
+      # What actually works: any calibredb subcommand (list is the
+      # simplest) opens the library database first before doing
+      # anything else, and Calibre's own DB-opening code creates a
+      # fresh, valid, empty metadata.db automatically if none exists at
+      # the given path - the same thing the desktop GUI does when you
+      # point it at an empty folder. Run against an isolated scratch
+      # directory inside this init container's own throwaway
+      # filesystem (never touches the mounted /books content at all),
+      # then copy only the resulting metadata.db into /books.
+      # Idempotent - skips entirely if metadata.db is already there.
       - name: library-init
         image: ghcr.io/gorttman/books-pipeline:0.1.0
         command: ["sh", "-c"]
@@ -67,7 +79,7 @@ spec:
           else
             echo "no metadata.db at /books - building one in an isolated scratch dir, not scanning /books"
             mkdir -p /tmp/empty-library
-            calibredb restore_database --really-do-it --with-library /tmp/empty-library
+            calibredb list --library-path /tmp/empty-library
             cp /tmp/empty-library/metadata.db /books/metadata.db
             echo "metadata.db created at /books/metadata.db"
           fi
