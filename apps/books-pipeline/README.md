@@ -100,3 +100,71 @@ entries yet. Not fixed here.
 `N8N_WEBHOOK_URL` in `books-pipeline-secret` (shared with
 `books-fingerprint-reconcile`) is currently a placeholder - no real n8n
 workflow exists yet. Failed POSTs log a `WARN`, never fail the job.
+
+## Real bug found 2026-07-18: NFS ownership never matched the runtime UID
+
+User dropped ~4,480 real files into `import/` and none processed - every
+`books-pipeline` run for ~2 hours had been failing with `error: timed
+out waiting for the condition` (the 1800s `activeDeadlineSeconds`).
+
+Root cause, in order: `import/`, `quarantine/`, and `library/{books,comics}/`
+on the NFS export were owned `root:100` with the directory only granting
+write to owner/group - but the then-live `books-pipeline:0.1.0` ran as
+the invented `10001:10001` (matches neither), so every `quarantine()`
+call failed with `EACCES`, and a failed quarantine leaves the original
+file in `import/` untouched - so the *next* run picked up the exact same
+stuck files and repeated the same expensive `ebook-convert` attempt
+(most of these are old scanned PDFs; `ebook-convert` was genuinely
+taking the full 600s timeout on several of them, not hanging), burning
+the entire job deadline on 2-3 files before timing out. Compounding
+factor, unrelated to the permission bug but hit in the same failure
+window: on a `promote()` failure *after* a successful conversion,
+`quarantine()` was called with the converted `tempfile.TemporaryDirectory()`
+artifact - generically named `converted.epub` for every book - instead
+of the original file, which both loses the original filename for human
+review and guarantees a same-name collision on the second such failure.
+Fixed in `books_pipeline.py`/`books-pipeline-configmap-script.yml`:
+always quarantine the original file, matching the other two quarantine
+call sites in `process_file()`.
+
+**Separately**, a parallel session had already landed (`662a071`/`22be1af`)
+the real structural fix for the UID mismatch class of bug - standardizing
+`books-pipeline`/`inbox-router`/`calibre-web` on `UID 1000 / GID 100`
+(matching every other linuxserver-based app in this cluster, and the
+NFS directories' pre-existing `root:100` group ownership) rather than
+the invented `10001:10001`. That fix was already synced by the time
+this was investigated. **A first pass at fixing this live mistakenly
+`chown`'d the NFS directories to `10001:10001`** (based on what the
+*old*, already-dead job's `id` showed, without checking whether a fix
+was already in flight elsewhere) - which briefly broke write access
+again, just for the *new* UID instead of the old one. Caught by
+checking `git log` mid-fix and re-diffing live state against
+`kubectl get cronjob ... -o jsonpath='{...image}'`, which showed
+`0.2.0` already deployed. Corrected: `import/`, `quarantine/`,
+`library/{books,comics}/`, and (found while checking for the same
+pattern) `calibre-web`'s `metadata.db` (owned `10001:10001`, no
+group/other write bit - same rollout gap, calibre-web's actual process
+also runs `1000:100` now) all re-`chown`'d to `1000:100`, the latter
+also `chmod 664`.
+
+**Lesson**: this NFS ownership state isn't code, so it doesn't show up
+in a diff and won't regress on its own - but it also isn't self-healing
+the way Argo CD's `selfHeal` is for everything else in this repo. Check
+`git log` for recent parallel-session commits *before* diagnosing a
+permission issue as "needs a chown to match what's currently running" -
+another session may have already changed what "currently running"
+means.
+
+Verified after both the code fix and the correct `chown`: a manual
+`kubectl create job --from=cronjob/books-pipeline` run actually wrote a
+real quarantine entry (correct original filename, real reason sidecar,
+removed from `import/` - count dropped by exactly one) with no
+`EACCES`, and correctly detected+skipped a pre-existing same-name
+collision without crashing the run. Real throughput on the current PDF
+backlog is still slow - up to ~10 minutes per file when `ebook-convert`
+times out - so draining 4,480 files (many of them PDFs) at 2-3
+files/15-minute cycle will take a long time. Not addressed here: the
+README's own stated design (a separate, not-yet-built "PDF triage
+subagent") already anticipated PDFs shouldn't go through full
+`ebook-convert` attempts in this pipeline at all - worth revisiting if
+the backlog needs to drain faster than "eventually."
