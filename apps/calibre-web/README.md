@@ -31,12 +31,23 @@ container. calibre-web here is purely a reading/browsing UI.
   backs up hourly and again on `preStop`. Worst case after an unclean
   node death: up to an hour of settings/reading-progress lost.
 
-## PUID/PGID: 10001, not linuxserver's default 1000
+## PUID/PGID: 1000/100, standardized 2026-07-18
 
-Deliberately matches `books-pipeline`'s non-root UID - both containers
-need to read *and* write the same library files and `metadata.db`, so
-they need to agree on ownership rather than fighting over it via
-mismatched UIDs.
+Originally `10001:10001` - an invented UID/GID that matched nothing
+else, deliberately chosen only so `calibre-web` and `books-pipeline`
+agreed with each other. Standardized to `1000` (UID) / `100`, `users`
+(GID) instead, for two reasons: it matches the pre-existing day0/day1
+convention (every linuxserver-based app in this cluster already runs
+`PUID=1000`), and `100`/`users` is gorttman's own real supplementary
+group on the QNAP host - so a human copying files into these
+directories directly and these containers writing to them now share
+group access, rather than one exclusive UID silently locking the other
+out (hit twice: once via a `root:root` export root, once when a bulk
+copy changed `/mnt/books`'s ownership to the user's own login and
+broke `library-init`'s write access). See
+`day1-foundation/apps/qnap-storage/README.md` for the QNAP-side half of
+this (`root:users`, `2775` setgid on every directory this app and
+`books-pipeline` touch).
 
 ## ⚠️ Known gap: this library isn't actually a Calibre library yet
 

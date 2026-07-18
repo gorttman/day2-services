@@ -1,7 +1,11 @@
-# PUID/PGID set to 10001 (not linuxserver's default 1000) to match
-# books-pipeline's non-root UID - both containers need to read AND
-# write the same library files and metadata.db, so they need to agree
-# on ownership rather than fighting over it.
+# PUID/PGID set to 1000/100 (2026-07-18 standardization) - matches
+# books-pipeline's UID/GID and the pre-existing day0/day1 convention
+# (every linuxserver-based app in this cluster already runs PUID=1000).
+# GID 100 is "users" - gorttman's own real supplementary group on the
+# QNAP host, chosen deliberately so a human's direct file copies and
+# these containers' writes share group access instead of fighting over
+# exclusive single-UID ownership (root:users + setgid on the QNAP
+# directories themselves - see day1-foundation apps/qnap-storage).
 #
 # DOCKER_MODS (linuxserver's optional on-the-fly conversion mod) is
 # deliberately NOT set - it's x86-64 only per linuxserver's own docs,
@@ -69,7 +73,7 @@ spec:
       # then copy only the resulting metadata.db into /books.
       # Idempotent - skips entirely if metadata.db is already there.
       - name: library-init
-        image: ghcr.io/gorttman/books-pipeline:0.1.0
+        image: ghcr.io/gorttman/books-pipeline:0.2.0
         command: ["sh", "-c"]
         args:
         - |
@@ -100,7 +104,7 @@ spec:
           else
             echo "no backup found - starting fresh"
           fi
-          chown -R 10001:10001 /config
+          chown -R 1000:100 /config
           chmod 0775 /config
         volumeMounts:
         - name: config
@@ -113,9 +117,9 @@ spec:
         imagePullPolicy: IfNotPresent
         env:
         - name: PUID
-          value: "10001"
+          value: "1000"
         - name: PGID
-          value: "10001"
+          value: "100"
         - name: TZ
           value: Australia/Sydney
         ports:
@@ -164,8 +168,8 @@ spec:
         imagePullPolicy: IfNotPresent
         command: ["python3", "/app/seed_users.py"]
         securityContext:
-          runAsUser: 10001
-          runAsGroup: 10001
+          runAsUser: 1000
+          runAsGroup: 100
         env:
         - name: MY_POD_NAME
           valueFrom:

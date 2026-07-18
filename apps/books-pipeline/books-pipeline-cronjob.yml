@@ -35,7 +35,7 @@ spec:
             kubernetes.io/hostname: k8smaster
           containers:
             - name: books-pipeline
-              image: ghcr.io/gorttman/books-pipeline:0.1.0
+              image: ghcr.io/gorttman/books-pipeline:0.2.0
               command: ["python3", "/app/books_pipeline.py"]
               env:
                 - name: PIPELINE_CONFIG

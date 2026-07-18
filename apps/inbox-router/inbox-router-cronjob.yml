@@ -24,7 +24,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: inbox-router
-              image: ghcr.io/gorttman/inbox-router:0.1.0
+              image: ghcr.io/gorttman/inbox-router:0.2.0
               command: ["python3", "/app/inbox_router.py"]
               env:
                 - name: ROUTER_CONFIG
