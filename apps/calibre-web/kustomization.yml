@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - calibre-web-namespace.yml
+  - calibre-web-rbac.yml
   - calibre-web-pvc.yml
   - calibre-web-books-pvc.yml
   - calibre-web-user-passwords-sealedsecret.yml

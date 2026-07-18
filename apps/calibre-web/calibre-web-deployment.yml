@@ -38,7 +38,32 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: k8smaster
       enableServiceLinks: false
+      serviceAccountName: calibre-web-seed
       initContainers:
+      # Creates a real Calibre library (metadata.db) at /books if one
+      # doesn't exist yet - calibredb isn't in calibre-web's own image
+      # (pure Python, no Calibre CLI), so this borrows books-pipeline's
+      # image, which has it. calibredb has no dedicated "create empty
+      # library" command; restore_database --really-do-it is the
+      # documented non-interactive workaround for producing a fresh,
+      # valid, empty metadata.db. Idempotent - skips if metadata.db is
+      # already there, safe on every pod restart including the
+      # self-triggered one below.
+      - name: library-init
+        image: ghcr.io/gorttman/books-pipeline:0.1.0
+        command: ["sh", "-c"]
+        args:
+        - |
+          set -e
+          if [ -f /books/metadata.db ]; then
+            echo "metadata.db already exists, skipping"
+          else
+            echo "no metadata.db at /books - creating a fresh empty library"
+            calibredb restore_database --really-do-it --with-library /books
+          fi
+        volumeMounts:
+        - name: books
+          mountPath: /books
       - name: config-restore
         image: busybox:1.36
         command: ["sh", "-c"]
@@ -109,6 +134,9 @@ spec:
       # doesn't exist until calibre-web itself creates it on first boot, so
       # this waits that out as a plain long-running container instead of
       # racing it. Idempotent - only creates rows that don't exist yet.
+      # Also sets config_calibre_dir to /books if still blank (2026-07-18) -
+      # see the script's own comments for why that needs a self-triggered
+      # pod restart to actually take effect.
       - name: user-seed
         image: lscr.io/linuxserver/calibre-web:0.6.26-ls391
         imagePullPolicy: IfNotPresent
@@ -117,6 +145,10 @@ spec:
           runAsUser: 10001
           runAsGroup: 10001
         env:
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: CALIBRE_PW_GORTTMAN
           valueFrom:
             secretKeyRef:

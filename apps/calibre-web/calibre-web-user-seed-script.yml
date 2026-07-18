@@ -30,13 +30,33 @@ data:
     # not ROLE_ADMIN (server settings/user management) or
     # ROLE_DELETE_BOOKS. Promote via the calibre-web UI (Admin > Edit
     # User) if that's ever not enough.
+    #
+    # Also sets config_calibre_dir (2026-07-18) - without this,
+    # calibre-web shows its "Location of Calibre database" setup screen
+    # forever, since nothing else in this deployment ever tells it where
+    # the library is. Only touches it if it's currently blank, same
+    # idempotency rule as the user rows - never overwrites a path an
+    # admin has since changed via the UI.
+    #
+    # calibre-web reads config_calibre_dir into memory once at process
+    # startup - writing it directly into app.db from this sidecar (a
+    # different process) doesn't make the already-running calibre-web
+    # process notice. The only way to make it notice, short of a human
+    # clicking Save in Admin > Basic Configuration, is a fresh boot - so
+    # this self-deletes the pod via the Kubernetes API when it makes
+    # that change, and the Deployment controller recreates it
+    # immediately. See calibre-web-rbac.yml for the (deliberately
+    # narrow: delete pods, this namespace only) permission that requires.
+    import http.client
     import os
     import sqlite3
+    import ssl
     import time
 
     from werkzeug.security import generate_password_hash
 
     DB_PATH = "/config/app.db"
+    LIBRARY_PATH = "/books"
     ROLE_READER = 2 + 4 + 8 + 16 + 64 + 256
 
     USERS = [
@@ -88,8 +108,65 @@ data:
         conn.close()
 
 
+    def configure_library():
+        """Returns True if config_calibre_dir was blank and just got set -
+        that's the signal the caller uses to decide whether a restart is
+        needed. Never touches a non-blank value."""
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("SELECT config_calibre_dir FROM settings")
+        row = cur.fetchone()
+        current = row[0] if row else None
+        if current:
+            print(f"config_calibre_dir already set to {current!r}, leaving alone", flush=True)
+            conn.close()
+            return False
+        cur.execute(
+            "UPDATE settings SET config_calibre_dir = ? WHERE config_calibre_dir IS NULL OR config_calibre_dir = ''",
+            (LIBRARY_PATH,),
+        )
+        conn.commit()
+        conn.close()
+        print(f"config_calibre_dir was blank, set to {LIBRARY_PATH}", flush=True)
+        return True
+
+
+    def restart_pod():
+        pod_name = os.environ.get("MY_POD_NAME")
+        if not pod_name:
+            print("MY_POD_NAME not set - cannot self-restart, set the library path via the UI or restart the pod manually", flush=True)
+            return
+
+        secrets_dir = "/var/run/secrets/kubernetes.io/serviceaccount"
+        with open(f"{secrets_dir}/token") as f:
+            token = f.read().strip()
+        with open(f"{secrets_dir}/namespace") as f:
+            namespace = f.read().strip()
+
+        context = ssl.create_default_context(cafile=f"{secrets_dir}/ca.crt")
+        conn = http.client.HTTPSConnection("kubernetes.default.svc", 443, context=context)
+        try:
+            conn.request(
+                "DELETE",
+                f"/api/v1/namespaces/{namespace}/pods/{pod_name}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            resp = conn.getresponse()
+            print(f"self-restart requested for {pod_name}: HTTP {resp.status}", flush=True)
+            resp.read()
+        finally:
+            conn.close()
+
+
     wait_for_schema()
     seed()
+    if configure_library():
+        print("library path just configured - self-restarting so calibre-web picks it up on its next boot", flush=True)
+        restart_pod()
+        # The DELETE above tears down this whole pod, including this
+        # container - idle briefly rather than racing the termination
+        # signal into the "done, idling" loop below.
+        time.sleep(30)
     print("user-seed: done, idling", flush=True)
     while True:
         time.sleep(3600)

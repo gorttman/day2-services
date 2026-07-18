@@ -133,6 +133,49 @@ calibre-web UI (Admin > Edit User) if that's ever not enough - the seed
 script only creates missing rows, so it won't fight a manual role change
 on next pod restart.
 
+## Library location: also automated, not the setup wizard (2026-07-18)
+
+Discovered live: logging in with a real seeded account still landed on
+calibre-web's "Location of Calibre database" setup screen. Root cause
+confirmed directly against `app.db`: `settings.config_calibre_dir` was
+blank - nothing in this deployment had ever told calibre-web where the
+library actually is. Fixed the same way as user accounts - no manual
+UI step.
+
+**Two pieces**:
+1. **`library-init` init container** (in `calibre-web-deployment.yml`) -
+   creates a real Calibre library (`metadata.db`) at `/books` if one
+   doesn't exist yet. Borrows the `books-pipeline` image for this,
+   since calibre-web's own image is pure Python with no Calibre CLI at
+   all. `calibredb` has no dedicated "create empty library" command;
+   `calibredb restore_database --really-do-it --with-library /books` is
+   the documented non-interactive workaround. Idempotent - skips if
+   `metadata.db` is already there.
+2. **`seed_users.py` (extended)** - after seeding accounts, checks
+   `settings.config_calibre_dir`; if still blank, sets it to `/books`.
+
+**Why this needs a pod restart, and how that's automated too**:
+calibre-web reads `config_calibre_dir` into memory once at process
+startup - a direct SQL write from a sidecar doesn't make the
+already-running calibre-web process notice, confirmed against
+upstream reports of the same behavior. The only way to make it notice,
+short of a human clicking Save in Admin > Basic Configuration, is a
+fresh boot. So the seed script self-deletes its own pod via the
+Kubernetes API (`calibre-web-rbac.yml` grants a dedicated
+`calibre-web-seed` ServiceAccount exactly one permission: `delete` on
+`pods`, scoped to this namespace only) when it makes that change - the
+Deployment controller recreates the pod immediately, and the fresh
+calibre-web process reads the now-set path correctly on its own normal
+startup. No custom reload logic, just a real restart, triggered
+automatically instead of by a human.
+
+**Still true after this fix** (see the known-gap section above): the
+library this creates is real and valid, but **empty**. Books already
+promoted by `books_pipeline.py` won't appear until the deeper
+Postgres/`calibredb` integration gap is resolved - this fix makes
+calibre-web *usable* (no setup screen, can upload/browse manually),
+not *populated*.
+
 ## Migration from kavita (2026-07-17)
 
 Kavita was genuinely install-only - no library ever configured, no

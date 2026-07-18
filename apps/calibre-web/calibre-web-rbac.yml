@@ -1,0 +1,50 @@
+# Grants the calibre-web pod permission to delete itself - needed
+# because setting config_calibre_dir directly in app.db (see
+# seed_users.py) doesn't take effect in the already-running calibre-web
+# process; it's read once at startup. Self-deleting triggers the
+# Deployment controller to recreate the pod immediately, which is the
+# only way to make calibre-web reload with the new library path
+# without a human clicking Save in the admin UI. Scoped to exactly one
+# verb (delete) on exactly one resource (pods) in exactly this
+# namespace - can't touch anything outside calibre-web's own pod.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: calibre-web-seed
+  namespace: calibre-web
+  labels:
+    app: calibre-web
+    app.kubernetes.io/name: calibre-web
+    argocd.argoproj.io/managed-by: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: calibre-web-seed-self-restart
+  namespace: calibre-web
+  labels:
+    app: calibre-web
+    app.kubernetes.io/name: calibre-web
+    argocd.argoproj.io/managed-by: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: calibre-web-seed-self-restart
+  namespace: calibre-web
+  labels:
+    app: calibre-web
+    app.kubernetes.io/name: calibre-web
+    argocd.argoproj.io/managed-by: argocd
+subjects:
+  - kind: ServiceAccount
+    name: calibre-web-seed
+    namespace: calibre-web
+roleRef:
+  kind: Role
+  name: calibre-web-seed-self-restart
+  apiGroup: rbac.authorization.k8s.io
