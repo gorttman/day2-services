@@ -49,43 +49,20 @@ broke `library-init`'s write access). See
 this (`root:users`, `2775` setgid on every directory this app and
 `books-pipeline` touch).
 
-## ⚠️ Known gap: this library isn't actually a Calibre library yet
+## Resolved 2026-07-18: `books_pipeline.py` now uses `calibredb add`
 
-**calibre-web requires a real Calibre library to function** - a
-directory containing `metadata.db`, which Calibre itself creates and
-maintains via `calibredb add` (or the desktop GUI's own add-books
-flow). It can bootstrap a fresh one as books are uploaded *through its
-own UI*, but it does not "adopt" a folder of pre-existing files dropped
-in by an external process.
-
-`books_pipeline.py`'s `promote()` (prompt 4) does exactly that: a plain
-`shutil.copy2` + rename into `library/{books,comics}/<Author>/<Title>.ext`,
-with dedup/metadata tracked in a **separate Postgres `fingerprints`
-table** - not `calibredb add`, no `metadata.db` anywhere in the tree.
-This was a deliberate, reasonable choice for the pipeline (Postgres is
-a better fit for the fuzzy-matching dedup logic than Calibre's own
-database), made independently of - and before - the decision to use
-calibre-web as the reading UI. The two designs don't currently talk to
-each other.
-
-**Practical effect**: books promoted by `books_pipeline.py` will sit in
-`/books` as real files, correctly organized, correctly deduped in
-Postgres - but calibre-web will not see them as library entries until
-something creates the `metadata.db` calibre-web actually reads from.
-
-**Not fixed here** - flagging clearly rather than silently deploying
-something that looks done but won't actually show any books. Options,
-not yet decided:
-1. Change `books_pipeline.py`'s `promote()` to shell out to
-   `calibredb add` instead of (or alongside) the current move
-   mechanic, maintaining both a Calibre-native library and the Postgres
-   fingerprints table.
-2. Point calibre-web at a library location it initializes itself, and
-   have the pipeline promote into *that* structure rather than a bare
-   folder tree.
-3. Accept the split for now (Postgres for dedup, something else
-   entirely for calibre-web) and treat this as two genuinely separate
-   concerns rather than forcing them to share a filesystem tree.
+Was flagged here as a real, deliberately-unresolved gap: `promote()`
+did a plain file copy, never touched `metadata.db`, so calibre-web
+(which only ever shows what's *registered* in that database, not
+whatever it finds scanning the filesystem) never displayed anything
+the pipeline promoted. Went with option 1 from the three listed here
+originally - `promote()` now calls `calibredb add` directly, so every
+promoted book lands in the exact same `metadata.db` this app reads
+from `config_calibre_dir` (`/books` - see `books-pipeline/README.md`
+for the full change, including why `--duplicates` is deliberate and
+what happened to the old `library_books_dir`/`library_comics_dir`
+split). Nothing in this app changed - it was already pointed at the
+right `metadata.db`, it just had nothing registered in it yet.
 
 Worth resolving before this deployment is actually useful for reading
 - not before it's safe to apply (it's harmless either way, just

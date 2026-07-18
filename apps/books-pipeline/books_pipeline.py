@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import html.parser
+import json
 import os
 import re
 import shutil
@@ -260,35 +261,68 @@ def quarantine(path, reason, quarantine_dir, counters):
 
 
 def promote(conn, meta, src_path, config, counters):
-    """DB insert happens in the same transaction as the file move, and is
-    only committed after the move succeeds - but a crash between the
-    filesystem rename and the commit can still leave a file in the
+    """calibredb add owns file placement (its own Author/Title (id)/
+    folder scheme) and writes metadata.db directly - that's what makes a
+    promoted book actually show up in calibre-web (see README's former
+    "no shared library format with calibre-web" gap, resolved
+    2026-07-18). A plain file copy, which is all this used to do, left
+    real files sitting in the tree with nothing in metadata.db pointing
+    at them - calibre-web only ever shows what's registered in that
+    database, never what it finds by scanning the filesystem.
+
+    --duplicates bypasses Calibre's own (cruder, title+author-text-only)
+    duplicate check: dedup_check() is this pipeline's single source of
+    truth for duplicate/format-upgrade decisions and already ran before
+    promote() is ever called - Calibre's own redundant check must never
+    silently veto an add this pipeline already decided to make.
+
+    --title/--authors/--isbn pass this pipeline's own meta dict (which
+    may have been enriched by stage 5's backfill_metadata) explicitly,
+    rather than letting calibredb fall back to whatever's embedded in
+    the raw file - otherwise a successful backfill would never actually
+    reach calibre-web's displayed metadata.
+
+    DB insert happens after a successful add, committed only then - a
+    crash between the add and the commit can still leave a file in the
     library with no fingerprint row. That specific drift shape (file
     exists, no row) is exactly what prompt 5's weekly reconcile job is
     built to detect and report - true cross-system atomicity between a
     filesystem and a database isn't achievable here, so this is an
     accepted, monitored gap rather than an ignored one."""
-    is_comic = meta["format"] in COMIC_FORMATS
-    library_dir = config["library_comics_dir"] if is_comic else config["library_books_dir"]
+    if not meta["title"]:
+        return False, "insufficient metadata to add to Calibre (no title after backfill)"
 
-    author_display = bookutils.safe_filename_component(meta["author"], "Unknown Author")
-    title_display = bookutils.safe_filename_component(meta["title"], None)
-    if title_display is None:
-        return False, "insufficient metadata to compute canonical path (no title after backfill)"
-
-    dest_dir = os.path.join(library_dir, author_display)
-    name = f"{title_display}.{meta['format']}"
-    final_path = os.path.join(dest_dir, name)
-
-    if os.path.exists(final_path):
-        return False, f"destination filename collision: {final_path} already exists"
+    library_dir = config["library_dir"]
+    add_cmd = ["calibredb", "add", src_path, "--library-path", library_dir, "--duplicates"]
+    add_cmd += ["--title", meta["title"]]
+    if meta["author"]:
+        add_cmd += ["--authors", meta["author"]]
+    if meta["isbn13"]:
+        add_cmd += ["--isbn", meta["isbn13"]]
 
     try:
-        os.makedirs(dest_dir, exist_ok=True)
-    except OSError as e:
-        return False, f"could not create library directory {dest_dir}: {e}"
+        result = subprocess.run(add_cmd, capture_output=True, text=True, timeout=120)
+    except (subprocess.SubprocessError, OSError) as e:
+        return False, f"calibredb add failed to run: {e}"
 
-    incoming_path = os.path.join(dest_dir, f"{INCOMING_PREFIX}{name}")
+    if result.returncode != 0:
+        return False, f"calibredb add exited {result.returncode}: {result.stderr.strip()[:2000]}"
+
+    id_match = re.search(r"Added book ids: (\d+)", result.stdout)
+    if not id_match:
+        return False, f"calibredb add did not report a new book id (may have been silently rejected): {result.stdout.strip()[:1000]}"
+    book_id = id_match.group(1)
+
+    final_path = f"<calibre id {book_id}>"
+    try:
+        list_result = subprocess.run(
+            ["calibredb", "list", "--library-path", library_dir, "--for-machine",
+             "--fields=formats", "--search", f"id:{book_id}"],
+            capture_output=True, text=True, timeout=30,
+        )
+        final_path = json.loads(list_result.stdout)[0]["formats"][0]
+    except (subprocess.SubprocessError, OSError, json.JSONDecodeError, IndexError, KeyError) as e:
+        log("WARN", f"added calibre id {book_id} but path lookup failed (add itself succeeded): {e}")
 
     with conn.cursor() as cur:
         cur.execute(
@@ -305,23 +339,12 @@ def promote(conn, meta, src_path, config, counters):
                 final_path,
             ),
         )
+    conn.commit()
 
-        try:
-            shutil.copy2(src_path, incoming_path)
-            if os.path.getsize(src_path) != os.path.getsize(incoming_path):
-                raise OSError("size mismatch after copy")
-            os.rename(incoming_path, final_path)
-        except OSError as e:
-            conn.rollback()
-            if os.path.exists(incoming_path):
-                os.remove(incoming_path)
-            return False, f"move to library failed: {e}"
-
-        os.remove(src_path)
-        conn.commit()
+    os.remove(src_path)
 
     counters["routes"]["promoted"] = counters["routes"].get("promoted", 0) + 1
-    log("INFO", f"promoted {os.path.basename(src_path)} -> {final_path}")
+    log("INFO", f"promoted {os.path.basename(src_path)} -> {final_path} (calibre id {book_id})")
     return True, None
 
 

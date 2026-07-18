@@ -31,24 +31,35 @@ def load_config(path):
         return yaml.safe_load(f)
 
 
-def walk_library_paths(*library_dirs):
+# Every calibredb add (2026-07-18) creates these alongside the actual
+# book file - metadata.opf and cover.jpg per book, metadata.db once at
+# the library root. None are tracked in fingerprints (which only ever
+# stores the promoted ebook file itself), so without this exclusion
+# every single book would report two permanent false-positive
+# "untracked" entries, plus one more for the whole library.
+CALIBRE_SIDECAR_NAMES = {"metadata.opf", "cover.jpg", "metadata.db"}
+
+
+def walk_library_paths(library_dir):
     paths = set()
-    for library_dir in library_dirs:
-        if not os.path.isdir(library_dir):
-            log("WARN", f"library dir does not exist, skipping: {library_dir}")
-            continue
-        for root, _dirs, files in os.walk(library_dir):
-            for fname in files:
-                if fname.startswith(".") or fname.endswith(".quarantine-reason.txt"):
-                    continue
-                paths.add(os.path.join(root, fname))
+    if not os.path.isdir(library_dir):
+        log("WARN", f"library dir does not exist, skipping: {library_dir}")
+        return paths
+    for root, dirnames, files in os.walk(library_dir):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        for fname in files:
+            if fname.startswith(".") or fname.endswith(".quarantine-reason.txt"):
+                continue
+            if fname in CALIBRE_SIDECAR_NAMES:
+                continue
+            paths.add(os.path.join(root, fname))
     return paths
 
 
 def main():
     config = load_config(CONFIG_PATH)
 
-    actual_paths = walk_library_paths(config["library_books_dir"], config["library_comics_dir"])
+    actual_paths = walk_library_paths(config["library_dir"])
     log("INFO", f"found {len(actual_paths)} actual files in library")
 
     conn = psycopg2.connect(**DB_ENV)

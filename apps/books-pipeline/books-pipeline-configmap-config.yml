@@ -8,8 +8,12 @@ data:
     settle_seconds: 120   # same convention as the inbox-router, single stat check
     
     import_dir: /mnt/books/import
-    library_books_dir: /mnt/books/library/books
-    library_comics_dir: /mnt/books/library/comics
+    # Single shared root, not separate books/comics trees - calibredb add
+    # (2026-07-18) owns file placement now, and calibre-web's own
+    # config_calibre_dir already points at this same NFS root (see
+    # calibre-web-user-seed-script.yml), so this has to be the exact same
+    # path for calibre-web to see what gets promoted here.
+    library_dir: /mnt/books
     quarantine_dir: /mnt/books/quarantine
     
     # Restricts fetch-ebook-metadata to these sources only (stage 5 backfill) -

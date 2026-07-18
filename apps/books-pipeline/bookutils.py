@@ -117,19 +117,6 @@ def _isbn10_to_isbn13(digits):
     return core + str(check)
 
 
-def safe_filename_component(value, fallback):
-    """Sanitize a display-text (title/author) for use as a path segment.
-    Not the same as normalize_title/_author - this keeps case and spacing
-    for a readable folder name, only strips characters a filesystem/NFS
-    export can't handle."""
-    value = (value or "").strip()
-    if not value:
-        return fallback
-    value = re.sub(r'[\/:*?"<>|]', "_", value)
-    value = _WS_RE.sub(" ", value).strip()
-    return value or fallback
-
-
 _OPF_NS = {"opf": "http://www.idpf.org/2007/opf", "dc": "http://purl.org/dc/elements/1.1/"}
 
 

@@ -9,10 +9,16 @@
 
 ## What it does
 
-Processes arrivals in `books/import/` (populated by `inbox-router`)
-through six stages and promotes clean results into
-`books/library/{books,comics}/`:
+Processes arrivals in `books/import/` (populated by `inbox-router`,
+recursively - real arrivals are often a whole `Author/Title.ext` tree,
+not flat files) through six stages and promotes clean results into
+Calibre's own library at `/books` via `calibredb add` (books and comics
+share one library - see "Resolved 2026-07-18" below):
 
+0. **PDFs skip straight to quarantine** - PDF triage is explicitly out
+   of scope for this pipeline (see the "PDF triage subagent" note
+   below); attempting `ebook-convert` on one anyway just burns its
+   timeout for a result that was never going to auto-promote regardless.
 1. **Extract metadata** (`ebook-meta`) - title, author, ISBN.
 2. **Dedup check** against the `fingerprints` Postgres table - exact
    ISBN match first, then `pg_trgm`-narrowed candidates scored with
@@ -26,10 +32,9 @@ through six stages and promotes clean results into
    (`quality.*`), starting guesses, meant to be tuned against real data.
 5. **Metadata backfill** (`fetch-ebook-metadata`, Open Library + Google
    Books) - only if title/author/ISBN still incomplete.
-6. **Promote** - canonical `Author/Title.ext` path, comics always to
-   `library/comics/` unconditionally by format (never content
-   judgment). DB insert and file move happen in one transaction,
-   committed only after the move succeeds.
+6. **Promote** - `calibredb add`, passing this pipeline's own
+   (possibly backfilled) title/author/ISBN explicitly. `fingerprints`
+   INSERT happens after a successful add, committed only then.
 
 `books-fingerprint-reconcile` (weekly, Sunday 03:00) walks the library
 and the `fingerprints` table in both directions, reporting drift
@@ -87,13 +92,57 @@ quarantine copy and sidecar) were all cleaned up after verification -
 the library and `fingerprints` table are back to empty, ready for real
 use.
 
-## Known gap: no shared library format with calibre-web
+## Resolved 2026-07-18: `promote()` now uses `calibredb add`, not a plain file copy
 
-See `apps/calibre-web/README.md` and
-`~/gm-dev/homelab-book/chapters/002-kavita-to-calibre-web.md` - this
-pipeline's `promote()` doesn't produce a real Calibre library
-(`metadata.db`), so calibre-web won't see promoted books as library
-entries yet. Not fixed here.
+Was: no shared library format with calibre-web. `promote()` did a plain
+`shutil.copy2` into a predictable `Author/Title.ext` path - real files,
+but nothing in Calibre's `metadata.db` ever pointed at them, and
+calibre-web only ever shows what's *registered*, not whatever it finds
+scanning the filesystem. Found live 2026-07-18 after the recursive-scan
+fix (below) actually started promoting real books and they still didn't
+show up in calibre-web.
+
+Now: `promote()` calls `calibredb add <file> --library-path
+/mnt/books --duplicates --title ... --authors ... --isbn ...` instead.
+Consequences worth knowing:
+
+- **`library_dir` replaces `library_books_dir`/`library_comics_dir`** -
+  one shared root (`/mnt/books`, same NFS path calibre-web's own
+  `config_calibre_dir` already points at - see `calibre-web/README.md`),
+  not two separate trees. Calibre happily mixes books and comics in one
+  library; the old book/comics split existed only because this
+  pipeline's own hand-rolled placement needed it, not because Calibre
+  does.
+- **Calibre owns the file layout now** - `<Author>/<Title> (<id>)/`,
+  plus a `metadata.opf` and `cover.jpg` it generates itself per book.
+  The `fingerprints.path` column stores whatever `calibredb list
+  --for-machine` reports back as the real path (best-effort lookup - if
+  it fails, the add itself still succeeded, just logged with a
+  placeholder path).
+- **`--duplicates` is deliberate, not a safety hole**: Calibre does its
+  own (simpler, title+author-text-only) duplicate check on every add,
+  which would otherwise silently veto an add that this pipeline's own
+  `dedup_check()` - the actual authority here, already run before
+  `promote()` is ever called - already decided should happen.
+- **`--title`/`--authors`/`--isbn` are passed explicitly** from this
+  pipeline's `meta` dict (possibly enriched by stage 5's metadata
+  backfill), not left to whatever's embedded in the raw file - otherwise
+  a successful backfill would never actually reach what calibre-web
+  displays.
+- `reconcile_fingerprints.py` had to change too: its file-vs-database
+  drift walk now excludes `metadata.opf`/`cover.jpg`/`metadata.db` -
+  every one of those is created by every single `calibredb add` and was
+  about to become two permanent false-positive "untracked" entries per
+  book, plus one for the whole library.
+- `bookutils.safe_filename_component()` was removed - it existed only
+  to compute the old hand-rolled path, which Calibre now computes
+  itself.
+
+**One-time backfill required** for anything promoted under the *old*
+scheme before this fix - those files exist for real but were never
+registered in Calibre's `metadata.db` either. See `HISTORY`/commit log
+for the one-off backfill run, if one was needed at the time this
+landed.
 
 ## Webhook
 
