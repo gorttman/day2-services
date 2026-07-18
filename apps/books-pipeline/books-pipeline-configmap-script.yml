@@ -443,10 +443,25 @@ data:
     
         try:
             import_dir = config["import_dir"]
-            for entry in sorted(os.listdir(import_dir)):
-                path = os.path.join(import_dir, entry)
-                if os.path.isdir(path) or entry.startswith(INCOMING_PREFIX) or entry.startswith("."):
-                    continue
+            # Import arrivals can be nested (e.g. a whole Author/Title.ext
+            # tree copied in wholesale, not flat individual files dropped
+            # one at a time by inbox-router) - found live 2026-07-18: 4,449
+            # author-named subdirectories sitting completely untouched,
+            # invisible to a top-level-only os.listdir() scan since
+            # directories were silently skipped. promote() always recomputes
+            # its own canonical Author/Title path from extracted metadata
+            # regardless of where a file came from, so the source tree's own
+            # structure is never relied on - safe to flatten here.
+            paths = []
+            for dirpath, dirnames, filenames in os.walk(import_dir):
+                dirnames[:] = [d for d in dirnames if not d.startswith(INCOMING_PREFIX) and not d.startswith(".")]
+                for entry in filenames:
+                    if entry.startswith(INCOMING_PREFIX) or entry.startswith("."):
+                        continue
+                    paths.append(os.path.join(dirpath, entry))
+
+            for path in sorted(paths):
+                entry = os.path.basename(path)
                 if not is_settled(path, config["settle_seconds"]):
                     continue
                 try:
