@@ -260,7 +260,7 @@ def quarantine(path, reason, quarantine_dir, counters):
     counters["quarantined"].append({"file": name, "reason": reason})
 
 
-def promote(conn, meta, src_path, config, counters):
+def promote(conn, meta, src_path, original_name, config, counters):
     """calibredb add owns file placement (its own Author/Title (id)/
     folder scheme) and writes metadata.db directly - that's what makes a
     promoted book actually show up in calibre-web (see README's former
@@ -344,7 +344,7 @@ def promote(conn, meta, src_path, config, counters):
     os.remove(src_path)
 
     counters["routes"]["promoted"] = counters["routes"].get("promoted", 0) + 1
-    log("INFO", f"promoted {os.path.basename(src_path)} -> {final_path} (calibre id {book_id})")
+    log("INFO", f"promoted {original_name} -> {final_path} (calibre id {book_id})")
     return True, None
 
 
@@ -415,7 +415,7 @@ def process_file(conn, path, config, counters):
         meta = backfill_metadata(meta, config)
 
         # Stage 6
-        ok, promote_reason = promote(conn, meta, promote_src, config, counters)
+        ok, promote_reason = promote(conn, meta, promote_src, name, config, counters)
         if not ok:
             # Quarantine the original file, not promote_src - if conversion
             # happened, promote_src is a tempfile.TemporaryDirectory() path
