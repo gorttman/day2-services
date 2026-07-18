@@ -4,7 +4,6 @@ kind: Kustomization
 resources:
   - obsidian-namespace.yml
   - obsidian-pvc.yml
+  - obsidian-state-pvc.yml
+  - obsidian-sealed-secret.yaml
   - obsidian-deploy.yml
-  - obsidian-service.yml
-  - obsidian-ingress.yml
-  - obsidian-public-ingress.yml

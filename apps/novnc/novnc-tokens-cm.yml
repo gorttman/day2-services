@@ -9,4 +9,3 @@ metadata:
 data:
   tokens.cfg: |
     mac: 192.168.2.163:5900
-    obsidian: obsidian.obsidian.svc.cluster.local:5900
