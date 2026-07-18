@@ -347,17 +347,33 @@ def process_file(conn, path, config, counters):
         counters["format_upgrade_candidates"] = counters.get("format_upgrade_candidates", 0) + 1
         return
 
-    is_pdf_source = meta["format"] == "pdf"
+    if meta["format"] == "pdf":
+        # PDF conversion is explicitly out of scope here (see README's
+        # "PDF triage subagent" note) - Calibre's PDF handling is the
+        # known weak point, and a PDF-sourced conversion was never going
+        # to get auto-promoted regardless (the convert-failure and
+        # quality-failure branches below both already refused to
+        # auto-promote one). Attempting ebook-convert anyway just burns
+        # up to a 600s timeout per file for no benefit. Quarantine
+        # immediately instead - same reviewability, none of the wait.
+        # Found live 2026-07-18: this was the actual reason the
+        # ~4,480-file import backlog (mostly PDFs) was barely draining.
+        quarantine(
+            path,
+            "PDF - triage not automated (Calibre's PDF handling is the known weak "
+            "point; see README's 'PDF triage subagent' note). Original may be "
+            "promotable as-is after human review (library policy: EPUB-preferred, "
+            "PDF-tolerated), but requires manual confirmation, not automatic promotion.",
+            config["quarantine_dir"], counters,
+        )
+        return
 
     with tempfile.TemporaryDirectory() as workdir:
         # Stage 3
         converted_path, convert_error = convert_to_epub(path, meta, workdir)
 
         if converted_path is None:
-            reason = f"conversion failed: {convert_error}"
-            if is_pdf_source:
-                reason += " - original PDF may be promotable as-is after human review (library policy: EPUB-preferred, PDF-tolerated), but requires manual confirmation, not automatic promotion"
-            quarantine(path, reason, config["quarantine_dir"], counters)
+            quarantine(path, f"conversion failed: {convert_error}", config["quarantine_dir"], counters)
             return
 
         # Stage 4 (skipped for comics - nothing to quality-check, they
@@ -365,10 +381,7 @@ def process_file(conn, path, config, counters):
         if meta["format"] not in COMIC_FORMATS:
             passed, quality_reason = quality_check(converted_path, config)
             if not passed:
-                reason = f"quality check failed: {quality_reason}"
-                if is_pdf_source:
-                    reason += " - original PDF may be promotable as-is after human review, requires manual confirmation"
-                quarantine(path, reason, config["quarantine_dir"], counters)
+                quarantine(path, f"quality check failed: {quality_reason}", config["quarantine_dir"], counters)
                 return
             meta["format"] = "epub"
             promote_src = converted_path
