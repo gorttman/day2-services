@@ -10,7 +10,8 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-client
+  storageClassName: qnap-static
+  volumeName: qnap-vault
   resources:
     requests:
       storage: 10Gi
