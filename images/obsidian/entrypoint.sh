@@ -10,7 +10,10 @@ CONFIG_DIR=.obsidian-headless-sync
 # without real credentials at proposal time.
 if ! ob sync-list-remote >/tmp/remotes.log 2>&1; then
   echo "[*] Not logged in - logging in"
-  ob login --email "$OBSIDIAN_EMAIL" --password "$OBSIDIAN_PASSWORD"
+  # TOTP codes are only valid for ~30s - computed fresh, right before use,
+  # never stored anywhere.
+  MFA_CODE="$(oathtool --totp -b "$OBSIDIAN_TOTP_SECRET")"
+  ob login --email "$OBSIDIAN_EMAIL" --password "$OBSIDIAN_PASSWORD" --mfa "$MFA_CODE"
   ob sync-list-remote >/tmp/remotes.log
 fi
 

@@ -53,6 +53,11 @@ spec:
             secretKeyRef:
               name: obsidian-headless-credentials
               key: OBSIDIAN_SYNC_PASSWORD
+        - name: OBSIDIAN_TOTP_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: obsidian-headless-credentials
+              key: OBSIDIAN_TOTP_SECRET
         volumeMounts:
         - name: vault
           mountPath: /vault
