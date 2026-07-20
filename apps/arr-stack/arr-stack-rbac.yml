@@ -1,0 +1,54 @@
+# Grants the arr-stack pod permission to delete itself - needed because
+# the config-seed sidecars (lazylibrarian, sabnzbd, prowlarr) patch
+# config.ini files directly on disk, which the already-running
+# processes don't pick up until restart. Self-deleting triggers the
+# Deployment controller to recreate the pod immediately.
+#
+# IMPORTANT, unlike calibre-web's equivalent: arr-stack is ONE shared
+# pod for all seven containers (gluetun + six apps), not one container
+# per pod - so this restart cycles the WHOLE stack (sonarr, radarr,
+# bazarr, jdownloader2 included), not just whichever app's config
+# changed. Only fires once per genuinely-changed config value (each
+# seed script is idempotent - no-op, no restart, on subsequent boots
+# once its keys already match), but the first-ever config-seed run
+# after this lands will restart everything once. Scoped to exactly one
+# verb (delete) on exactly one resource (pods) in exactly this
+# namespace - can't touch anything outside arr-stack's own pod.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: arr-stack-seed
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    argocd.argoproj.io/managed-by: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: arr-stack-seed-self-restart
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    argocd.argoproj.io/managed-by: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: arr-stack-seed-self-restart
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    argocd.argoproj.io/managed-by: argocd
+subjects:
+  - kind: ServiceAccount
+    name: arr-stack-seed
+    namespace: arr-stack
+roleRef:
+  kind: Role
+  name: arr-stack-seed-self-restart
+  apiGroup: rbac.authorization.k8s.io

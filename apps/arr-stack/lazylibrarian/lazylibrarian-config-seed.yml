@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lazylibrarian-config-seed-script
+  namespace: arr-stack
+data:
+  seed_config.py: |
+    #!/usr/bin/env python3
+    # Patches LazyLibrarian's own config.ini (INI format, same shape as
+    # every other *arr app) so its post-processing step drops files flat
+    # into books-pipeline's import/ mount instead of organizing its own
+    # Author/Title folder tree - "no library organisation" per the
+    # arr-stack extension proposal (2026-07-21). books-pipeline already
+    # does all real organizing from embedded ebook metadata, not from
+    # folder structure, so LazyLibrarian doing its own foldering would
+    # just be redundant work immediately flattened away downstream.
+    #
+    # UNVERIFIED key mapping: DESTINATION_DIR/DESTINATION_COPY/
+    # EBOOK_DEST_FOLDER are LazyLibrarian's documented config.ini keys
+    # as of this writing, but this has not been tested against a live
+    # instance - gluetun can't reach Ready without real Mullvad
+    # credentials, which don't exist yet in this install pass. Check
+    # the actual [General]/[postprocess] section of a booted instance's
+    # config.ini against what's written below before trusting this
+    # blindly; adjust key names here if they don't match.
+    #
+    # Same reasoning as calibre-web's config_calibre_dir seed for why
+    # this waits for the app to create its own config file first rather
+    # than shipping one: config.ini is LazyLibrarian's own writable
+    # state (library settings, indexer state), not something safe to
+    # own externally - only specific keys get patched, idempotently,
+    # never the whole file.
+    import configparser
+    import http.client
+    import os
+    import ssl
+    import time
+
+    CONFIG_PATH = "/config/config.ini"
+    IMPORT_DEST = "/import"
+
+    DESIRED = {
+        "General": {
+            "DESTINATION_DIR": IMPORT_DEST,
+            "DESTINATION_COPY": "0",  # move, not copy - books-pipeline removes the source itself after a verified import
+        },
+        "postprocess": {
+            "EBOOK_DEST_FOLDER": "",   # no per-book folder - flat into DESTINATION_DIR
+            "EBOOK_DEST_FILE": "$Title - $Author",
+        },
+    }
+
+
+    def wait_for_config():
+        while not os.path.exists(CONFIG_PATH):
+            print("waiting for LazyLibrarian to create config.ini...", flush=True)
+            time.sleep(5)
+        # Give the app a moment past file-creation to finish its own
+        # first-run writes before this reads/rewrites it.
+        time.sleep(5)
+
+
+    def patch_config():
+        cp = configparser.ConfigParser()
+        cp.read(CONFIG_PATH)
+        changed = False
+        for section, keys in DESIRED.items():
+            if not cp.has_section(section):
+                cp.add_section(section)
+            for key, value in keys.items():
+                current = cp.get(section, key, fallback=None)
+                if current != value:
+                    cp.set(section, key, value)
+                    changed = True
+                    print(f"{section}.{key}: {current!r} -> {value!r}", flush=True)
+        if changed:
+            with open(CONFIG_PATH, "w") as f:
+                cp.write(f)
+        return changed
+
+
+    def restart_pod():
+        pod_name = os.environ.get("MY_POD_NAME")
+        if not pod_name:
+            print("MY_POD_NAME not set - cannot self-restart, restart the pod manually", flush=True)
+            return
+        secrets_dir = "/var/run/secrets/kubernetes.io/serviceaccount"
+        with open(f"{secrets_dir}/token") as f:
+            token = f.read().strip()
+        with open(f"{secrets_dir}/namespace") as f:
+            namespace = f.read().strip()
+        context = ssl.create_default_context(cafile=f"{secrets_dir}/ca.crt")
+        conn = http.client.HTTPSConnection("kubernetes.default.svc", 443, context=context)
+        try:
+            conn.request(
+                "DELETE",
+                f"/api/v1/namespaces/{namespace}/pods/{pod_name}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            resp = conn.getresponse()
+            print(f"self-restart requested for {pod_name}: HTTP {resp.status}", flush=True)
+            resp.read()
+        finally:
+            conn.close()
+
+
+    wait_for_config()
+    if patch_config():
+        print("config.ini patched - self-restarting the whole arr-stack pod so LazyLibrarian picks it up", flush=True)
+        restart_pod()
+        time.sleep(30)
+    print("lazylibrarian-config-seed: done, idling", flush=True)
+    while True:
+        time.sleep(3600)

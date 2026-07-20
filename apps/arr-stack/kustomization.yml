@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - arr-stack-namespace.yml
+  - arr-stack-rbac.yml
   - arr-stack-deployment.yml
   - gluetun
   - sonarr
@@ -11,3 +12,4 @@ resources:
   - sabnzbd
   - bazarr
   - jdownloader2
+  - lazylibrarian

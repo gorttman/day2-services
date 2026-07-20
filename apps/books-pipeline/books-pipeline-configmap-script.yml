@@ -248,10 +248,23 @@ data:
             log("CRIT", f"quarantine dir unreachable ({quarantine_dir}) - leaving {name} in place: {reason}")
             return
 
-        final_path = os.path.join(quarantine_dir, name)
-        if os.path.exists(final_path):
-            log("CRIT", f"quarantine collision for {name} - leaving original in place: {reason}")
-            return
+        # Disambiguate by parent directory, not just basename - generic
+        # sidecar names (cover.jpg, metadata.opf) recur across thousands of
+        # different book folders under a recursive import/ scan. Basename-
+        # only collisions were leaving every file after the first stuck in
+        # import/ forever (found live: books-pipeline-29743020's logs,
+        # 2026-07-20). Falls back to a numeric suffix in the rare case two
+        # genuinely different files share both parent dir and filename, so
+        # a source is never silently left unquarantined for lack of a slot.
+        parent = os.path.basename(os.path.dirname(path)) or "root"
+        disambiguated = f"{parent} - {name}"
+        final_path = os.path.join(quarantine_dir, disambiguated)
+        suffix = 2
+        while os.path.exists(final_path):
+            disambiguated = f"{parent} - {name} ({suffix})"
+            final_path = os.path.join(quarantine_dir, disambiguated)
+            suffix += 1
+        name = disambiguated
 
         incoming_path = os.path.join(quarantine_dir, f"{INCOMING_PREFIX}{name}")
         try:
@@ -271,6 +284,44 @@ data:
                 f.write(reason + "\n")
         except OSError as e:
             log("CRIT", f"quarantined {name} but failed to write reason sidecar: {e}")
+
+        counters["quarantined"].append({"file": name, "reason": reason})
+
+
+    def quarantine_broken_symlink(path, reason, quarantine_dir, counters):
+        """Moves a broken symlink itself (not its unreachable target) into
+        quarantine. os.rename() doesn't follow symlinks, unlike quarantine()
+        above's shutil.copy2() - which would try to read the target and
+        crash the same way this exists to prevent. Found live 2026-07-21:
+        import/Books -> a QNAP-internal path (MD0_DATA/Public/Media/Books)
+        not reachable via this NFS export, crashing main()'s settle check
+        (which follows symlinks) on every run once the walk reached it."""
+        name = os.path.basename(path)
+        if not os.path.isdir(quarantine_dir):
+            log("CRIT", f"quarantine dir unreachable ({quarantine_dir}) - leaving broken symlink {name} in place: {reason}")
+            return
+
+        parent = os.path.basename(os.path.dirname(path)) or "root"
+        disambiguated = f"{parent} - {name}"
+        final_path = os.path.join(quarantine_dir, disambiguated)
+        suffix = 2
+        while os.path.lexists(final_path):
+            disambiguated = f"{parent} - {name} ({suffix})"
+            final_path = os.path.join(quarantine_dir, disambiguated)
+            suffix += 1
+        name = disambiguated
+
+        try:
+            os.rename(path, final_path)
+        except OSError as e:
+            log("CRIT", f"failed to quarantine broken symlink {name}: {e}")
+            return
+
+        try:
+            with open(os.path.join(quarantine_dir, f"{name}.quarantine-reason.txt"), "w") as f:
+                f.write(reason + "\n")
+        except OSError as e:
+            log("CRIT", f"quarantined broken symlink {name} but failed to write reason sidecar: {e}")
 
         counters["quarantined"].append({"file": name, "reason": reason})
 
@@ -503,9 +554,22 @@ data:
 
             for path in sorted(paths):
                 entry = os.path.basename(path)
-                if not is_settled(path, config["settle_seconds"]):
+                # A dangling symlink passes the walk's own filter (it's not
+                # a directory os.walk would descend into) but every
+                # stat-following call below - is_settled(), ebook-meta,
+                # everything - raises on its unreachable target. Handled
+                # before any of that runs, not inside the general except
+                # below: found live 2026-07-21 that this was crashing the
+                # *entire* job (is_settled() sat outside that try/except),
+                # not just failing this one entry, and recurring on every
+                # run since nothing ever moved the symlink out of the way.
+                if os.path.islink(path) and not os.path.exists(path):
+                    log("CRIT", f"broken symlink, quarantining without following it: {entry}")
+                    quarantine_broken_symlink(path, "broken symlink - target not reachable via this NFS export", config["quarantine_dir"], counters)
                     continue
                 try:
+                    if not is_settled(path, config["settle_seconds"]):
+                        continue
                     process_file(conn, path, config, counters)
                 except Exception as e:
                     log("CRIT", f"unhandled error processing {entry}: {e}")

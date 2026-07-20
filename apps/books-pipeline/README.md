@@ -217,3 +217,43 @@ README's own stated design (a separate, not-yet-built "PDF triage
 subagent") already anticipated PDFs shouldn't go through full
 `ebook-convert` attempts in this pipeline at all - worth revisiting if
 the backlog needs to drain faster than "eventually."
+
+## Two more bugs found and fixed, arr-stack extension discovery (2026-07-21)
+
+Found doing Phase 1 discovery for the arr-stack/LazyLibrarian books
+extension - neither related to that extension itself, both pre-existing:
+
+1. **`main()` crashed the entire job on a broken symlink.**
+   `import/Books` was a symlink to `MD0_DATA/Public/Media/Books` - a
+   QNAP-internal path notation, not reachable via the `/books` NFS
+   export from this cluster's side. `os.walk()` picked it up fine (it's
+   not a directory to descend into), but `is_settled()`'s `os.stat()`
+   call follows symlinks and raised `FileNotFoundError` on the
+   unreachable target - **outside** the per-file `try/except`, so it
+   killed the whole run, every time the walk reached "Books"
+   alphabetically. Confirmed against three consecutive `Failed` job runs
+   immediately before this fix. Fixed: broken symlinks are detected
+   (`os.path.islink() and not os.path.exists()`) and quarantined via a
+   new `quarantine_broken_symlink()` - `os.rename()`, which doesn't
+   follow the link, unlike the existing `quarantine()`'s `shutil.copy2()`
+   which would have hit the exact same crash trying to "back it up"
+   properly.
+
+2. **`quarantine()`'s collision check was basename-only.** Generic
+   sidecar names (`cover.jpg`, `metadata.opf`) recur across thousands
+   of different book folders once the scan is recursive - the first
+   occurrence quarantined fine, every one after collided on the bare
+   filename and was left stuck in `import/` forever (**1,576 files**
+   already piled up in `quarantine/` by the time this was found, an
+   unknown share of the remaining `import/` backlog stuck the same
+   way). Fixed: quarantined names are now disambiguated by parent
+   directory (`"<parent dir> - <filename>"`), with a numeric-suffix
+   fallback for the rare case two genuinely different files still
+   collide - a source is now never left unquarantined for lack of a
+   free name.
+
+Both fixes double as the remediation for the one stray file found in
+the same discovery pass (the broken symlink itself) - no separate
+cleanup command needed, the fixed pipeline quarantines it properly
+(with a real reason file) the next time it runs, rather than needing a
+manual `rm`.
