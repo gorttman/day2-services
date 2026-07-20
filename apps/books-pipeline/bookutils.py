@@ -69,6 +69,57 @@ def _normalize_text(value):
     return value
 
 
+_SUSPICIOUS_AUTHOR_RE = re.compile(r"[\[\]]|\(v\d|\d{3,}|\.html?\b", re.IGNORECASE)
+
+
+def looks_like_valid_author(author):
+    """Rejects author values that are clearly not a person's name - file/
+    version-descriptor fragments that leaked in from a source file's own
+    scrambled metadata (a title/author swap in the file's own embedded
+    OPF, confirmed live 2026-07-19 against a real file: Title "ANTHONY
+    BURGESS", Author(s) "A Clockwork Orange (Uk Version)(v1.1)[htm]" -
+    the file's own metadata, not a parsing bug). Conservative on
+    purpose: only flags strong, unambiguous junk signals (brackets,
+    "(v1.1)"-style version tags, 3+ digit runs, .htm/.html) - real names
+    essentially never contain these, so false positives on genuine
+    authors should be rare."""
+    if not author:
+        return True  # nothing to validate - absence is handled elsewhere
+    return not _SUSPICIOUS_AUTHOR_RE.search(author)
+
+
+def dedupe_author_credits(author):
+    """Collapses redundant/truncated tokens within a single file's own
+    multi-author credit line - e.g. "Robert A. Heinlein & Robert A."
+    (confirmed live 2026-07-19: the file's own embedded metadata was a
+    clean single author: "Robert A. Heinlein" - the truncated second
+    token is a formatting glitch in how the credit line joins repeated/
+    truncated names, not a second real person). If one token is a
+    word-boundary-aligned prefix of another token in the *same* credit
+    line, keep only the longer one. Only ever compares tokens within one
+    file's own author string - never across different files/books - so
+    this cannot merge two different real people who happen to share a
+    name prefix on different books."""
+    if not author or " & " not in author:
+        return author
+    tokens = [t.strip() for t in author.split(" & ") if t.strip()]
+    keep = []
+    for i, t in enumerate(tokens):
+        drop = False
+        for j, other in enumerate(tokens):
+            if i == j or not other.startswith(t):
+                continue
+            if len(other) == len(t):
+                drop = j < i  # exact duplicate - keep only the first occurrence
+            elif other[len(t)] == " ":
+                drop = True  # t is a genuine prefix of a longer token
+            if drop:
+                break
+        if not drop:
+            keep.append(t)
+    return " & ".join(keep)
+
+
 def normalize_isbn(raw):
     """Strip formatting, validate checksum, return a bare ISBN-13 digit
     string (converting ISBN-10 if needed) or None if invalid/unparseable.

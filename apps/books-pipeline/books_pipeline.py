@@ -54,7 +54,15 @@ def extract_metadata(path):
     result = bookutils.extract_ebook_metadata(path)
     if result["error"]:
         log("WARN", f"ebook-meta failed for {os.path.basename(path)}: {result['error']}")
-    return {k: v for k, v in result.items() if k != "error"}
+    meta = {k: v for k, v in result.items() if k != "error"}
+
+    if meta["author"]:
+        deduped = bookutils.dedupe_author_credits(meta["author"])
+        if deduped != meta["author"]:
+            log("INFO", f"collapsed redundant author credit for {os.path.basename(path)}: {meta['author']!r} -> {deduped!r}")
+        meta["author"] = deduped
+
+    return meta
 
 
 # ---------------------------------------------------------------------------
@@ -358,6 +366,16 @@ def process_file(conn, path, config, counters):
     # Stage 1
     meta = extract_metadata(path)
     log("INFO", f"stage1 metadata: {name} title={meta['title']!r} author={meta['author']!r} isbn13={meta['isbn13']!r} format={meta['format']}")
+
+    if meta["author"] and not bookutils.looks_like_valid_author(meta["author"]):
+        quarantine(
+            path,
+            "implausible author metadata (likely a title/author swap in the source "
+            f"file's own embedded metadata, not a pipeline bug) - author value looks "
+            f"like a title/filename fragment, not a name: {meta['author']!r}",
+            config["quarantine_dir"], counters,
+        )
+        return
 
     # Stage 2
     dedup_kind, matched_path = dedup_check(conn, meta, config)
