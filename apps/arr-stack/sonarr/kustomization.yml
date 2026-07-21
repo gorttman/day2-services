@@ -5,3 +5,4 @@ resources:
   - sonarr-pvc.yml
   - sonarr-service.yml
   - sonarr-ingress.yml
+  - sonarr-public-ingress.yml

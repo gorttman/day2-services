@@ -5,3 +5,4 @@ resources:
   - jdownloader2-pvc.yml
   - jdownloader2-service.yml
   - jdownloader2-ingress.yml
+  - jdownloader2-public-ingress.yml

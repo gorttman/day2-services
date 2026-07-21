@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sonarr-public
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: sonarr
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+    # cloudflared's Public Hostname (Terraform-managed, day1-foundation
+    # apps/cloudflare-tf) forwards here as plain HTTP, not HTTPS - without
+    # this, nginx's default ssl-redirect would 308 that request to https
+    # and loop.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # No auth-url/auth-signin here - same as homeassistant/books/etc,
+    # this cluster's norm is the Cloudflare mTLS gate alone, no
+    # separate app-level auth layered on top for apps that don't
+    # already have their own real user-account system.
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - sonarr.i3sec.com.au
+    secretName: sonarr-public-tls
+  rules:
+  - host: sonarr.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: sonarr
+            port:
+              number: 8989

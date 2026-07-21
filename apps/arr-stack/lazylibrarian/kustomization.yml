@@ -5,5 +5,6 @@ resources:
   - lazylibrarian-pvc.yml
   - lazylibrarian-service.yml
   - lazylibrarian-ingress.yml
+  - lazylibrarian-public-ingress.yml
   - lazylibrarian-sealed-secret.yml
   - lazylibrarian-config-seed.yml

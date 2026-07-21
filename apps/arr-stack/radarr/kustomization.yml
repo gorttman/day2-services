@@ -5,3 +5,4 @@ resources:
   - radarr-pvc.yml
   - radarr-service.yml
   - radarr-ingress.yml
+  - radarr-public-ingress.yml

@@ -5,3 +5,4 @@ resources:
   - bazarr-pvc.yml
   - bazarr-service.yml
   - bazarr-ingress.yml
+  - bazarr-public-ingress.yml

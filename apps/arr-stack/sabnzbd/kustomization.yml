@@ -5,3 +5,4 @@ resources:
   - sabnzbd-pvc.yml
   - sabnzbd-service.yml
   - sabnzbd-ingress.yml
+  - sabnzbd-public-ingress.yml
