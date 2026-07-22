@@ -1,9 +1,9 @@
 # arr-stack
 
-Media automation stack behind a PIA VPN via OpenVPN (Gluetun -
-switched from Mullvad/WireGuard 2026-07-22, see "LIVE 2026-07-22"
-below). Originally install-only (see below) - extended 2026-07-21 to
-also cover books via LazyLibrarian, feeding the same `books-pipeline`
+Media automation stack behind a PIA VPN via WireGuard (Gluetun -
+switched from OpenVPN 2026-07-23, see "LIVE 2026-07-23" below).
+Originally install-only (see below) - extended 2026-07-21 to also
+cover books via LazyLibrarian, feeding the same `books-pipeline`
 import path every other book-arrival route already uses.
 
 | App | UI | Container port |
@@ -35,14 +35,11 @@ than pulling a new one). Three pieces:
    LazyLibrarian creates it on first boot (`DESTINATION_DIR` = the
    import mount, per-book folder naming turned off), then self-restarts
    the pod so the change takes effect - same shape as calibre-web's
-   `config_calibre_dir` seed. **The exact key names
-   (`DESTINATION_DIR`/`DESTINATION_COPY`/`EBOOK_DEST_FOLDER`) were
-   unverified against a live instance as of 2026-07-21** (gluetun
-   couldn't reach Ready without real credentials, which didn't exist
-   yet at that point). Real credentials landed 2026-07-22 (see "LIVE
-   2026-07-22" below) - check the actual `config.ini` this produces now
-   that the pod can actually boot; adjust `lazylibrarian-config-seed.yml`
-   if the keys don't match.
+   `config_calibre_dir` seed. Verified 2026-07-23 against a live,
+   internet-connected instance: `config.ini` ends up with
+   `destination_dir=/import`, `destination_copy=0`, `ebook_dest_folder`
+   empty, `ebook_dest_file=$Title - $Author` - exactly as intended, no
+   key-name corrections needed.
 3. **SABnzbd's `books` category** - mounted the same `import/` subPath
    directly (`/books-import` in the sabnzbd container), so the
    category's completed-directory can point straight at it - no sweep,
@@ -72,19 +69,33 @@ admits only the UI ports (`FIREWALL_INPUT_PORTS`) and cluster subnets
 tunnel. Per-app subdirectories hold each app's config PVC, Service and
 Ingress; the Services all select the same pod on different ports.
 
-## LIVE 2026-07-22: real PIA (Private Internet Access) creds via OpenVPN
+## LIVE 2026-07-23: real PIA (Private Internet Access) via WireGuard
 
-`gluetun/gluetun-sealed-secret.yml` holds real, working credentials -
-`VPN_SERVICE_PROVIDER=private internet access`, `VPN_TYPE=openvpn`,
-real `OPENVPN_USER`/`OPENVPN_PASSWORD`, `SERVER_REGIONS=AU Sydney`
-(confirmed as a real, valid gluetun/PIA region name, picked for
-proximity to where this cluster lives). Switched from Mullvad/WireGuard
-the same day - user already had a PIA subscription, no need for a
-second VPN service; OpenVPN rather than WireGuard because gluetun's
-native PIA support is OpenVPN-only (WireGuard for PIA needs a
-third-party config-generation tool, documented upstream as
-work-in-progress). `replicas: 1`, `arr-stack-app.yml` back in
-`apps/kustomization.yml` - no longer disabled.
+`gluetun/gluetun-sealed-secret.yml` holds a real, working WireGuard
+peer registration for PIA (`VPN_SERVICE_PROVIDER=custom`,
+`VPN_TYPE=wireguard`, `WIREGUARD_ENDPOINT_IP`/`_PORT`/`_PUBLIC_KEY`/
+`_PRIVATE_KEY`/`_ADDRESSES`). Confirmed live: gluetun logs a real
+tunnel-up event and a PIA exit IP (`117.120.9.36`, Sydney), and every
+other container in the pod (checked: sonarr, sabnzbd, lazylibrarian)
+gets real internet egress through it with that same exit IP.
+
+WireGuard was reached in two steps:
+1. **2026-07-22, PIA via OpenVPN** - switched from Mullvad/WireGuard
+   because the user already had a PIA subscription (no need for a
+   second VPN service) and gluetun's native PIA support is
+   OpenVPN-only. This never actually worked: UDP 1197, UDP 8080 and
+   TCP 501 all failed (TLS handshake timeout / hard connect timeout)
+   against multiple real PIA server IPs across two regions, while
+   plain HTTPS egress from the same pod network was fine - pointing at
+   something in this network path blocking OpenVPN specifically.
+2. **2026-07-23, PIA via WireGuard, custom provider** - gluetun has no
+   native PIA WireGuard support (confirmed upstream: "slow work in
+   progress"), and PIA doesn't publish static WireGuard configs, so
+   the peer above was registered directly against PIA's own API
+   (`pia-foss/manual-connections`'s documented flow: auth token → pick
+   a server from the region's server list → generate an X25519
+   keypair → register it via `/addKey`) rather than left as a manual
+   step, fully scripted end to end.
 
 Disabled 2026-07-17 through 2026-07-22 on a placeholder VPN secret
 (`gluetun` CrashLoopBackOff, `replicas: 0`) - kept here for context,
@@ -95,9 +106,12 @@ not because it's still true:
 - no indexers or download clients were wired up in the install-only
   pass - still true, see "Deliberately unconfigured" below.
 
-To rotate any one credential later: `kubeseal --raw` (scope strict,
-namespace `arr-stack`, name `gluetun-vpn`), replacing only that key's
-line in `gluetun-sealed-secret.yml` - same pattern as every other
+The WireGuard peer is tied to one specific PIA server IP
+(`117.120.9.43`, AU Sydney) - if PIA ever retires/rotates that server,
+the tunnel needs a fresh registration. See the header comment in
+`gluetun-sealed-secret.yml` for the exact 4-step flow to repeat and
+which fields to reseal (`kubeseal --raw`, scope strict, namespace
+`arr-stack`, name `gluetun-vpn`) - same pattern as every other
 multi-field sealed secret in this repo.
 
 ## Deliberately unconfigured (install-only)

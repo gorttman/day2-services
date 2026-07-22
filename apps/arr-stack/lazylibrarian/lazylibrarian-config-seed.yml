@@ -15,14 +15,12 @@ data:
     # folder structure, so LazyLibrarian doing its own foldering would
     # just be redundant work immediately flattened away downstream.
     #
-    # UNVERIFIED key mapping: DESTINATION_DIR/DESTINATION_COPY/
-    # EBOOK_DEST_FOLDER are LazyLibrarian's documented config.ini keys
-    # as of this writing, but this has not been tested against a live
-    # instance - gluetun can't reach Ready without real Mullvad
-    # credentials, which don't exist yet in this install pass. Check
-    # the actual [General]/[postprocess] section of a booted instance's
-    # config.ini against what's written below before trusting this
-    # blindly; adjust key names here if they don't match.
+    # Verified 2026-07-23 against a live instance (once gluetun's PIA
+    # WireGuard tunnel came up for real): config.ini ends up with
+    # destination_dir=/import, destination_copy=0, ebook_dest_folder
+    # empty, ebook_dest_file=$Title - $Author, exactly as intended.
+    # configparser lower-cases option names on write; LazyLibrarian
+    # reads config.ini case-insensitively so this doesn't matter.
     #
     # Same reasoning as calibre-web's config_calibre_dir seed for why
     # this waits for the app to create its own config file first rather
