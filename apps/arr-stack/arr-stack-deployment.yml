@@ -7,8 +7,11 @@
 #
 # EXPECTED-DEGRADED UNTIL VPN CREDS EXIST: gluetun/gluetun-sealed-secret
 # holds sealed PLACEHOLDER values, so the gluetun container CrashLoops by
-# design until real Mullvad credentials are sealed over it. The app UIs
-# stay reachable meanwhile (publishNotReadyAddresses on the Services).
+# design until real PIA (Private Internet Access) OpenVPN credentials
+# are sealed over it - switched from Mullvad/WireGuard 2026-07-22, user
+# already had a PIA subscription. OpenVPN, not WireGuard, deliberately:
+# gluetun's native PIA support is OpenVPN-only. The app UIs stay
+# reachable meanwhile (publishNotReadyAddresses on the Services).
 #
 # DISABLED 2026-07-17: replicas set to 0 pending fix of the above. Flip
 # back to 1 once real VPN creds are sealed over gluetun-vpn.
