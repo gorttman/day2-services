@@ -3,6 +3,7 @@ import html.parser
 import json
 import os
 import re
+import resource
 import shutil
 import subprocess
 import sys
@@ -123,6 +124,26 @@ def dedup_check(conn, meta, config):
 # Stage 3: convert to EPUB (comics and already-EPUB bypass entirely)
 # ---------------------------------------------------------------------------
 
+# Found live 2026-07-23: a single large/complex PDF drove ebook-convert
+# to 3.2GB+ RSS and climbing, well past the container's then-2Gi memory
+# limit - which killed the whole container (fine, contained), but a
+# retry at 4Gi instead pushed the *node's* total real memory over the
+# edge (this node's pods' limits sum to ~23Gi against 16Gi actual
+# capacity - a normal overcommit that only breaks if several
+# memory-heavy pods spike together, which they did here) - a global,
+# not per-cgroup, OOM kill (dmesg: "constraint=CONSTRAINT_NONE,
+# global_oom") that took out unrelated processes as collateral, not
+# just this one. Capping ebook-convert's own address space below the
+# container limit means a problem file fails on its own rlimit and
+# gets quarantined normally, instead of the failure mode being
+# "how much of the node can this one file take down with it."
+CONVERT_MEMORY_LIMIT_BYTES = 3 * 1024 * 1024 * 1024  # 3GiB - leaves headroom under the container's 4Gi limit for the main process + calibre's helper workers
+
+
+def _limit_convert_memory():
+    resource.setrlimit(resource.RLIMIT_AS, (CONVERT_MEMORY_LIMIT_BYTES, CONVERT_MEMORY_LIMIT_BYTES))
+
+
 def convert_to_epub(path, meta, workdir):
     if meta["format"] == "epub" or meta["format"] in COMIC_FORMATS:
         return path, None
@@ -132,6 +153,7 @@ def convert_to_epub(path, meta, workdir):
         result = subprocess.run(
             ["ebook-convert", path, dest],
             capture_output=True, text=True, timeout=600,
+            preexec_fn=_limit_convert_memory,
         )
     except (subprocess.SubprocessError, OSError) as e:
         return None, str(e)
