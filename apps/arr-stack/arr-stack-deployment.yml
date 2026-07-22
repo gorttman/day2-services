@@ -67,25 +67,29 @@ spec:
             add: ["NET_ADMIN"]
         envFrom:
         - secretRef:
-            name: gluetun-vpn   # real PIA/OpenVPN creds sealed 2026-07-22 - see gluetun/README note
+            name: gluetun-vpn   # real PIA WireGuard peer config sealed 2026-07-23 - see gluetun-sealed-secret.yml
         env:
         - name: TZ
           value: Australia/Sydney
-        # UDP OpenVPN to PIA never completes a TLS handshake from this
-        # network - tried both the default port 1197 and the documented
-        # UDP-1197-deprecated workaround (port 8080, gluetun#3288), same
-        # "TLS key negotiation failed" symptom both times against two
-        # different real server IPs. Basic outbound connectivity is
-        # fine (confirmed: HTTPS out works, raw UDP send doesn't error)
-        # - looks like sustained OpenVPN UDP specifically gets dropped
-        # somewhere in this network path (router/ISP), not a PIA-side
-        # or credentials problem. Forcing TCP instead - gluetun's own
-        # bundled PIA server list picks the correct TCP endpoint port
-        # automatically, so no manual OPENVPN_ENDPOINT_PORT override
-        # needed (removed the UDP-specific one from the previous
-        # attempt, since it doesn't apply to TCP mode).
-        - name: OPENVPN_PROTOCOL
-          value: "tcp"
+        # OpenVPN to PIA (UDP 1197, UDP 8080, TCP 501 - all tried) never
+        # completes a handshake from this network: UDP got "TLS key
+        # negotiation failed", TCP got a hard connect timeout, both
+        # against multiple real server IPs across two regions. Basic
+        # outbound connectivity is fine (control test to 1.1.1.1:443
+        # succeeds from the same pod network) and PIA's own account API
+        # (token issuance) works over plain HTTPS, so this points at
+        # something in this network path specifically dropping OpenVPN
+        # traffic, not a PIA-side or credentials problem - consistent
+        # with the user's own prior experience of PIA working fine on
+        # this same network segment via WireGuard (PIA's app default).
+        # Switched 2026-07-23 to WireGuard via gluetun's "custom"
+        # provider (native PIA WireGuard support doesn't exist in
+        # gluetun - upstream confirms this is still work in progress).
+        # The peer registration (keypair + PIA's /addKey API) was done
+        # once, out of band, using PIA's own documented flow
+        # (pia-foss/manual-connections) - see gluetun-sealed-secret.yml
+        # for the full rundown and what to do if this peer ever needs
+        # to be re-registered.
         # Admit the arr UIs through gluetun's firewall (inbound)
         - name: FIREWALL_INPUT_PORTS
           value: "8989,7878,9696,8080,6767,5800,5299"
