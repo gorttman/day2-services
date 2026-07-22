@@ -71,15 +71,21 @@ spec:
         env:
         - name: TZ
           value: Australia/Sydney
-        # PIA's legacy OpenVPN UDP port 1197 stopped completing TLS
-        # handshakes cluster-wide (PIA-side server/infra change, not
-        # specific to this account) - confirmed against gluetun's own
-        # issue tracker (qdm12/gluetun#3288/#3202), same symptom
-        # ("TLS key negotiation failed to occur within 60 seconds",
-        # same cached remote address retried forever). UDP 8080 is the
-        # documented working workaround.
-        - name: OPENVPN_ENDPOINT_PORT
-          value: "8080"
+        # UDP OpenVPN to PIA never completes a TLS handshake from this
+        # network - tried both the default port 1197 and the documented
+        # UDP-1197-deprecated workaround (port 8080, gluetun#3288), same
+        # "TLS key negotiation failed" symptom both times against two
+        # different real server IPs. Basic outbound connectivity is
+        # fine (confirmed: HTTPS out works, raw UDP send doesn't error)
+        # - looks like sustained OpenVPN UDP specifically gets dropped
+        # somewhere in this network path (router/ISP), not a PIA-side
+        # or credentials problem. Forcing TCP instead - gluetun's own
+        # bundled PIA server list picks the correct TCP endpoint port
+        # automatically, so no manual OPENVPN_ENDPOINT_PORT override
+        # needed (removed the UDP-specific one from the previous
+        # attempt, since it doesn't apply to TCP mode).
+        - name: OPENVPN_PROTOCOL
+          value: "tcp"
         # Admit the arr UIs through gluetun's firewall (inbound)
         - name: FIREWALL_INPUT_PORTS
           value: "8989,7878,9696,8080,6767,5800,5299"
