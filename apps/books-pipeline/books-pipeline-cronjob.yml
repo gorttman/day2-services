@@ -2,12 +2,15 @@
 # subdirectories of the single qnap.i3sec.com.au:/books export - one nfs
 # volume covers all of them, same as inbox-router's /mnt/books mount.
 #
-# Resources and activeDeadlineSeconds are a first estimate, not backed by
-# CronJob precedent in this repo (Phase 1 found none) - anchored instead
-# to the closest real precedent available, the postgres/homeassistant
-# Deployments' resource blocks, scaled up for Calibre conversion +
-# network metadata lookups being the two genuinely variable-cost
-# operations here. Revisit after real runs.
+# Memory limit raised 2Gi -> 4Gi 2026-07-23: real runs showed the
+# original 2Gi estimate was too low - dmesg confirmed the container's
+# cgroup being OOM-killed (memory.oom.group, whole container including
+# the main python3 process) by ebook-convert alone hitting ~2GB RSS
+# converting some large/complex PDFs, recurring on every single
+# 15-minute run for several cycles straight (01:18, 01:33, 01:48) and
+# stalling the whole import backlog. Node has ~7.7Gi free at 4 cores/
+# 16Gi allocatable, so 4Gi leaves comfortable headroom without starving
+# anything else on k8smaster.
 #
 # nodeSelector: pinned to k8smaster preemptively, matching the
 # precautionary note in the prompt-3 image README - Calibre-bundled
@@ -70,7 +73,7 @@ spec:
                   memory: 512Mi
                   cpu: 250m
                 limits:
-                  memory: 2Gi
+                  memory: 4Gi
                   cpu: 2000m
           volumes:
             - name: script

@@ -242,29 +242,75 @@ data:
     # shared runtime between the two separate CronJob containers/images)
     # ---------------------------------------------------------------------------
 
+    # Filesystem NAME_MAX is 255 bytes. This budget is kept well under that
+    # because the resulting name also gets combined with two sidecar
+    # affixes elsewhere: ".incoming-" (10 bytes, quarantine()'s temp-copy
+    # prefix) and ".quarantine-reason.txt" (22 bytes, the reason sidecar
+    # suffix) - either of those pushes the real ceiling down to ~233-245
+    # bytes, so 200 leaves comfortable headroom for both.
+    MAX_QUARANTINE_NAME_BYTES = 200
+
+
+    def _byte_truncate(s, max_bytes):
+        if max_bytes <= 0:
+            return ""
+        b = s.encode("utf-8")
+        if len(b) <= max_bytes:
+            return s
+        return b[:max_bytes].decode("utf-8", errors="ignore")
+
+
+    def _quarantine_target_name(path, quarantine_dir, exists_fn):
+        """Builds a parent-disambiguated quarantine filename, truncated to
+        fit the filesystem's NAME_MAX. Found live 2026-07-22: long book
+        titles combined with the parent-dir disambiguation prefix (added to
+        fix basename-only collisions, see below) routinely exceeded 255
+        bytes, so every long-titled file failed to quarantine with
+        "[Errno 36] File name too long" on every single run, forever - the
+        parent-prefix fix for one collision bug silently introduced this
+        one. Disambiguates by parent directory, not just basename - generic
+        sidecar names (cover.jpg, metadata.opf) recur across thousands of
+        different book folders under a recursive import/ scan; basename-
+        only collisions were leaving every file after the first stuck in
+        import/ forever (found live: books-pipeline-29743020's logs,
+        2026-07-20). Falls back to a numeric suffix in the rare case two
+        genuinely different files share both parent dir and filename, so a
+        source is never silently left unquarantined for lack of a slot.
+        Truncates the stem (the original filename) rather than the
+        extension, since ebook-meta/calibre still need a recognizable
+        extension to identify the format; truncates parent too as a
+        fallback so this can never loop forever regardless of how long a
+        parent directory name is."""
+        name = os.path.basename(path)
+        parent = os.path.basename(os.path.dirname(path)) or "root"
+        stem, ext = os.path.splitext(name)
+        parent = _byte_truncate(parent, 80)
+        parent_bytes = len(parent.encode("utf-8"))
+        ext_bytes = len(ext.encode("utf-8"))
+
+        def build(suffix=""):
+            suffix_bytes = len(suffix.encode("utf-8"))
+            stem_budget = MAX_QUARANTINE_NAME_BYTES - parent_bytes - len(" - ") - ext_bytes - suffix_bytes
+            fitted_stem = _byte_truncate(stem, stem_budget)
+            return f"{parent} - {fitted_stem}{ext}{suffix}"
+
+        disambiguated = build()
+        final_path = os.path.join(quarantine_dir, disambiguated)
+        suffix_n = 2
+        while exists_fn(final_path):
+            disambiguated = build(suffix=f" ({suffix_n})")
+            final_path = os.path.join(quarantine_dir, disambiguated)
+            suffix_n += 1
+        return disambiguated, final_path
+
+
     def quarantine(path, reason, quarantine_dir, counters):
         name = os.path.basename(path)
         if not os.path.isdir(quarantine_dir):
             log("CRIT", f"quarantine dir unreachable ({quarantine_dir}) - leaving {name} in place: {reason}")
             return
 
-        # Disambiguate by parent directory, not just basename - generic
-        # sidecar names (cover.jpg, metadata.opf) recur across thousands of
-        # different book folders under a recursive import/ scan. Basename-
-        # only collisions were leaving every file after the first stuck in
-        # import/ forever (found live: books-pipeline-29743020's logs,
-        # 2026-07-20). Falls back to a numeric suffix in the rare case two
-        # genuinely different files share both parent dir and filename, so
-        # a source is never silently left unquarantined for lack of a slot.
-        parent = os.path.basename(os.path.dirname(path)) or "root"
-        disambiguated = f"{parent} - {name}"
-        final_path = os.path.join(quarantine_dir, disambiguated)
-        suffix = 2
-        while os.path.exists(final_path):
-            disambiguated = f"{parent} - {name} ({suffix})"
-            final_path = os.path.join(quarantine_dir, disambiguated)
-            suffix += 1
-        name = disambiguated
+        name, final_path = _quarantine_target_name(path, quarantine_dir, os.path.exists)
 
         incoming_path = os.path.join(quarantine_dir, f"{INCOMING_PREFIX}{name}")
         try:
@@ -301,15 +347,7 @@ data:
             log("CRIT", f"quarantine dir unreachable ({quarantine_dir}) - leaving broken symlink {name} in place: {reason}")
             return
 
-        parent = os.path.basename(os.path.dirname(path)) or "root"
-        disambiguated = f"{parent} - {name}"
-        final_path = os.path.join(quarantine_dir, disambiguated)
-        suffix = 2
-        while os.path.lexists(final_path):
-            disambiguated = f"{parent} - {name} ({suffix})"
-            final_path = os.path.join(quarantine_dir, disambiguated)
-            suffix += 1
-        name = disambiguated
+        name, final_path = _quarantine_target_name(path, quarantine_dir, os.path.lexists)
 
         try:
             os.rename(path, final_path)
@@ -583,7 +621,6 @@ data:
 
     if __name__ == "__main__":
         main()
-
   bookutils.py: |
     import os
     import re
@@ -839,7 +876,6 @@ data:
         in pdf_triage.py)."""
         score = match_score(query_title, query_author, candidate_title, candidate_author)
         return score >= threshold
-
   reconcile_fingerprints.py: |
     #!/usr/bin/env python3
     """Recurring weekly job. Read-only against both the filesystem and the
@@ -944,4 +980,3 @@ data:
 
     if __name__ == "__main__":
         main()
-
