@@ -5,16 +5,13 @@
 # Gluetun's firewall only admits the UI ports listed in
 # FIREWALL_INPUT_PORTS and only routes egress via the VPN tunnel.
 #
-# EXPECTED-DEGRADED UNTIL VPN CREDS EXIST: gluetun/gluetun-sealed-secret
-# holds sealed PLACEHOLDER values, so the gluetun container CrashLoops by
-# design until real PIA (Private Internet Access) OpenVPN credentials
-# are sealed over it - switched from Mullvad/WireGuard 2026-07-22, user
-# already had a PIA subscription. OpenVPN, not WireGuard, deliberately:
-# gluetun's native PIA support is OpenVPN-only. The app UIs stay
-# reachable meanwhile (publishNotReadyAddresses on the Services).
-#
-# DISABLED 2026-07-17: replicas set to 0 pending fix of the above. Flip
-# back to 1 once real VPN creds are sealed over gluetun-vpn.
+# LIVE 2026-07-22: real PIA (Private Internet Access) OpenVPN
+# credentials sealed over gluetun-vpn - switched from Mullvad/WireGuard
+# the same day, user already had a PIA subscription. OpenVPN, not
+# WireGuard, deliberately: gluetun's native PIA support is OpenVPN-only.
+# Disabled 2026-07-17 through 2026-07-22 on a placeholder VPN secret
+# (gluetun CrashLoopBackOff, replicas: 0) - re-enabled once real creds
+# landed.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -27,7 +24,7 @@ metadata:
     app.kubernetes.io/part-of: day2-services
     argocd.argoproj.io/managed-by: argocd
 spec:
-  replicas: 0
+  replicas: 1
   # RWO local-path volumes: old pod must release them before the new one starts
   strategy:
     type: Recreate

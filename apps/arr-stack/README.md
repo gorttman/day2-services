@@ -1,7 +1,7 @@
 # arr-stack
 
 Media automation stack behind a PIA VPN via OpenVPN (Gluetun -
-switched from Mullvad/WireGuard 2026-07-22, see "EXPECTED STATE"
+switched from Mullvad/WireGuard 2026-07-22, see "LIVE 2026-07-22"
 below). Originally install-only (see below) - extended 2026-07-21 to
 also cover books via LazyLibrarian, feeding the same `books-pipeline`
 import path every other book-arrival route already uses.
@@ -36,12 +36,13 @@ than pulling a new one). Three pieces:
    import mount, per-book folder naming turned off), then self-restarts
    the pod so the change takes effect - same shape as calibre-web's
    `config_calibre_dir` seed. **The exact key names
-   (`DESTINATION_DIR`/`DESTINATION_COPY`/`EBOOK_DEST_FOLDER`) are
-   unverified against a live instance** - gluetun can't reach Ready
-   without real Mullvad credentials, which don't exist in this pass
-   (see "EXPECTED STATE" below, unchanged). Check the actual config.ini
-   this produces once real credentials are sealed and the pod boots for
-   real; adjust `lazylibrarian-config-seed.yml` if the keys don't match.
+   (`DESTINATION_DIR`/`DESTINATION_COPY`/`EBOOK_DEST_FOLDER`) were
+   unverified against a live instance as of 2026-07-21** (gluetun
+   couldn't reach Ready without real credentials, which didn't exist
+   yet at that point). Real credentials landed 2026-07-22 (see "LIVE
+   2026-07-22" below) - check the actual `config.ini` this produces now
+   that the pod can actually boot; adjust `lazylibrarian-config-seed.yml`
+   if the keys don't match.
 3. **SABnzbd's `books` category** - mounted the same `import/` subPath
    directly (`/books-import` in the sabnzbd container), so the
    category's completed-directory can point straight at it - no sweep,
@@ -71,37 +72,33 @@ admits only the UI ports (`FIREWALL_INPUT_PORTS`) and cluster subnets
 tunnel. Per-app subdirectories hold each app's config PVC, Service and
 Ingress; the Services all select the same pod on different ports.
 
-## EXPECTED STATE: Gluetun CrashLoops until real credentials are sealed
-`gluetun/gluetun-sealed-secret.yml` contains sealed **placeholder**
-values, deliberately - this install pass does not touch real
-credentials. Provider is **PIA (Private Internet Access) via OpenVPN**
-(switched from Mullvad/WireGuard 2026-07-22 - user already has a PIA
-subscription, no need for a second VPN service; OpenVPN rather than
-WireGuard because gluetun's native PIA support is OpenVPN-only -
-WireGuard for PIA needs a third-party config-generation tool and is
-documented upstream as work-in-progress). Until real values exist:
+## LIVE 2026-07-22: real PIA (Private Internet Access) creds via OpenVPN
 
-- the `gluetun` container CrashLoops (invalid OpenVPN credentials) -
-  **this is not a bug**;
-- the pod shows NotReady, but the app UIs stay reachable because the
-  Services set `publishNotReadyAddresses: true`;
-- the apps have no VPN egress (and nothing configured to use it - no
-  indexers or download clients are wired up in this pass).
+`gluetun/gluetun-sealed-secret.yml` holds real, working credentials -
+`VPN_SERVICE_PROVIDER=private internet access`, `VPN_TYPE=openvpn`,
+real `OPENVPN_USER`/`OPENVPN_PASSWORD`, `SERVER_REGIONS=AU Sydney`
+(confirmed as a real, valid gluetun/PIA region name, picked for
+proximity to where this cluster lives). Switched from Mullvad/WireGuard
+the same day - user already had a PIA subscription, no need for a
+second VPN service; OpenVPN rather than WireGuard because gluetun's
+native PIA support is OpenVPN-only (WireGuard for PIA needs a
+third-party config-generation tool, documented upstream as
+work-in-progress). `replicas: 1`, `arr-stack-app.yml` back in
+`apps/kustomization.yml` - no longer disabled.
 
-To go live: seal a real secret over it (same name `gluetun-vpn`,
-namespace `arr-stack`; `VPN_SERVICE_PROVIDER`/`VPN_TYPE` are already
-sealed correctly as `private internet access`/`openvpn` - only
-`OPENVPN_USER`, `OPENVPN_PASSWORD`, and `SERVER_REGIONS` need real
-values):
-```bash
-echo -n '<value>' | sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubeseal --raw \
-  --scope strict --namespace arr-stack --name gluetun-vpn
-```
-Paste each output over the matching key in `gluetun-sealed-secret.yml`.
-For `SERVER_REGIONS`, check gluetun's own PIA region list
-(gluetun-wiki, "Private Internet Access" page) for the exact valid
-string rather than guessing one. Commit, push, and restart the
-deployment once real values are in.
+Disabled 2026-07-17 through 2026-07-22 on a placeholder VPN secret
+(`gluetun` CrashLoopBackOff, `replicas: 0`) - kept here for context,
+not because it's still true:
+- the pod showed NotReady, but app UIs stayed reachable regardless
+  (`publishNotReadyAddresses: true` on every Service) - that
+  mechanism is still in place, just no longer masking a real problem;
+- no indexers or download clients were wired up in the install-only
+  pass - still true, see "Deliberately unconfigured" below.
+
+To rotate any one credential later: `kubeseal --raw` (scope strict,
+namespace `arr-stack`, name `gluetun-vpn`), replacing only that key's
+line in `gluetun-sealed-secret.yml` - same pattern as every other
+multi-field sealed secret in this repo.
 
 ## Deliberately unconfigured (install-only)
 - No indexers (Prowlarr), no download clients wired into Sonarr/Radarr
