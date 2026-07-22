@@ -67,10 +67,19 @@ spec:
             add: ["NET_ADMIN"]
         envFrom:
         - secretRef:
-            name: gluetun-vpn   # sealed placeholder - see gluetun/README note
+            name: gluetun-vpn   # real PIA/OpenVPN creds sealed 2026-07-22 - see gluetun/README note
         env:
         - name: TZ
           value: Australia/Sydney
+        # PIA's legacy OpenVPN UDP port 1197 stopped completing TLS
+        # handshakes cluster-wide (PIA-side server/infra change, not
+        # specific to this account) - confirmed against gluetun's own
+        # issue tracker (qdm12/gluetun#3288/#3202), same symptom
+        # ("TLS key negotiation failed to occur within 60 seconds",
+        # same cached remote address retried forever). UDP 8080 is the
+        # documented working workaround.
+        - name: OPENVPN_ENDPOINT_PORT
+          value: "8080"
         # Admit the arr UIs through gluetun's firewall (inbound)
         - name: FIREWALL_INPUT_PORTS
           value: "8989,7878,9696,8080,6767,5800,5299"
