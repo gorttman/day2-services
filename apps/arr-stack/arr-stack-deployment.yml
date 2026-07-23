@@ -292,8 +292,14 @@ spec:
         - name: arr-stack-wiring-config
           mountPath: /wiring-config
           readOnly: true
+        - name: arr-stack-wiring-secret
+          mountPath: /wiring-secret
+          readOnly: true
         - name: sabnzbd-config
           mountPath: /app-config/sabnzbd
+          readOnly: true
+        - name: prowlarr-config
+          mountPath: /app-config/prowlarr
           readOnly: true
         resources:
           requests: {memory: "32Mi", cpu: "10m"}

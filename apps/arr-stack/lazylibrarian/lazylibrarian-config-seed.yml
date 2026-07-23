@@ -37,30 +37,57 @@ data:
     # applied differently here since LazyLibrarian only reads config.ini
     # at startup (no REST API for this), so this loops and self-restarts
     # the pod on any real change instead of idling after one check.
-    # Real key names confirmed against LazyLibrarian's own source
-    # (lazylibrarian/__init__.py's CONFIG_DEFINITIONS): section
-    # [SABnzbd], keys SAB_HOST/SAB_PORT/SAB_API/SAB_CAT; the enable
-    # toggle is NZB_DOWNLOADER_SABNZBD under section [USENET].
+    # Real key names confirmed against this exact pinned image's own
+    # installed source (/app/lazylibrarian/lazylibrarian/configdefs.py
+    # inside the container): section [SABNZBD], keys SAB_HOST/SAB_PORT/
+    # SAB_API/SAB_CAT; the enable toggle is NZB_DOWNLOADER_SABNZBD
+    # under section [USENET]. See the BASE_DESIRED comment below for
+    # why "confirmed against source" alone wasn't enough here.
+    #
+    # Also wires the first arr-stack-wiring-config.yml prowlarr.indexers
+    # entry in as LazyLibrarian's own search provider (Providers tab,
+    # [Newznab_0]) - see newznab_desired()'s docstring for why this
+    # can't just inherit Prowlarr's indexer the way Sonarr/Radarr do.
     import configparser
     import http.client
+    import json
     import os
     import ssl
     import time
+    import urllib.error
+    import urllib.request
+    import xml.etree.ElementTree as ET
 
     import yaml
 
     CONFIG_PATH = "/config/config.ini"
     IMPORT_DEST = "/import"
     WIRING_CONFIG_PATH = "/wiring-config/wiring.yml"
+    WIRING_SECRET_DIR = "/wiring-secret"
     SABNZBD_INI_PATH = "/app-config/sabnzbd/sabnzbd.ini"
+    PROWLARR_CONFIG_XML_PATH = "/app-config/prowlarr/config.xml"
     RECHECK_INTERVAL_SECONDS = 300
 
+    # Section names are ALL-CAPS, confirmed 2026-07-23 against this
+    # exact image's own installed source (/app/lazylibrarian/
+    # lazylibrarian/configdefs.py inside the container - NOT
+    # upstream's current GitHub master, which is a meaningfully
+    # different, newer codebase and gave wrong answers earlier: master
+    # declares mixed-case section names like 'General'/'PostProcess',
+    # but this pinned image's own config-loading code normalizes to
+    # GENERAL/SABNZBD/POSTPROCESS/USENET, confirmed by inspecting the
+    # live config.ini after a save cycle - GENERAL and POSTPROCESS
+    # written in mixed case never actually populated LazyLibrarian's
+    # own live sections (silently orphaned, no error), while SABnzbd/
+    # USENET happened to already be correct. Ground truth is always
+    # the specific pinned image, not whatever's on GitHub's default
+    # branch right now.
     BASE_DESIRED = {
-        "General": {
+        "GENERAL": {
             "DESTINATION_DIR": IMPORT_DEST,
             "DESTINATION_COPY": "0",  # move, not copy - books-pipeline removes the source itself after a verified import
         },
-        "postprocess": {
+        "POSTPROCESS": {
             "EBOOK_DEST_FOLDER": "",   # no per-book folder - flat into DESTINATION_DIR
             "EBOOK_DEST_FILE": "$Title - $Author",
         },
@@ -87,7 +114,7 @@ data:
 
 
     def sabnzbd_desired():
-        """Returns the {"SABnzbd": {...}, "USENET": {...}} block, or {}
+        """Returns the {"SABNZBD": {...}, "USENET": {...}} block, or {}
         if either the wiring-config has no lazylibrarian entry yet or
         SABnzbd hasn't written its own API key yet - never blocks the
         BASE_DESIRED patch above on this being ready."""
@@ -102,7 +129,7 @@ data:
             for entry in dc.get("apps", []):
                 if entry["app"] == "lazylibrarian":
                     return {
-                        "SABnzbd": {
+                        "SABNZBD": {
                             "SAB_HOST": dc["host"],
                             "SAB_PORT": str(dc["port"]),
                             "SAB_API": sab_apikey,
@@ -113,6 +140,84 @@ data:
                         },
                     }
         return {}
+
+
+    def read_apikey_xml(path):
+        if not os.path.exists(path):
+            return None
+        try:
+            el = ET.parse(path).getroot().find("ApiKey")
+        except ET.ParseError:
+            return None
+        return el.text if el is not None else None
+
+
+    def load_secret(key):
+        path = os.path.join(WIRING_SECRET_DIR, key)
+        if not os.path.exists(path):
+            return None
+        with open(path) as f:
+            return f.read().strip()
+
+
+    def newznab_desired():
+        """Returns {"Newznab_0": {...}} for the first prowlarr.indexers
+        entry in wiring.yml, or {} if any dependency isn't ready yet.
+        LazyLibrarian's own Providers tab doesn't inherit Prowlarr's
+        indexers automatically - Prowlarr's "Apps" sync feature only
+        covers the Servarr family (Sonarr/Radarr/Readarr/...), not
+        LazyLibrarian - so this wires it directly: reads the indexer's
+        live baseUrl from Prowlarr's own API (already-reconciled by
+        arr-wiring-reconciler, so this is the same source of truth, not
+        a second copy) and the real key from the wiring secret. Array
+        section naming/keys confirmed against this exact pinned image's
+        own installed source (configdefs.py's ARRAY_DEFS['NEWZNAB'],
+        template 'Newznab_%s') - and unlike GENERAL/POSTPROCESS/etc,
+        config2.py's _load_array_section() uppercases the array-name
+        prefix before matching, so case doesn't matter for this one
+        specifically, matching what BASE_DESIRED's comment above found
+        the hard way for the non-array sections."""
+        if not os.path.exists(WIRING_CONFIG_PATH):
+            return {}
+        with open(WIRING_CONFIG_PATH) as f:
+            wiring = yaml.safe_load(f) or {}
+        indexers = wiring.get("prowlarr", {}).get("indexers", [])
+        if not indexers:
+            return {}
+        idx_cfg = indexers[0]  # one is enough to get LazyLibrarian searching; add more slots later if needed
+
+        prowlarr_apikey = read_apikey_xml(PROWLARR_CONFIG_XML_PATH)
+        if not prowlarr_apikey:
+            return {}
+        indexer_apikey = load_secret(idx_cfg["secretKey"])
+        if not indexer_apikey or indexer_apikey.startswith("placeholder-"):
+            return {}
+
+        try:
+            req = urllib.request.Request(f"http://localhost:9696/api/v1/indexer?apikey={prowlarr_apikey}")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                existing = json.loads(resp.read())
+        except (urllib.error.URLError, OSError):
+            return {}
+        match = next((e for e in existing if e.get("name") == idx_cfg["name"]), None)
+        if not match:
+            return {}
+        base_url = next((f["value"] for f in match["fields"] if f["name"] == "baseUrl"), None)
+        if not base_url:
+            return {}
+
+        return {
+            "Newznab_0": {
+                "NAME": "Newznab",
+                "DISPNAME": idx_cfg["name"],
+                "ENABLED": "1",
+                "HOST": base_url,
+                "API": indexer_apikey,
+                "GENERALSEARCH": "search",
+                "BOOKSEARCH": "book",
+                "BOOKCAT": "7000,7020",
+            },
+        }
 
 
     def wait_for_config():
@@ -126,7 +231,7 @@ data:
 
     def patch_config():
         desired = {**BASE_DESIRED}
-        for section, keys in sabnzbd_desired().items():
+        for section, keys in {**sabnzbd_desired(), **newznab_desired()}.items():
             desired[section] = {**desired.get(section, {}), **keys}
 
         cp = configparser.ConfigParser()
@@ -140,7 +245,7 @@ data:
                 if current != value:
                     cp.set(section, key, value)
                     changed = True
-                    if key == "SAB_API":  # don't log the real api key
+                    if key in ("SAB_API", "API"):  # don't log real api keys
                         print(f"{section}.{key}: changed", flush=True)
                     else:
                         print(f"{section}.{key}: {current!r} -> {value!r}", flush=True)
