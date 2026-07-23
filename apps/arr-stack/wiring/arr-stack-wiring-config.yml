@@ -29,15 +29,17 @@ data:
 
       # Frugal Usenet account (2026-07-23) - username/password sealed
       # and ready (frugal_username/frugal_password in
-      # arr-stack-wiring-sealed-secret.yml), but host/port are still
-      # placeholders: Frugal doesn't publish their NNTP server
-      # hostname, it's only in the welcome email / member portal after
-      # signup. Fill those two in once known, commit, push - the
-      # reconciler does the rest (mode=set_config&section=servers,
-      # same mechanism as the categories block above).
+      # arr-stack-wiring-sealed-secret.yml). Frugal doesn't publish
+      # their NNTP hostname on their own site (checked - marketing
+      # pages only, no server settings page); news.frugalusenet.com is
+      # from a third-party provider-docs page (nzbget.com), NOT
+      # confirmed against this specific account's welcome email -
+      # correct this if the server reconcile below doesn't connect.
+      # eunews.frugalusenet.com is the documented EU alternative if the
+      # US one is slow/wrong for this connection.
       servers:
         - name: frugal
-          host: CHANGEME.frugalusenet.example  # replace with the real hostname from your welcome email
+          host: news.frugalusenet.com
           port: 563
           ssl: true
           connections: 20
