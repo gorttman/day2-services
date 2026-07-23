@@ -11,6 +11,24 @@
 # directory ConfigMap mount, not subPath, so kubelet's normal sync
 # refreshes it in place).
 #
+# That "no restart" promise is about DATA changes to wiring.yml only -
+# load_wiring_config() genuinely re-reads it fresh every pass. It does
+# NOT cover CODE changes to this script: Python loads reconcile.py
+# once at process start and keeps running those function definitions
+# in memory for the container's whole lifetime, so editing this
+# ConfigMap updates the file on disk but not the already-running
+# process. Learned this the hard way 2026-07-23: the appProfileId fix
+# and the whole reconcile_sabnzbd_servers() function sat on disk,
+# confirmed correct via one-off `python3 -c` runs (which read the
+# current file fresh each time), while the actual long-running
+# container kept executing stale pre-fix code and either failing
+# deterministically (appProfileId=0 on every real pass, which looked
+# like NZBgeek flakiness but wasn't) or silently doing nothing (no
+# reconcile_sabnzbd_servers() call existed yet in its loaded memory).
+# A code change to this script needs the arr-wiring-reconciler
+# container restarted (pod delete, Recreate strategy) to actually take
+# effect - the wiring.yml data hot-reload has no such requirement.
+#
 # Every reconcile pass unconditionally re-applies (POST if missing, PUT
 # if it already exists) rather than diffing first - each app's API
 # masks privacy-flagged fields like apiKey as "********" on GET, which
