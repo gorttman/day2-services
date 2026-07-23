@@ -27,6 +27,23 @@ data:
         - name: books
           dir: /books-import
 
+      # Frugal Usenet account (2026-07-23) - username/password sealed
+      # and ready (frugal_username/frugal_password in
+      # arr-stack-wiring-sealed-secret.yml), but host/port are still
+      # placeholders: Frugal doesn't publish their NNTP server
+      # hostname, it's only in the welcome email / member portal after
+      # signup. Fill those two in once known, commit, push - the
+      # reconciler does the rest (mode=set_config&section=servers,
+      # same mechanism as the categories block above).
+      servers:
+        - name: frugal
+          host: CHANGEME.frugalusenet.example  # replace with the real hostname from your welcome email
+          port: 563
+          ssl: true
+          connections: 20
+          usernameSecretKey: frugal_username
+          passwordSecretKey: frugal_password
+
     downloadClients:
       - name: SABnzbd
         host: localhost
@@ -54,4 +71,6 @@ data:
       # --namespace arr-stack --name arr-stack-wiring-secret, then add
       # the encryptedData line + reference it here - same pattern as
       # every other multi-field sealed secret in this repo.
-      indexers: []
+      indexers:
+        - name: NZBgeek
+          secretKey: nzbgeek_api_key

@@ -123,6 +123,35 @@ data:
             log("INFO", f"sabnzbd category ensured: {cat['name']} -> {cat['dir']}")
 
 
+    def reconcile_sabnzbd_servers(desired, sab_apikey):
+        base = "http://localhost:8080/api"
+        for srv in desired.get("sabnzbd", {}).get("servers", []):
+            if "CHANGEME" in srv["host"]:
+                log("INFO", f"sabnzbd server {srv['name']!r} has a placeholder host - skipping until the real hostname is filled in")
+                continue
+            username = load_secret(srv["usernameSecretKey"])
+            password = load_secret(srv["passwordSecretKey"])
+            if not username or not password:
+                log("CRIT", f"sabnzbd server {srv['name']!r}: missing sealed credentials ({srv['usernameSecretKey']!r}/{srv['passwordSecretKey']!r}) - skipping")
+                continue
+            params = "&".join([
+                "mode=set_config",
+                "section=servers",
+                f"name={urllib.parse.quote(srv['name'])}",
+                f"host={urllib.parse.quote(srv['host'])}",
+                f"port={srv['port']}",
+                f"connections={srv.get('connections', 8)}",
+                f"ssl={1 if srv.get('ssl', True) else 0}",
+                "enable=1",
+                f"username={urllib.parse.quote(username)}",
+                f"password={urllib.parse.quote(password)}",
+                f"apikey={sab_apikey}",
+                "output=json",
+            ])
+            http_json("GET", f"{base}?{params}")
+            log("INFO", f"sabnzbd server ensured: {srv['name']} ({srv['host']}:{srv['port']})")
+
+
     # ---------------------------------------------------------------------
     # Sonarr/Radarr download clients (schema-driven - see module docstring)
     # ---------------------------------------------------------------------
@@ -213,6 +242,10 @@ data:
                 reconcile_sabnzbd_categories(desired, sab_apikey)
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
                 log("CRIT", f"sabnzbd category reconcile failed: {e}")
+            try:
+                reconcile_sabnzbd_servers(desired, sab_apikey)
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+                log("CRIT", f"sabnzbd server reconcile failed: {e}")
         else:
             log("INFO", "sabnzbd api key not available yet (config.ini not written) - skipping this pass")
 
