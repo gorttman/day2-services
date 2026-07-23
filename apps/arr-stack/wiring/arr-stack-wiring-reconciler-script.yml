@@ -25,7 +25,6 @@ metadata:
 data:
   reconcile.py: |
     #!/usr/bin/env python3
-    import configparser
     import json
     import os
     import time
@@ -79,11 +78,24 @@ data:
 
 
     def read_sabnzbd_apikey(path):
+        # Not configparser: sabnzbd.ini starts with __version__/__encoding__
+        # lines before any [section] header (confirmed live 2026-07-23),
+        # which configparser rejects outright as MissingSectionHeaderError.
+        # Only one value is ever needed from this file, so a plain line
+        # scan sidesteps that entirely rather than fighting configparser
+        # into tolerating SABnzbd's actual ini dialect.
         if not os.path.exists(path):
             return None
-        cp = configparser.ConfigParser()
-        cp.read(path)
-        return cp.get("misc", "api_key", fallback=None)
+        section = None
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("[") and line.endswith("]"):
+                    section = line[1:-1]
+                elif section == "misc" and line.startswith("api_key"):
+                    _, _, value = line.partition("=")
+                    return value.strip()
+        return None
 
 
     def load_wiring_config():

@@ -67,6 +67,25 @@ data:
     }
 
 
+    def read_sabnzbd_apikey():
+        # Not configparser: sabnzbd.ini starts with __version__/__encoding__
+        # lines before any [section] header (confirmed live 2026-07-23),
+        # which configparser rejects outright as MissingSectionHeaderError.
+        # Only one value is ever needed from this file, so a plain line
+        # scan sidesteps that entirely rather than fighting configparser
+        # into tolerating SABnzbd's actual ini dialect.
+        section = None
+        with open(SABNZBD_INI_PATH) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("[") and line.endswith("]"):
+                    section = line[1:-1]
+                elif section == "misc" and line.startswith("api_key"):
+                    _, _, value = line.partition("=")
+                    return value.strip()
+        return None
+
+
     def sabnzbd_desired():
         """Returns the {"SABnzbd": {...}, "USENET": {...}} block, or {}
         if either the wiring-config has no lazylibrarian entry yet or
@@ -76,9 +95,7 @@ data:
             return {}
         with open(WIRING_CONFIG_PATH) as f:
             wiring = yaml.safe_load(f) or {}
-        sab_cp = configparser.ConfigParser()
-        sab_cp.read(SABNZBD_INI_PATH)
-        sab_apikey = sab_cp.get("misc", "api_key", fallback=None)
+        sab_apikey = read_sabnzbd_apikey()
         if not sab_apikey:
             return {}
         for dc in wiring.get("downloadClients", []):
@@ -160,10 +177,13 @@ data:
 
     wait_for_config()
     while True:
-        if patch_config():
-            print("config.ini patched - self-restarting the whole arr-stack pod so LazyLibrarian picks it up", flush=True)
-            restart_pod()
-            time.sleep(30)
-        else:
-            print("lazylibrarian-config-seed: no change this pass, idling", flush=True)
+        try:
+            if patch_config():
+                print("config.ini patched - self-restarting the whole arr-stack pod so LazyLibrarian picks it up", flush=True)
+                restart_pod()
+                time.sleep(30)
+            else:
+                print("lazylibrarian-config-seed: no change this pass, idling", flush=True)
+        except Exception as e:
+            print(f"CRIT unhandled error during patch pass: {e}", flush=True)
         time.sleep(RECHECK_INTERVAL_SECONDS)
