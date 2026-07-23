@@ -43,8 +43,11 @@ data:
     # its auto-generated API key - same source of truth the
     # arr-wiring-reconciler sidecar uses for Sonarr/Radarr, just
     # applied differently here since LazyLibrarian only reads config.ini
-    # at startup (no REST API for this), so this loops and self-restarts
-    # the pod on any real change instead of idling after one check.
+    # at startup (its own REST API, off by default, doesn't cover
+    # config - see api_access_desired() below for turning that API on,
+    # which is a separate, later addition to this script), so this
+    # loops and self-restarts the pod on any real change instead of
+    # idling after one check.
     # Real key names confirmed against this exact pinned image's own
     # installed source (/app/lazylibrarian/lazylibrarian/configdefs.py
     # inside the container): section [SABNZBD], keys SAB_HOST/SAB_PORT/
@@ -56,6 +59,13 @@ data:
     # entry in as LazyLibrarian's own search provider (Providers tab,
     # [Newznab_0]) - see newznab_desired()'s docstring for why this
     # can't just inherit Prowlarr's indexer the way Sonarr/Radarr do.
+    #
+    # 2026-07-24: also turns on LazyLibrarian's own REST API (off by
+    # default) with a self-generated key - see api_access_desired()'s
+    # docstring. Once on, this stack can drive LazyLibrarian's own
+    # actions (adding authors by their real OpenLibrary ID, etc.) the
+    # same consistent way every other app here is driven, instead of
+    # only being able to read/patch config.ini.
     import configparser
     import http.client
     import json
@@ -121,6 +131,27 @@ data:
             "OL_API": "1",
         },
     }
+
+
+    def api_access_desired():
+        """Returns {"API": {"API_ENABLED": "1", "API_KEY": ...}} once
+        the self-generated lazylibrarian_api_key secret exists, or {}
+        before then. Turns on LazyLibrarian's own REST API (off by
+        default) with a key that's ours to set - unlike GR_API_KEY
+        earlier, this one's real: API_ENABLED/API_KEY are confirmed
+        real config2.py keys (section [API]), and having the API on
+        lets this whole stack be driven the same consistent way
+        everywhere else - real HTTP calls (addAuthorID etc.), not
+        reaching into its sqlite database by hand."""
+        api_key = load_secret("lazylibrarian_api_key")
+        if not api_key:
+            return {}
+        return {
+            "API": {
+                "API_ENABLED": "1",
+                "API_KEY": api_key,
+            },
+        }
 
 
     def read_sabnzbd_apikey():
@@ -260,8 +291,9 @@ data:
 
     def patch_config():
         desired = {**BASE_DESIRED}
-        for section, keys in {**sabnzbd_desired(), **newznab_desired()}.items():
-            desired[section] = {**desired.get(section, {}), **keys}
+        for source in (sabnzbd_desired(), newznab_desired(), api_access_desired()):
+            for section, keys in source.items():
+                desired[section] = {**desired.get(section, {}), **keys}
 
         cp = configparser.ConfigParser()
         cp.read(CONFIG_PATH)
@@ -274,7 +306,7 @@ data:
                 if current != value:
                     cp.set(section, key, value)
                     changed = True
-                    if key in ("SAB_API", "API"):  # don't log real api keys
+                    if key in ("SAB_API", "API", "API_KEY"):  # don't log real api keys
                         print(f"{section}.{key}: changed", flush=True)
                     else:
                         print(f"{section}.{key}: {current!r} -> {value!r}", flush=True)
