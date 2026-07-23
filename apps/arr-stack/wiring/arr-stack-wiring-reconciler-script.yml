@@ -203,6 +203,18 @@ data:
         existing = http_json("GET", f"{base}/indexer?apikey={apikey}") or []
         schema_list = http_json("GET", f"{base}/indexer/schema?apikey={apikey}")
 
+        # An indexer's schema defaults appProfileId to 0, which
+        # Prowlarr's own validation rejects outright ("must be greater
+        # than 0") - confirmed live 2026-07-23. Every fresh Prowlarr
+        # install ships a default "Standard" app profile; use whichever
+        # profile is actually first rather than hardcoding id=1, in
+        # case that ever changes.
+        profiles = http_json("GET", f"{base}/appprofile?apikey={apikey}") or []
+        if not profiles:
+            log("CRIT", "prowlarr: no app profile exists yet - skipping indexer reconcile this pass")
+            return
+        app_profile_id = profiles[0]["id"]
+
         for idx_cfg in indexers:
             schema = next((e for e in schema_list if e["name"] == idx_cfg["name"]), None)
             if schema is None:
@@ -215,6 +227,7 @@ data:
                 continue
 
             schema["enable"] = True
+            schema["appProfileId"] = app_profile_id
             for f in schema["fields"]:
                 if f["name"] == "apiKey":
                     f["value"] = indexer_apikey
