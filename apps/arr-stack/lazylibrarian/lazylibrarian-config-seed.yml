@@ -99,6 +99,27 @@ data:
             "EBOOK_DEST_FOLDER": "",   # no per-book folder - flat into EBOOK_DIR
             "EBOOK_DEST_FILE": "$Title - $Author",
         },
+        # BOOK_API already defaults to 'OpenLibrary' (free, keyless) in
+        # this pinned image's own configdefs.py, but that alone doesn't
+        # make it usable: every metadata source has its own separate
+        # boolean gate (startup.py's build_sources() maps
+        # OpenLibrary -> 'OL_API'), and OL_API itself defaults to False.
+        # importer.py's search_for() (the actual function behind every
+        # author/book search) checks that gate before calling the
+        # source at all - `if CONFIG[this_source['enabled']]:` - so
+        # with OL_API unset, BOOK_API naming OpenLibrary as "preferred"
+        # never actually got used, no source ever ran, and the UI just
+        # sat on an empty result with no obvious error. Confirmed live
+        # 2026-07-24 by reading importer.py directly rather than
+        # guessing from the setting's name alone - explicit is set
+        # here rather than relied on as a default for the same reason
+        # EBOOK_DIR/DESTINATION_DIR bit before: an unread or
+        # wrongly-gated default is indistinguishable from "working"
+        # until you actually trace the code path.
+        "API": {
+            "BOOK_API": "OpenLibrary",
+            "OL_API": "1",
+        },
     }
 
 
