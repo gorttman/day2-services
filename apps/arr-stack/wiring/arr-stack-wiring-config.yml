@@ -29,17 +29,15 @@ data:
 
       # Frugal Usenet account (2026-07-23) - username/password sealed
       # and ready (frugal_username/frugal_password in
-      # arr-stack-wiring-sealed-secret.yml). Frugal doesn't publish
-      # their NNTP hostname on their own site (checked - marketing
-      # pages only, no server settings page); news.frugalusenet.com is
-      # from a third-party provider-docs page (nzbget.com), NOT
-      # confirmed against this specific account's welcome email -
-      # correct this if the server reconcile below doesn't connect.
-      # eunews.frugalusenet.com is the documented EU alternative if the
-      # US one is slow/wrong for this connection.
+      # arr-stack-wiring-sealed-secret.yml). aunews.frugalusenet.com is
+      # Frugal's Sydney server, straight from the account's own server
+      # list (up to 200 connections allowed there) - picked over the
+      # US East Coast main server for the obvious latency win from this
+      # network. connections=20 is a conservative default, well under
+      # the 200 ceiling; raise it if downloads are connection-starved.
       servers:
         - name: frugal
-          host: news.frugalusenet.com
+          host: aunews.frugalusenet.com
           port: 563
           ssl: true
           connections: 20
