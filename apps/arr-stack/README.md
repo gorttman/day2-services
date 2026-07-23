@@ -18,9 +18,7 @@ import path every other book-arrival route already uses.
 
 ## Books extension (2026-07-21)
 
-LazyLibrarian joins the shared pod as an eighth container (ninth
-counting its own config-seed sidecar, which reuses its image rather
-than pulling a new one). Three pieces:
+LazyLibrarian joins the shared pod as an eighth app container. Three pieces:
 
 1. **LazyLibrarian itself** - mounts `books-pipeline`'s own `import/`
    directory directly, via `subPath: import` on a raw NFS volume onto
@@ -43,21 +41,67 @@ than pulling a new one). Three pieces:
 3. **SABnzbd's `books` category** - mounted the same `import/` subPath
    directly (`/books-import` in the sabnzbd container), so the
    category's completed-directory can point straight at it - no sweep,
-   no extra hop. **Not automated**: SABnzbd's category config lives in
-   `sabnzbd.ini` under a `[[section]]`-per-category `ConfigObj` format
-   that Python's `configparser` can't safely round-trip - a blind
-   automated patch risked corrupting the whole config file. This one
-   genuinely is a manual step:
-   - SABnzbd UI → Config → Categories → add `books`, Folder/Path =
-     `/books-import`
-   - Prowlarr UI → add your indexers (which services you use is a real
-     choice only you can make, not something to automate) → enable the
-     Books category on any indexer that supports it
+   no extra hop. Set live by the wiring reconciler (below) via
+   SABnzbd's own config API, not a blind `sabnzbd.ini` patch - see
+   "Cross-app wiring" for the mechanism and why the category name/path
+   isn't hardcoded here.
 
 `downloads/complete` and `downloads/incomplete` (SABnzbd's own,
 non-books completed/in-progress dirs) are a second, separate raw NFS
 volume onto the previously-unused `/downloads` QNAP export - see the
 same qnap-storage README entry for the chown/layout details.
+
+## Cross-app wiring (2026-07-23)
+
+`wiring/arr-stack-wiring-config.yml` is the one file to edit for
+SABnzbd's category, which apps get it as a download client, and which
+Prowlarr indexer(s) to run - human choices, captured declaratively,
+same "edit, commit, push, done" workflow as the Pi-hole DNS ConfigMap
+(`dns-conf/pihole/pihole-custom-dns-cm.yml`), but without that one's
+manual-restart limitation: this ConfigMap is mounted as a whole
+directory (not `subPath`, which doesn't hot-reload on this cluster),
+so an edit lands automatically via kubelet's normal sync.
+
+Two sidecars apply it, split by whether the target app needs a restart
+to pick up a change:
+
+- **`arr-wiring-reconciler`** - Sonarr, Radarr, Prowlarr, SABnzbd all
+  have real REST APIs, so this just loops every 5 minutes, re-reads the
+  mounted config, and re-applies it (SABnzbd category via
+  `mode=set_config`; Sonarr/Radarr download clients and Prowlarr
+  indexers via each app's own `.../schema` endpoint - fetch the schema,
+  fill in the fields matching what's declared, POST-or-PUT). No pod
+  restart, ever. Every field mapping here (SABnzbd's `name`/`dir`
+  params, Sonarr's `tvCategory` vs Radarr's `movieCategory` field name,
+  Prowlarr's indexer `definitionName` matching) was confirmed live
+  against this exact install (Sonarr 4.0.19, Radarr 6.2.1, Prowlarr
+  2.4.0, SABnzbd 5.0.4), not guessed from docs - their real API
+  reference pages are JS-rendered and not fetchable, so the live
+  cluster's own `/schema` endpoints were the source of truth instead.
+  Always re-applies rather than diffing first: every app's API masks
+  `apiKey`-type fields as `"********"` on GET, which would make a
+  real diff always look changed for the one field that actually
+  matters, so "always re-assert desired state" is simpler and more
+  correct than tracking drift.
+- **`lazylibrarian-config-seed`** (extended, see above) - LazyLibrarian
+  has no REST API for this, only `config.ini` read at startup, so this
+  reads the same wiring-config, patches `config.ini`'s `[SABnzbd]`
+  section (`SAB_HOST`/`SAB_PORT`/`SAB_API`/`SAB_CAT`) and `[USENET]`'s
+  `NZB_DOWNLOADER_SABNZBD` toggle, then self-restarts the pod only if
+  something actually changed. Real key names confirmed against
+  LazyLibrarian's own upstream source
+  (`lazylibrarian/__init__.py`'s config definitions), not guessed.
+
+Neither app's own auto-generated API key lives in the wiring-config -
+those aren't ours to set, so both sidecars read them live from each
+app's own config file (`config.xml`'s `<ApiKey>` for Sonarr/Radarr/
+Prowlarr, `sabnzbd.ini`'s `api_key` for SABnzbd) every pass, mounted
+read-only for exactly that purpose.
+
+Indexer API keys go in `wiring/arr-stack-wiring-sealed-secret.yml`
+(referenced by name from `wiring.yml`, never in the plaintext config) -
+currently just a placeholder since no indexer is configured yet; see
+that file's header comment for how to add a real one.
 
 ## Network layout - one shared pod
 Containers in a pod share a network namespace, so the whole stack runs as
@@ -115,7 +159,10 @@ which fields to reseal (`kubeseal --raw`, scope strict, namespace
 multi-field sealed secret in this repo.
 
 ## Deliberately unconfigured (install-only)
-- No indexers (Prowlarr), no download clients wired into Sonarr/Radarr
+- No Prowlarr indexers - see "Cross-app wiring" above, this is the one
+  genuinely manual choice left (which provider/indexer to use); SABnzbd
+  category and Sonarr/Radarr/LazyLibrarian download-client wiring are
+  handled by the reconcilers there
 - No quality profiles, no root folders
 - **No shared media PVC** - where the media library lives is a
   configuration-time decision, out of scope here

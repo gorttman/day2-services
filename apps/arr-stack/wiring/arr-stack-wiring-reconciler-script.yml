@@ -1,0 +1,237 @@
+# Reconciler for arr-stack-wiring-config.yml's desired state: SABnzbd's
+# category, Sonarr/Radarr's download client, Prowlarr's indexers.
+# Applied live via each app's own REST API (schema-driven, same
+# mechanism the apps' own web UI uses internally - confirmed 2026-07-23
+# against the real running Sonarr 4.0.19/Radarr 6.2.1/Prowlarr
+# 2.4.0/SABnzbd 5.0.4 in this pod, not guessed from docs), so unlike
+# LazyLibrarian's config.ini-based wiring (see
+# lazylibrarian-config-seed.yml), no pod restart is needed - this just
+# loops, re-applies the desired state every 5 minutes, and picks up any
+# change to the mounted wiring-config automatically (it's a whole-
+# directory ConfigMap mount, not subPath, so kubelet's normal sync
+# refreshes it in place).
+#
+# Every reconcile pass unconditionally re-applies (POST if missing, PUT
+# if it already exists) rather than diffing first - each app's API
+# masks privacy-flagged fields like apiKey as "********" on GET, which
+# would make a real diff always look changed for the one field that
+# actually matters, so "always re-assert desired state" is both
+# simpler and more correct than tracking drift.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: arr-stack-wiring-reconciler-script
+  namespace: arr-stack
+data:
+  reconcile.py: |
+    #!/usr/bin/env python3
+    import configparser
+    import json
+    import os
+    import time
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    import xml.etree.ElementTree as ET
+
+    import yaml
+
+    WIRING_CONFIG_PATH = "/wiring-config/wiring.yml"
+    WIRING_SECRET_DIR = "/wiring-secret"
+    RECONCILE_INTERVAL_SECONDS = 300
+
+    APP_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696}
+    # Sonarr/Radarr name their SABnzbd category field differently -
+    # confirmed live via each app's own /downloadclient/schema, not
+    # guessed (Sonarr: tvCategory, Radarr: movieCategory).
+    CATEGORY_FIELD = {"sonarr": "tvCategory", "radarr": "movieCategory"}
+
+    CONFIG_XML_PATHS = {
+        "sonarr": "/app-config/sonarr/config.xml",
+        "radarr": "/app-config/radarr/config.xml",
+        "prowlarr": "/app-config/prowlarr/config.xml",
+    }
+    SABNZBD_INI_PATH = "/app-config/sabnzbd/sabnzbd.ini"
+
+
+    def log(level, msg):
+        ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+        print(f"[{ts}] {level:5} {msg}", flush=True)
+
+
+    def http_json(method, url, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            return json.loads(raw) if raw else None
+
+
+    def read_apikey_xml(path):
+        if not os.path.exists(path):
+            return None
+        try:
+            el = ET.parse(path).getroot().find("ApiKey")
+        except ET.ParseError:
+            return None
+        return el.text if el is not None else None
+
+
+    def read_sabnzbd_apikey(path):
+        if not os.path.exists(path):
+            return None
+        cp = configparser.ConfigParser()
+        cp.read(path)
+        return cp.get("misc", "api_key", fallback=None)
+
+
+    def load_wiring_config():
+        with open(WIRING_CONFIG_PATH) as f:
+            return yaml.safe_load(f) or {}
+
+
+    def load_secret(key):
+        path = os.path.join(WIRING_SECRET_DIR, key)
+        if not os.path.exists(path):
+            return None
+        with open(path) as f:
+            return f.read().strip()
+
+
+    # ---------------------------------------------------------------------
+    # SABnzbd categories
+    # ---------------------------------------------------------------------
+
+    def reconcile_sabnzbd_categories(desired, sab_apikey):
+        base = "http://localhost:8080/api"
+        for cat in desired.get("sabnzbd", {}).get("categories", []):
+            params = f"mode=set_config&section=categories&name={cat['name']}&dir={urllib.parse.quote(cat['dir'])}&apikey={sab_apikey}&output=json"
+            http_json("GET", f"{base}?{params}")
+            log("INFO", f"sabnzbd category ensured: {cat['name']} -> {cat['dir']}")
+
+
+    # ---------------------------------------------------------------------
+    # Sonarr/Radarr download clients (schema-driven - see module docstring)
+    # ---------------------------------------------------------------------
+
+    def reconcile_downloadclient(app, apikey, dc_cfg, category, sab_apikey):
+        port = APP_PORTS[app]
+        base = f"http://localhost:{port}/api/v3"
+        category_field = CATEGORY_FIELD[app]
+
+        existing = http_json("GET", f"{base}/downloadclient?apikey={apikey}") or []
+        match = next(
+            (e for e in existing if e.get("implementation") == "Sabnzbd" and e.get("name") == dc_cfg["name"]),
+            None,
+        )
+
+        schema_list = http_json("GET", f"{base}/downloadclient/schema?apikey={apikey}")
+        schema = next(e for e in schema_list if e["implementation"] == "Sabnzbd")
+        schema["enable"] = True
+        schema["name"] = dc_cfg["name"]
+
+        field_values = {
+            "host": dc_cfg["host"],
+            "port": dc_cfg["port"],
+            "apiKey": sab_apikey,
+            category_field: category,
+        }
+        for f in schema["fields"]:
+            if f["name"] in field_values:
+                f["value"] = field_values[f["name"]]
+
+        if match is None:
+            http_json("POST", f"{base}/downloadclient?apikey={apikey}", body=schema)
+            log("INFO", f"{app}: created download client {dc_cfg['name']!r} (category={category})")
+        else:
+            schema["id"] = match["id"]
+            http_json("PUT", f"{base}/downloadclient/{match['id']}?apikey={apikey}", body=schema)
+            log("INFO", f"{app}: re-applied download client {dc_cfg['name']!r} (category={category})")
+
+
+    # ---------------------------------------------------------------------
+    # Prowlarr indexers
+    # ---------------------------------------------------------------------
+
+    def reconcile_prowlarr_indexers(desired, apikey):
+        indexers = desired.get("prowlarr", {}).get("indexers", [])
+        if not indexers:
+            return
+        base = "http://localhost:9696/api/v1"
+        existing = http_json("GET", f"{base}/indexer?apikey={apikey}") or []
+        schema_list = http_json("GET", f"{base}/indexer/schema?apikey={apikey}")
+
+        for idx_cfg in indexers:
+            schema = next((e for e in schema_list if e["name"] == idx_cfg["name"]), None)
+            if schema is None:
+                log("CRIT", f"prowlarr: no indexer definition named {idx_cfg['name']!r} - check spelling against /api/v1/indexer/schema")
+                continue
+
+            indexer_apikey = load_secret(idx_cfg["secretKey"])
+            if not indexer_apikey or indexer_apikey.startswith("placeholder-"):
+                log("CRIT", f"prowlarr: {idx_cfg['name']!r} has no real key sealed under {idx_cfg['secretKey']!r} yet - skipping")
+                continue
+
+            schema["enable"] = True
+            for f in schema["fields"]:
+                if f["name"] == "apiKey":
+                    f["value"] = indexer_apikey
+
+            match = next((e for e in existing if e.get("name") == idx_cfg["name"]), None)
+            if match is None:
+                http_json("POST", f"{base}/indexer?apikey={apikey}", body=schema)
+                log("INFO", f"prowlarr: created indexer {idx_cfg['name']!r}")
+            else:
+                schema["id"] = match["id"]
+                http_json("PUT", f"{base}/indexer/{match['id']}?apikey={apikey}", body=schema)
+                log("INFO", f"prowlarr: re-applied indexer {idx_cfg['name']!r}")
+
+
+    # ---------------------------------------------------------------------
+
+    def reconcile_once():
+        desired = load_wiring_config()
+
+        apikeys = {app: read_apikey_xml(path) for app, path in CONFIG_XML_PATHS.items()}
+        sab_apikey = read_sabnzbd_apikey(SABNZBD_INI_PATH)
+
+        if sab_apikey:
+            try:
+                reconcile_sabnzbd_categories(desired, sab_apikey)
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+                log("CRIT", f"sabnzbd category reconcile failed: {e}")
+        else:
+            log("INFO", "sabnzbd api key not available yet (config.ini not written) - skipping this pass")
+
+        for dc_cfg in desired.get("downloadClients", []):
+            if not sab_apikey:
+                break
+            for entry in dc_cfg.get("apps", []):
+                app = entry["app"]
+                if app not in APP_PORTS:
+                    continue  # lazylibrarian etc. handled by their own config-seed sidecar, not here
+                if not apikeys.get(app):
+                    log("INFO", f"{app} api key not available yet (config.xml not written) - skipping this pass")
+                    continue
+                try:
+                    reconcile_downloadclient(app, apikeys[app], dc_cfg, entry["category"], sab_apikey)
+                except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+                    log("CRIT", f"{app} download client reconcile failed: {e}")
+
+        if apikeys.get("prowlarr"):
+            try:
+                reconcile_prowlarr_indexers(desired, apikeys["prowlarr"])
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+                log("CRIT", f"prowlarr indexer reconcile failed: {e}")
+        else:
+            log("INFO", "prowlarr api key not available yet (config.xml not written) - skipping this pass")
+
+
+    if __name__ == "__main__":
+        while True:
+            try:
+                reconcile_once()
+            except Exception as e:
+                log("CRIT", f"unhandled error during reconcile pass: {e}")
+            time.sleep(RECONCILE_INTERVAL_SECONDS)

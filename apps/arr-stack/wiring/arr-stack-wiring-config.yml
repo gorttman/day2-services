@@ -1,0 +1,57 @@
+# Human-edited desired state for arr-stack's cross-app wiring (SABnzbd
+# category, which app gets it as a download client, which Prowlarr
+# indexers to run) - edit this file, commit, push. The
+# arr-wiring-reconciler sidecar (see arr-stack-wiring-reconciler-script.yml)
+# picks it up automatically: mounted as a whole directory, not subPath,
+# so kubelet's normal sync updates it in place without a pod restart -
+# same "commit away" workflow as the Pi-hole DNS ConfigMap
+# (dns-conf/pihole/pihole-custom-dns-cm.yml), minus that one's
+# manual-restart limitation, since Sonarr/Radarr/Prowlarr/SABnzbd's
+# REST APIs apply changes live (only LazyLibrarian's config.ini-based
+# wiring needs a restart, handled separately by
+# lazylibrarian-config-seed.yml, which reads this same file).
+#
+# What's NOT here on purpose: any app's own auto-generated API key.
+# Those aren't ours to set or predict - the reconciler reads each one
+# live from that app's own config file (config.xml's <ApiKey>, or
+# sabnzbd.ini's api_key) every reconcile pass.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: arr-stack-wiring-config
+  namespace: arr-stack
+data:
+  wiring.yml: |
+    sabnzbd:
+      categories:
+        - name: books
+          dir: /books-import
+
+    downloadClients:
+      - name: SABnzbd
+        host: localhost
+        port: 8080
+        apps:
+          - app: sonarr
+            category: tv
+          - app: radarr
+            category: movies
+          - app: lazylibrarian
+            category: books
+
+    prowlarr:
+      # Empty on purpose - which indexer(s) to use is a real choice
+      # (cost, retention, reliability), not something to pick a default
+      # for. Add entries here once you've settled on a provider, e.g.:
+      #
+      #   indexers:
+      #     - name: NZBgeek          # must match a definitionName in
+      #                               # Prowlarr's own indexer/schema list
+      #       secretKey: nzbgeek_api_key   # key name in
+      #                                     # arr-stack-wiring-sealed-secret.yml
+      #
+      # Reseal the real key with: kubeseal --raw --scope strict
+      # --namespace arr-stack --name arr-stack-wiring-secret, then add
+      # the encryptedData line + reference it here - same pattern as
+      # every other multi-field sealed secret in this repo.
+      indexers: []

@@ -44,11 +44,11 @@ spec:
       #
       # TEMPORARY hard pin to k8smaster, tied to the local-path
       # placeholder (same reasoning as apps/jellyfin): on diskless
-      # pinode-01 the k3s agent dir is a 4G RAM tmpfs - eight images
-      # (nine counting the lazylibrarian-config-seed sidecar, which
-      # reuses lazylibrarian's own image rather than pulling a ninth)
-      # would evict-loop and PVC data would be lost on reboot. Remove
-      # together with the storage swap.
+      # pinode-01 the k3s agent dir is a 4G RAM tmpfs - eight app images
+      # (ten containers counting lazylibrarian-config-seed and
+      # arr-wiring-reconciler, both of which reuse lazylibrarian's own
+      # image rather than pulling more) would evict-loop and PVC data
+      # would be lost on reboot. Remove together with the storage swap.
       nodeSelector:
         kubernetes.io/hostname: k8smaster
       enableServiceLinks: false  # SONARR_PORT etc. would collide with app config
@@ -178,15 +178,14 @@ spec:
         - name: downloads
           mountPath: /downloads
         # books-pipeline's own import/ mount, direct - the "books"
-        # category's completed-dir should be set to this path (Config >
-        # Categories > books > Folder/Path = /books-import) so a
-        # finished books download lands exactly where books-pipeline
-        # already scans, no extra hop. Not automated - see README, this
-        # is one of the two config values called out as a manual step
-        # rather than a risky blind INI patch (sabnzbd.ini's category
-        # section uses ConfigObj's nested [[section]] format, which
-        # configparser can't safely round-trip without real risk of
-        # corrupting the whole file).
+        # category's completed-dir points here (Config > Categories >
+        # books > Folder/Path = /books-import) so a finished books
+        # download lands exactly where books-pipeline already scans, no
+        # extra hop. Set live by arr-wiring-reconciler via SABnzbd's own
+        # config API (mode=set_config&section=categories), not a blind
+        # INI patch - sabnzbd.ini's category section uses ConfigObj's
+        # nested [[section]] format, which configparser can't safely
+        # round-trip, but SABnzbd's own API sidesteps that entirely.
         - name: books-import
           mountPath: /books-import
           subPath: import
@@ -266,10 +265,13 @@ spec:
           requests: {memory: "128Mi", cpu: "50m"}
           limits: {memory: "512Mi", cpu: "1000m"}
       # Patches lazylibrarian's config.ini (DESTINATION_DIR, per-book
-      # foldering off) once it exists, then self-restarts the pod so
-      # lazylibrarian picks it up - see lazylibrarian-config-seed.yml
-      # for the full reasoning and the caveat that its exact key names
-      # are unverified against a live instance.
+      # foldering off, and - 2026-07-23 - the SABnzbd download-client
+      # section, reading arr-stack-wiring-config.yml the same way the
+      # arr-wiring-reconciler sidecar does below) once it exists, then
+      # self-restarts the pod so lazylibrarian picks it up - see
+      # lazylibrarian-config-seed.yml for the full reasoning. Verified
+      # 2026-07-23 against a live instance: the DESTINATION_DIR/
+      # DESTINATION_COPY/EBOOK_DEST_FOLDER keys are correct as written.
       - name: lazylibrarian-config-seed
         image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
         imagePullPolicy: IfNotPresent
@@ -287,6 +289,52 @@ spec:
           mountPath: /config
         - name: lazylibrarian-config-seed-script
           mountPath: /app
+        - name: arr-stack-wiring-config
+          mountPath: /wiring-config
+          readOnly: true
+        - name: sabnzbd-config
+          mountPath: /app-config/sabnzbd
+          readOnly: true
+        resources:
+          requests: {memory: "32Mi", cpu: "10m"}
+          limits: {memory: "128Mi", cpu: "200m"}
+      # Applies arr-stack-wiring-config.yml's SABnzbd category and
+      # Sonarr/Radarr download-client wiring live, via each app's own
+      # REST API - unlike lazylibrarian-config-seed above, no pod
+      # restart needed (confirmed live 2026-07-23 against the real
+      # running apps, not guessed from docs - see
+      # arr-stack-wiring-reconciler-script.yml's module docstring for
+      # the full mechanism). Loops every 5 minutes, re-reading the
+      # mounted wiring-config each pass, so an indexer/category change
+      # is a commit away with no pod restart and no manual UI step.
+      - name: arr-wiring-reconciler
+        image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+        imagePullPolicy: IfNotPresent
+        command: ["python3", "/app/reconcile.py"]
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+        volumeMounts:
+        - name: arr-wiring-reconciler-script
+          mountPath: /app
+        - name: arr-stack-wiring-config
+          mountPath: /wiring-config
+          readOnly: true
+        - name: arr-stack-wiring-secret
+          mountPath: /wiring-secret
+          readOnly: true
+        - name: sonarr-config
+          mountPath: /app-config/sonarr
+          readOnly: true
+        - name: radarr-config
+          mountPath: /app-config/radarr
+          readOnly: true
+        - name: prowlarr-config
+          mountPath: /app-config/prowlarr
+          readOnly: true
+        - name: sabnzbd-config
+          mountPath: /app-config/sabnzbd
+          readOnly: true
         resources:
           requests: {memory: "32Mi", cpu: "10m"}
           limits: {memory: "128Mi", cpu: "200m"}
@@ -312,6 +360,20 @@ spec:
       - name: lazylibrarian-config-seed-script
         configMap:
           name: lazylibrarian-config-seed-script
+      - name: arr-wiring-reconciler-script
+        configMap:
+          name: arr-stack-wiring-reconciler-script
+      # Whole-directory mount, deliberately not subPath - subPath
+      # ConfigMaps don't hot-reload on this cluster (known gotcha, see
+      # the Pi-hole DNS ConfigMap), a plain directory mount does via
+      # kubelet's normal sync, which is what lets a wiring-config edit
+      # take effect without a pod restart.
+      - name: arr-stack-wiring-config
+        configMap:
+          name: arr-stack-wiring-config
+      - name: arr-stack-wiring-secret
+        secret:
+          secretName: arr-stack-wiring-secret
       # Same raw-nfs-volume-not-PVC pattern books-pipeline/calibre-web
       # already use for /books - multiple containers in this one pod
       # need it (lazylibrarian, sabnzbd), so a 1:1-bound static PV/PVC

@@ -28,16 +28,34 @@ data:
     # state (library settings, indexer state), not something safe to
     # own externally - only specific keys get patched, idempotently,
     # never the whole file.
+    #
+    # 2026-07-23: also wires SABnzbd in as LazyLibrarian's usenet
+    # downloader, reading arr-stack-wiring-config.yml's downloadClients
+    # list for the connection details and SABnzbd's own sabnzbd.ini for
+    # its auto-generated API key - same source of truth the
+    # arr-wiring-reconciler sidecar uses for Sonarr/Radarr, just
+    # applied differently here since LazyLibrarian only reads config.ini
+    # at startup (no REST API for this), so this loops and self-restarts
+    # the pod on any real change instead of idling after one check.
+    # Real key names confirmed against LazyLibrarian's own source
+    # (lazylibrarian/__init__.py's CONFIG_DEFINITIONS): section
+    # [SABnzbd], keys SAB_HOST/SAB_PORT/SAB_API/SAB_CAT; the enable
+    # toggle is NZB_DOWNLOADER_SABNZBD under section [USENET].
     import configparser
     import http.client
     import os
     import ssl
     import time
 
+    import yaml
+
     CONFIG_PATH = "/config/config.ini"
     IMPORT_DEST = "/import"
+    WIRING_CONFIG_PATH = "/wiring-config/wiring.yml"
+    SABNZBD_INI_PATH = "/app-config/sabnzbd/sabnzbd.ini"
+    RECHECK_INTERVAL_SECONDS = 300
 
-    DESIRED = {
+    BASE_DESIRED = {
         "General": {
             "DESTINATION_DIR": IMPORT_DEST,
             "DESTINATION_COPY": "0",  # move, not copy - books-pipeline removes the source itself after a verified import
@@ -47,6 +65,37 @@ data:
             "EBOOK_DEST_FILE": "$Title - $Author",
         },
     }
+
+
+    def sabnzbd_desired():
+        """Returns the {"SABnzbd": {...}, "USENET": {...}} block, or {}
+        if either the wiring-config has no lazylibrarian entry yet or
+        SABnzbd hasn't written its own API key yet - never blocks the
+        BASE_DESIRED patch above on this being ready."""
+        if not os.path.exists(WIRING_CONFIG_PATH) or not os.path.exists(SABNZBD_INI_PATH):
+            return {}
+        with open(WIRING_CONFIG_PATH) as f:
+            wiring = yaml.safe_load(f) or {}
+        sab_cp = configparser.ConfigParser()
+        sab_cp.read(SABNZBD_INI_PATH)
+        sab_apikey = sab_cp.get("misc", "api_key", fallback=None)
+        if not sab_apikey:
+            return {}
+        for dc in wiring.get("downloadClients", []):
+            for entry in dc.get("apps", []):
+                if entry["app"] == "lazylibrarian":
+                    return {
+                        "SABnzbd": {
+                            "SAB_HOST": dc["host"],
+                            "SAB_PORT": str(dc["port"]),
+                            "SAB_API": sab_apikey,
+                            "SAB_CAT": entry["category"],
+                        },
+                        "USENET": {
+                            "NZB_DOWNLOADER_SABNZBD": "1",
+                        },
+                    }
+        return {}
 
 
     def wait_for_config():
@@ -59,10 +108,14 @@ data:
 
 
     def patch_config():
+        desired = {**BASE_DESIRED}
+        for section, keys in sabnzbd_desired().items():
+            desired[section] = {**desired.get(section, {}), **keys}
+
         cp = configparser.ConfigParser()
         cp.read(CONFIG_PATH)
         changed = False
-        for section, keys in DESIRED.items():
+        for section, keys in desired.items():
             if not cp.has_section(section):
                 cp.add_section(section)
             for key, value in keys.items():
@@ -70,7 +123,10 @@ data:
                 if current != value:
                     cp.set(section, key, value)
                     changed = True
-                    print(f"{section}.{key}: {current!r} -> {value!r}", flush=True)
+                    if key == "SAB_API":  # don't log the real api key
+                        print(f"{section}.{key}: changed", flush=True)
+                    else:
+                        print(f"{section}.{key}: {current!r} -> {value!r}", flush=True)
         if changed:
             with open(CONFIG_PATH, "w") as f:
                 cp.write(f)
@@ -103,10 +159,11 @@ data:
 
 
     wait_for_config()
-    if patch_config():
-        print("config.ini patched - self-restarting the whole arr-stack pod so LazyLibrarian picks it up", flush=True)
-        restart_pod()
-        time.sleep(30)
-    print("lazylibrarian-config-seed: done, idling", flush=True)
     while True:
-        time.sleep(3600)
+        if patch_config():
+            print("config.ini patched - self-restarting the whole arr-stack pod so LazyLibrarian picks it up", flush=True)
+            restart_pod()
+            time.sleep(30)
+        else:
+            print("lazylibrarian-config-seed: no change this pass, idling", flush=True)
+        time.sleep(RECHECK_INTERVAL_SECONDS)
