@@ -261,6 +261,47 @@ data:
 
 
     # ---------------------------------------------------------------------
+    # Prowlarr "Apps" sync - pushes Prowlarr's own indexers out into
+    # Sonarr/Radarr automatically, so adding one indexer in Prowlarr is
+    # enough rather than also wiring each *arr app's Indexers page by
+    # hand. Found live 2026-07-24: without this, Sonarr's own health
+    # check reports "No indexers available" even though Prowlarr has
+    # one configured and working - Prowlarr never pushes anything out
+    # on its own without an Application link. implementationName here
+    # is confirmed against /api/v1/applications/schema (also lists
+    # LazyLibrarian, Lidarr, Readarr, etc., not just Sonarr/Radarr, in
+    # case more get wired the same way later).
+    # ---------------------------------------------------------------------
+
+    def reconcile_prowlarr_apps(prowlarr_apikey, apikeys):
+        base = "http://localhost:9696/api/v1"
+        existing = http_json("GET", f"{base}/applications?apikey={prowlarr_apikey}") or []
+        schema_list = http_json("GET", f"{base}/applications/schema?apikey={prowlarr_apikey}")
+
+        for app in ("sonarr", "radarr"):
+            if not apikeys.get(app):
+                continue
+            schema = next((e for e in schema_list if e["implementation"].lower() == app), None)
+            if schema is None:
+                log("CRIT", f"prowlarr: no applications/schema entry for {app!r}")
+                continue
+
+            schema["name"] = app.capitalize()
+            for f in schema["fields"]:
+                if f["name"] == "apiKey":
+                    f["value"] = apikeys[app]
+
+            match = next((e for e in existing if e.get("name") == app.capitalize()), None)
+            if match is None:
+                http_json("POST", f"{base}/applications?apikey={prowlarr_apikey}", body=schema)
+                log("INFO", f"prowlarr: linked application {app.capitalize()!r}")
+            else:
+                schema["id"] = match["id"]
+                http_json("PUT", f"{base}/applications/{match['id']}?apikey={prowlarr_apikey}", body=schema)
+                log("INFO", f"prowlarr: re-applied application link {app.capitalize()!r}")
+
+
+    # ---------------------------------------------------------------------
 
     def reconcile_once():
         desired = load_wiring_config()
@@ -300,6 +341,10 @@ data:
                 reconcile_prowlarr_indexers(desired, apikeys["prowlarr"])
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
                 log("CRIT", f"prowlarr indexer reconcile failed: {e}")
+            try:
+                reconcile_prowlarr_apps(apikeys["prowlarr"], apikeys)
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+                log("CRIT", f"prowlarr application-link reconcile failed: {e}")
         else:
             log("INFO", "prowlarr api key not available yet (config.xml not written) - skipping this pass")
 
