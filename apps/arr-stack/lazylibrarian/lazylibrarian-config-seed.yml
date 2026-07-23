@@ -255,38 +255,74 @@ data:
         return changed
 
 
+    RESTART_PENDING_MARKER = "/tmp/restart-pending"
+
+
     def restart_pod():
+        """Returns True only if the DELETE was actually accepted by the
+        API server. Found live 2026-07-23: right at this container's
+        own startup, cluster DNS ("kubernetes.default.svc") can briefly
+        fail to resolve - a transient race, not a real outage - which
+        silently ate a config.ini patch's restart entirely under the
+        old fire-and-forget version of this function: patch_config()
+        had already written the file, so the very next pass saw
+        changed=False and never tried the restart again, leaving
+        LazyLibrarian running with its stale in-memory config
+        indefinitely despite the file being correct on disk. Retries a
+        few times with a short backoff (DNS races like this clear
+        within a few seconds) before giving up for this pass."""
         pod_name = os.environ.get("MY_POD_NAME")
         if not pod_name:
             print("MY_POD_NAME not set - cannot self-restart, restart the pod manually", flush=True)
-            return
+            return False
         secrets_dir = "/var/run/secrets/kubernetes.io/serviceaccount"
         with open(f"{secrets_dir}/token") as f:
             token = f.read().strip()
         with open(f"{secrets_dir}/namespace") as f:
             namespace = f.read().strip()
         context = ssl.create_default_context(cafile=f"{secrets_dir}/ca.crt")
-        conn = http.client.HTTPSConnection("kubernetes.default.svc", 443, context=context)
-        try:
-            conn.request(
-                "DELETE",
-                f"/api/v1/namespaces/{namespace}/pods/{pod_name}",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            resp = conn.getresponse()
-            print(f"self-restart requested for {pod_name}: HTTP {resp.status}", flush=True)
-            resp.read()
-        finally:
-            conn.close()
+
+        for attempt in range(1, 6):
+            try:
+                conn = http.client.HTTPSConnection("kubernetes.default.svc", 443, context=context, timeout=10)
+                try:
+                    conn.request(
+                        "DELETE",
+                        f"/api/v1/namespaces/{namespace}/pods/{pod_name}",
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+                    resp = conn.getresponse()
+                    print(f"self-restart requested for {pod_name}: HTTP {resp.status}", flush=True)
+                    resp.read()
+                    return True
+                finally:
+                    conn.close()
+            except OSError as e:
+                print(f"self-restart attempt {attempt}/5 failed: {e}", flush=True)
+                if attempt < 5:
+                    time.sleep(5)
+        return False
 
 
     wait_for_config()
     while True:
         try:
-            if patch_config():
-                print("config.ini patched - self-restarting the whole arr-stack pod so LazyLibrarian picks it up", flush=True)
-                restart_pod()
-                time.sleep(30)
+            changed = patch_config()
+            restart_owed = changed or os.path.exists(RESTART_PENDING_MARKER)
+            if restart_owed:
+                if changed:
+                    print("config.ini patched - self-restarting the whole arr-stack pod so LazyLibrarian picks it up", flush=True)
+                else:
+                    print("retrying a previously-failed self-restart", flush=True)
+                if restart_pod():
+                    if os.path.exists(RESTART_PENDING_MARKER):
+                        os.remove(RESTART_PENDING_MARKER)
+                    time.sleep(30)
+                else:
+                    # keep retrying next pass even though the file is
+                    # already correct and patch_config() will report no
+                    # further changes - see restart_pod()'s docstring
+                    open(RESTART_PENDING_MARKER, "w").close()
             else:
                 print("lazylibrarian-config-seed: no change this pass, idling", flush=True)
         except Exception as e:
