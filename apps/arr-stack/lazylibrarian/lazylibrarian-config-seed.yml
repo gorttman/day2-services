@@ -15,12 +15,20 @@ data:
     # folder structure, so LazyLibrarian doing its own foldering would
     # just be redundant work immediately flattened away downstream.
     #
-    # Verified 2026-07-23 against a live instance (once gluetun's PIA
-    # WireGuard tunnel came up for real): config.ini ends up with
-    # destination_dir=/import, destination_copy=0, ebook_dest_folder
-    # empty, ebook_dest_file=$Title - $Author, exactly as intended.
-    # configparser lower-cases option names on write; LazyLibrarian
-    # reads config.ini case-insensitively so this doesn't matter.
+    # GENERAL.EBOOK_DIR, not DESTINATION_DIR - found live 2026-07-24:
+    # DESTINATION_DIR doesn't exist anywhere in this pinned image's own
+    # configdefs.py (an earlier, unverified guess that silently wrote a
+    # key LazyLibrarian never reads - configparser doesn't error on
+    # unknown keys, so this looked "verified" purely because the file
+    # contained the string, without confirming the app actually uses
+    # it). filesystem.py's get_directory("eBook") is what LazyLibrarian
+    # actually calls to find where post-processed ebooks land, and that
+    # reads EBOOK_DIR. It shipped defaulted to /books - a path this
+    # container doesn't even mount (only /import, via books-import's
+    # subPath) - so left alone, post-processing would have tried
+    # writing straight into the shared library root and either failed
+    # outright or bypassed books-pipeline's dedup/metadata handling
+    # entirely, not landed in /import as intended.
     #
     # Same reasoning as calibre-web's config_calibre_dir seed for why
     # this waits for the app to create its own config file first rather
@@ -84,11 +92,11 @@ data:
     # branch right now.
     BASE_DESIRED = {
         "GENERAL": {
-            "DESTINATION_DIR": IMPORT_DEST,
+            "EBOOK_DIR": IMPORT_DEST,
             "DESTINATION_COPY": "0",  # move, not copy - books-pipeline removes the source itself after a verified import
         },
         "POSTPROCESS": {
-            "EBOOK_DEST_FOLDER": "",   # no per-book folder - flat into DESTINATION_DIR
+            "EBOOK_DEST_FOLDER": "",   # no per-book folder - flat into EBOOK_DIR
             "EBOOK_DEST_FILE": "$Title - $Author",
         },
     }
