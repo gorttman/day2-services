@@ -133,6 +133,25 @@ data:
     }
 
 
+    def format_prefs_desired():
+        """Returns {"GENERAL": {"EBOOK_TYPE": ...}} from
+        wiring.yml's lazylibrarian.ebookTypes, or {} if that key isn't
+        set (leaves LazyLibrarian's own default - epub, mobi, pdf -
+        alone rather than forcing a value nobody asked for). Confirmed
+        against this image's own source (resultlist.py's match-scoring,
+        downloadmethods.py's post-download file filtering) that
+        EBOOK_TYPE genuinely affects both which NZB results score
+        highest and which extracted files get kept, not just cosmetic."""
+        if not os.path.exists(WIRING_CONFIG_PATH):
+            return {}
+        with open(WIRING_CONFIG_PATH) as f:
+            wiring = yaml.safe_load(f) or {}
+        ebook_types = wiring.get("lazylibrarian", {}).get("ebookTypes")
+        if not ebook_types:
+            return {}
+        return {"GENERAL": {"EBOOK_TYPE": ebook_types}}
+
+
     def api_access_desired():
         """Returns {"API": {"API_ENABLED": "1", "API_KEY": ...}} once
         the self-generated lazylibrarian_api_key secret exists, or {}
@@ -291,7 +310,7 @@ data:
 
     def patch_config():
         desired = {**BASE_DESIRED}
-        for source in (sabnzbd_desired(), newznab_desired(), api_access_desired()):
+        for source in (sabnzbd_desired(), newznab_desired(), api_access_desired(), format_prefs_desired()):
             for section, keys in source.items():
                 desired[section] = {**desired.get(section, {}), **keys}
 

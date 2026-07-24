@@ -74,3 +74,13 @@ data:
       indexers:
         - name: NZBgeek
           secretKey: nzbgeek_api_key
+
+    lazylibrarian:
+      # Format preference for what LazyLibrarian will search for/keep -
+      # comma-separated, most preferred first (LazyLibrarian's own
+      # EBOOK_TYPE setting, General section). epub-only per 2026-07-24 -
+      # books-pipeline converts everything to epub before it ever
+      # reaches the library anyway, so this isn't about the final
+      # library format, it's about not pulling down mobi/pdf copies
+      # into /import that just get discarded at conversion time.
+      ebookTypes: epub
