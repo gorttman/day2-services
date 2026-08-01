@@ -40,6 +40,15 @@ spec:
         - name: http
           containerPort: 8000
         env:
+        # consume is a raw NFS export written by a different pod
+        # (inbox-router) - inotify only fires for writes made through the
+        # same client's local mount, so it never sees a second NFS
+        # client's changes. Confirmed live 2026-08-01: a test file sat in
+        # consume/ unconsumed with the log showing "Using inotify to
+        # watch directory" until this was set. 30s matches Paperless's
+        # own docs recommendation for network-share consume dirs.
+        - name: PAPERLESS_CONSUMER_POLLING
+          value: "30"
         - name: PAPERLESS_REDIS
           value: redis://paperless-redis:6379
         - name: PAPERLESS_DBHOST
