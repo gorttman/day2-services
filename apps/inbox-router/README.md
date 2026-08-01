@@ -65,13 +65,21 @@ a single-writer PVC can't support anyway. No resource requests/limits
 set - no CronJob precedent existed anywhere in this repo when this was
 designed.
 
-## Verified working (2026-07-17)
+## Verified working
 
-Manually triggered end to end with a real file: dropped into
-`inbox/books`, correctly routed to `books/import` via the
+**2026-07-17**: Manually triggered end to end with a real file: dropped
+into `inbox/books`, correctly routed to `books/import` via the
 `explicit:inbox/books` rule, webhook POST attempted and failed
 gracefully (no real n8n workflow exists yet - logged as a `WARN`, did
 not fail the job, exactly as designed).
+
+**2026-08-01**: `inbox/records` → `paperless/consume`, real file, full
+chain including Paperless's own consumption (not just the routing
+hop). Hit a real blocker first: `/inbox`'s own export root had reverted
+to `root:users 755` (no group-write), the same regression `/books`
+independently hit the same day - see
+`day1-foundation/apps/qnap-storage/README.md`. Fixed, then the route
+worked on the very next scheduled cycle.
 
 ## Webhook
 

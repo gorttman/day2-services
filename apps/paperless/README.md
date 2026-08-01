@@ -38,6 +38,34 @@ k8smaster's own local-disk export, not the QNAP) — same "wrong home"
 pattern flagged and fixed for Obsidian's vault. Not migrated here; out
 of scope for the consumer-folder pass, flagged for a later one.
 
+**`PAPERLESS_CONSUMER_POLLING=30` is required**, not optional, for this
+setup — Paperless defaults to inotify-based watching, which only fires
+for writes made through the *same* client's local mount. inbox-router
+writes into `consume/` from a completely separate pod/NFS client, so
+its writes were invisible to Paperless's inotify watcher (confirmed
+live: a real test file sat unconsumed until this was set). Polling mode
+is the documented fix for any network-share consume directory.
+
+Verified end-to-end 2026-08-01: a file dropped into `inbox/records`
+(via inbox-router) was routed to `/mnt/paperless/consume`, picked up by
+Paperless's poller within ~30s, and consumed successfully (`New
+document id 1 created`).
+
+Also pinned to `k8smaster` (`nodeSelector`) — `pinode-01`'s k3s root is
+RAM-backed tmpfs and can't unpack this image (OCR + scipy/numpy deps);
+confirmed live via "no space left on device" during this same rollout.
+
+## Verified working (2026-08-01)
+
+Real end-to-end test: dropped a file into `inbox/records`, confirmed it
+routed to `/mnt/paperless/consume` via inbox-router's next scheduled
+run, and confirmed Paperless consumed it into a new document (id 1).
+Two real bugs found and fixed along the way, not just config: `/inbox`'s
+own export root had the same permission regression `/books` hit
+(`root:users 755` instead of `2775` — see qnap-storage README), and
+Paperless's default inotify watching doesn't see a second NFS client's
+writes (see `PAPERLESS_CONSUMER_POLLING` above).
+
 ## Deliberately unconfigured (separate pass)
 - No tag/correspondent automation rules
 - OCR language at default (`eng`)
