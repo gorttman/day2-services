@@ -19,15 +19,11 @@ data:
       - source: inbox/books
         dest: /mnt/books/import
     
-      # Dormant until the paperless/records consumer is enabled (a later
-      # prompt): /mnt/paperless is not mounted by this CronJob, so any file
-      # landing in inbox/records today will quarantine with reason
-      # "destination unreachable" rather than being silently dropped. Also
-      # flagged in Phase 1: /mnt/paperless/consume is the raw QNAP export,
-      # NOT the same storage the actual Paperless-ngx app consumes from
-      # (that's a separate dynamically-provisioned volume) - this path needs
-      # re-verifying against the app's real consume location before this
-      # route goes live, not just un-commenting the mount.
+      # Live 2026-08-01: /mnt/paperless is now mounted (raw QNAP export,
+      # qnap.i3sec.com.au:/paperless). Paperless-ngx's own consume PVC was
+      # swapped for the same export (subPath: consume) so this is the exact
+      # directory the app watches - the earlier "wrong underlying storage"
+      # caveat is resolved, not carried forward.
       - source: inbox/records
         dest: /mnt/paperless/consume
     
@@ -51,7 +47,7 @@ data:
         mime: [application/vnd.comicbook+zip, application/vnd.comicbook-rar]
         dest: /mnt/books/import
     
-      # Dormant - same /mnt/paperless caveat as inbox/records above.
+      # Live 2026-08-01, same as inbox/records above.
       - name: office-to-records
         mime:
           - application/msword

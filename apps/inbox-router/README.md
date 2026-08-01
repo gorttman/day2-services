@@ -25,19 +25,22 @@ ConfigMap - edit the source file and regenerate the ConfigMap (see the
 generation command at the top of `inbox-router-configmap-routes.yml`'s
 history) rather than hand-editing the embedded copy.
 
-## Scope: books-only, live
+## Scope: books + records live, vault still dormant
 
-Only the `inbox/books` → `books/import` route (and the matching
-`books-ebook`/`books-comic` MIME rules) actually reaches a mounted
-destination right now. `inbox/records` → `paperless/consume` and
-`inbox/working` → `vault/incoming` are present in `routes.yaml` but
-**dormant** - neither `/mnt/paperless` nor `/mnt/vault` is mounted by
-this CronJob, so files landing there quarantine with reason
-`destination unreachable`, not silently dropped. Deliberate, not a
-bug - per explicit direction, books gets proven out before the domain
-expands. `paperless/consume` additionally still points at the wrong
-underlying storage even once mounted (see routes.yaml comments) -
-carried forward, not yet resolved.
+`inbox/books` → `books/import` (and the matching `books-ebook`/
+`books-comic` MIME rules) and, as of 2026-08-01, `inbox/records` →
+`paperless/consume` (plus the `office-to-records` MIME fallback) both
+reach a mounted destination. `/mnt/paperless` is now mounted
+(`qnap.i3sec.com.au:/paperless`) and points at the exact directory
+Paperless-ngx's own deployment consumes from (its PVC-backed consume
+volume was swapped for the same export) - the earlier "wrong
+underlying storage" caveat is resolved.
+
+`inbox/working` → `vault/incoming` is still **dormant** - `/mnt/vault`
+is not mounted by this CronJob, so files landing there quarantine with
+reason `destination unreachable`, not silently dropped. Deliberate, not
+a bug - per explicit direction, each domain gets proven out before the
+next expands.
 
 `pdf-to-triage` routes undeclared bare-root PDFs to `inbox/triage` for
 the PDF triage subagent (separate app, proposal not yet applied) - a
@@ -46,18 +49,21 @@ to Paperless by directory convention.
 
 ## Image
 
-`ghcr.io/gorttman/inbox-router:0.1.0` - built via
+`ghcr.io/gorttman/inbox-router:0.2.0` - built via
 `.github/workflows/inbox-router-image.yml`, semver-tag-triggered,
 linux/arm64 only.
 
 ## Storage
 
-Direct pod-level `nfs:` volumes for `/mnt/inbox` and `/mnt/books`
-(`qnap.i3sec.com.au`) - not PV/PVC. `qnap-books` (the static PV
-pattern used elsewhere) is already bound to calibre-web's PVC; a
-direct volume avoids needing a second PV for the same export. No
-resource requests/limits set - no CronJob precedent existed anywhere
-in this repo when this was designed.
+Direct pod-level `nfs:` volumes for `/mnt/inbox`, `/mnt/books`, and
+(since 2026-08-01) `/mnt/paperless` (`qnap.i3sec.com.au`) - not PV/PVC.
+`qnap-books` (the static PV pattern used elsewhere) is already bound to
+calibre-web's PVC; a direct volume avoids needing a second PV for the
+same export, and both `/inbox` and `/paperless` are genuinely
+multi-consumer (this CronJob writes, the destination app reads), which
+a single-writer PVC can't support anyway. No resource requests/limits
+set - no CronJob precedent existed anywhere in this repo when this was
+designed.
 
 ## Verified working (2026-07-17)
 

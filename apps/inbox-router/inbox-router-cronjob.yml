@@ -43,6 +43,8 @@ spec:
                   mountPath: /mnt/inbox
                 - name: books
                   mountPath: /mnt/books
+                - name: paperless
+                  mountPath: /mnt/paperless
               # No resources block: no precedent exists anywhere in this
               # repo for CronJob resource requests/limits (log-archiver
               # and sealed-secrets-backup both omit it too) - flagged in
@@ -63,3 +65,7 @@ spec:
               nfs:
                 server: qnap.i3sec.com.au
                 path: /books
+            - name: paperless
+              nfs:
+                server: qnap.i3sec.com.au
+                path: /paperless

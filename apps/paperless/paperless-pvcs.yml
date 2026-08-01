@@ -27,18 +27,8 @@ spec:
   resources:
     requests:
       storage: 10Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: paperless-consume
-  namespace: paperless
-  labels:
-    app: paperless
-    argocd.argoproj.io/managed-by: argocd
-spec:
-  accessModes: ["ReadWriteOnce"]
-  storageClassName: nfs-client
-  resources:
-    requests:
-      storage: 5Gi
+# paperless-consume PVC removed 2026-08-01: consume is now a raw QNAP
+# export (qnap.i3sec.com.au:/paperless), mounted directly in
+# paperless-deployment.yml, not a PVC - inbox-router needs to write into
+# the same directory from its own pod, which a single-writer PVC can't
+# support. See day1-foundation/apps/qnap-storage/README.md.

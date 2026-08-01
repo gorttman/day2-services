@@ -63,8 +63,9 @@ spec:
               key: PAPERLESS_ADMIN_PASSWORD
         - name: PAPERLESS_URL
           value: https://paperless.i3sec.com.au
-        # Bare install: no PAPERLESS_CONSUMER_* overrides, no OCR language
-        # override (default eng) - configuration happens in a later pass.
+        # Consume folder is now wired (see the consume volume below); no
+        # PAPERLESS_CONSUMER_* tuning or OCR language override (default
+        # eng) yet - tag/correspondent rules are a later, separate pass.
         volumeMounts:
         - name: data
           mountPath: /usr/src/paperless/data
@@ -72,6 +73,7 @@ spec:
           mountPath: /usr/src/paperless/media
         - name: consume
           mountPath: /usr/src/paperless/consume
+          subPath: consume
         resources:
           requests:
             memory: 512Mi
@@ -101,6 +103,15 @@ spec:
       - name: media
         persistentVolumeClaim:
           claimName: paperless-media
+      # Raw QNAP export, not a PVC - inbox-router writes into this same
+      # export (qnap.i3sec.com.au:/paperless) from its own pod, so this has
+      # to be a directly-mounted multi-consumer NFS volume like /books and
+      # /inbox, not a single-writer PVC. subPath (in the volumeMount below,
+      # not here - not a valid NFSVolumeSource field) selects the consume/
+      # subdirectory, same pattern arr-stack uses for its books/import
+      # handoff. See day1-foundation/apps/qnap-storage/README.md,
+      # "paperless directory" section (2026-08-01).
       - name: consume
-        persistentVolumeClaim:
-          claimName: paperless-consume
+        nfs:
+          server: qnap.i3sec.com.au
+          path: /paperless
