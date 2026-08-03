@@ -1,0 +1,54 @@
+# Runs once via the normal Argo CD sync - same pattern as
+# postgres-books-db-init-job.yml. Uses the same image and DB env as the
+# main paperless Deployment so `manage.py shell` talks to the real shared
+# Postgres database directly - no REST API token needed.
+# Jobs are immutable once created: if this ever needs to re-run for real
+# (e.g. adding more tags later), delete the completed Job
+# (`kubectl delete job paperless-config-seed -n paperless`) and let Argo CD
+# recreate it - the script itself is idempotent either way.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: paperless-config-seed
+  namespace: paperless
+  labels:
+    app: paperless
+    app.kubernetes.io/name: paperless
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed-config
+          image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15
+          command: ["/bin/sh", "-c", "python3 manage.py shell < /scripts/seed_config.py"]
+          env:
+            - name: PAPERLESS_REDIS
+              value: redis://paperless-redis:6379
+            - name: PAPERLESS_DBHOST
+              value: postgres.postgres.svc.cluster.local
+            - name: PAPERLESS_DBNAME
+              value: paperless
+            - name: PAPERLESS_DBUSER
+              value: paperless
+            - name: PAPERLESS_DBPASS
+              valueFrom:
+                secretKeyRef:
+                  name: paperless-secret
+                  key: PAPERLESS_DBPASS
+            - name: PAPERLESS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: paperless-secret
+                  key: PAPERLESS_SECRET_KEY
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: paperless-config-seed
+            defaultMode: 0555

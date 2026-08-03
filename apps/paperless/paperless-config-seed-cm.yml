@@ -1,0 +1,79 @@
+# Idempotent - safe to leave in place and re-run (e.g. after deleting the
+# completed Job to force a re-check). get_or_create + explicit field sync
+# on every run, same pattern as postgres-books-db-init-configmap.yml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: paperless-config-seed
+  namespace: paperless
+  labels:
+    app: paperless
+    app.kubernetes.io/name: paperless
+    argocd.argoproj.io/managed-by: argocd
+data:
+  seed_config.py: |
+    from documents.models import Tag, DocumentType, StoragePath
+
+    # matching_algorithm: 0 = None (manual only), 1 = Any word
+    TAGS = [
+        ("Tax", "tax return, tax invoice, ATO, superannuation", 1),
+        ("Property", "inspection, property, lease, tenancy, Greenlaw, Berwick", 1),
+        ("Insurance", "insurance, policy", 1),
+        ("Contracts", "contract, agreement", 1),
+        ("Business", "I Cubed Consultants, ASIC, ABN, company statement", 1),
+        ("Vehicle", "vehicle, car service", 1),
+        ("Personal", "", 0),
+        ("Correspondence", "", 0),
+    ]
+    for name, match, algo in TAGS:
+        obj, created = Tag.objects.get_or_create(
+            name=name,
+            defaults={"matching_algorithm": algo, "match": match, "is_insensitive": True},
+        )
+        if not created:
+            obj.matching_algorithm = algo
+            obj.match = match
+            obj.is_insensitive = True
+            obj.save()
+        print(("created" if created else "updated"), "tag", name)
+
+    DOCTYPES = [
+        ("Invoice", "invoice", 1),
+        ("Statement", "statement, tax return, ATO", 1),
+        ("Contract", "contract, agreement, employment", 1),
+        ("Report", "inspection report, routine inspection", 1),
+        ("Quote", "quote", 1),
+    ]
+    for name, match, algo in DOCTYPES:
+        obj, created = DocumentType.objects.get_or_create(
+            name=name,
+            defaults={"matching_algorithm": algo, "match": match, "is_insensitive": True},
+        )
+        if not created:
+            obj.matching_algorithm = algo
+            obj.match = match
+            obj.is_insensitive = True
+            obj.save()
+        print(("created" if created else "updated"), "document type", name)
+
+    # Jinja2 syntax (raw, no conversion) - contrast with
+    # PAPERLESS_FILENAME_FORMAT in paperless-deployment.yml, which uses the
+    # old {var} style. matching_algorithm 0 here means this StoragePath
+    # only applies where manually assigned - the actual global default for
+    # every other document is PAPERLESS_FILENAME_FORMAT, using equivalent
+    # placeholders in the old syntax. Kept in sync by hand; no code shares
+    # the template string between the two because the syntaxes differ.
+    template = (
+        "{{ document.document_type.name|default('Unsorted') }}/"
+        "{{ document.created|datetime('%Y') }}/"
+        "{{ document.correspondent.name|default('Unknown') }}-{{ document.title }}"
+    )
+    sp, created = StoragePath.objects.get_or_create(
+        name="Default filing",
+        defaults={"path": template, "matching_algorithm": 0},
+    )
+    if not created:
+        sp.path = template
+        sp.save()
+    print(("created" if created else "updated"), "storage path")
+    print("DONE")

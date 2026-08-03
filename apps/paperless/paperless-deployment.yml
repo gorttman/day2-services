@@ -78,9 +78,17 @@ spec:
               key: PAPERLESS_ADMIN_PASSWORD
         - name: PAPERLESS_URL
           value: https://paperless.i3sec.com.au
-        # Consume folder is now wired (see the consume volume below); no
-        # PAPERLESS_CONSUMER_* tuning or OCR language override (default
-        # eng) yet - tag/correspondent rules are a later, separate pass.
+        # Global default filing scheme for any document that doesn't match
+        # a more specific StoragePath rule. Old-style {var} placeholders,
+        # not Jinja2 - Paperless auto-converts this one internally
+        # (documents/templating/utils.py), whereas StoragePath.path (set
+        # by paperless-config-seed-job.yml) uses raw Jinja2 directly. See
+        # that job's README note for the actual tag/type/storage-path
+        # config this pairs with.
+        - name: PAPERLESS_FILENAME_FORMAT
+          value: "{document_type}/{created_year}/{correspondent}-{title}"
+        # OCR language left at default (eng) - no non-English documents
+        # expected.
         volumeMounts:
         - name: data
           mountPath: /usr/src/paperless/data

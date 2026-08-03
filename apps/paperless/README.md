@@ -1,7 +1,7 @@
 # Paperless-NGX
 
-**Status:** ACTIVE (consumer folder wired 2026-08-01; tag/correspondent
-rules + Cloudflare exposure still pending)
+**Status:** ACTIVE (consumer folder + tag/document-type/filing config done
+2026-08-03; Cloudflare exposure + extra users still pending)
 **Version:** 2.20.15 (ghcr.io/paperless-ngx/paperless-ngx)
 **Namespace:** paperless
 **Sync Wave:** 0 (namespace only)
@@ -66,8 +66,39 @@ own export root had the same permission regression `/books` hit
 Paperless's default inotify watching doesn't see a second NFS client's
 writes (see `PAPERLESS_CONSUMER_POLLING` above).
 
+## Tags, document types, and filing (2026-08-03)
+
+Seeded via `paperless-config-seed-job.yml` (idempotent, same pattern as
+`postgres-books-db-init-job.yml` — runs `manage.py shell` against the
+script in `paperless-config-seed-cm.yml`, using the same image/DB env as
+the main Deployment rather than a REST API token):
+
+- **Tags** (auto-match on document content, "Any word"): Tax, Property,
+  Insurance, Contracts, Business, Vehicle. Personal and Correspondence
+  are manual-only (no auto-match) by design — too generic to keyword-match
+  reliably.
+- **Document types** (auto-match): Invoice, Statement, Contract, Report,
+  Quote.
+- **Filing**: two separate template mechanisms, deliberately not unified
+  because they use different syntax:
+  - `PAPERLESS_FILENAME_FORMAT` (paperless-deployment.yml) - the global
+    default for any document not matched to a specific `StoragePath`.
+    Old-style `{var}` placeholders (Paperless auto-converts these
+    internally); NOT Jinja2.
+  - The seeded `StoragePath` named "Default filing" - `matching_algorithm:
+    0` (manual-assignment only), Jinja2 syntax (`{{ document.field }}`).
+    Exists as a selectable option in the UI rather than an active
+    auto-rule; the global format above is what actually applies day to
+    day.
+  - Both render the same effective scheme:
+    `{document_type}/{created_year}/{correspondent}-{title}`.
+
+Category choices are based on what's actually shown up in the first real
+document import pass (tax returns, ASIC statements, property inspection
+reports, contracts, trade quotes) — expect to add/adjust tags as more
+document types show up, not a fixed final set.
+
 ## Deliberately unconfigured (separate pass)
-- No tag/correspondent automation rules
 - OCR language at default (`eng`)
 - No Cloudflare Tunnel exposure (tunnel path blocked)
 - User management: only the single `admin` superuser exists so far
