@@ -21,6 +21,11 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      # Same reason as paperless-deployment.yml's nodeSelector: pinode-01's
+      # tmpfs root can't unpack this image. Missed this the first time -
+      # the Job landed on pinode-01 and hung in ContainerCreating.
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
       containers:
         - name: seed-config
           image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15
