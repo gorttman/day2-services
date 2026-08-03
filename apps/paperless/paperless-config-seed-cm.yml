@@ -12,16 +12,29 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
 data:
   seed_config.py: |
-    from documents.models import Tag, DocumentType, StoragePath
+    from documents.models import Tag, DocumentType, StoragePath, Document
+    from documents.matching import match_tags, match_document_types
 
     # matching_algorithm: 0 = None (manual only), 1 = Any word
+    #
+    # IMPORTANT: Paperless's _split_match() (documents/matching.py) only
+    # groups a phrase together if it's double-quoted in the match string -
+    # commas do NOTHING for grouping, they're just more whitespace to the
+    # splitter. "vehicle, car service" was silently three independent
+    # any-word triggers: vehicle, car, and bare service - and "service"
+    # matched almost every consulting-business document. Found live
+    # 2026-08-04 after it tagged an architecture draft and a funeral-
+    # services form as Vehicle. Every multi-word phrase below MUST be
+    # wrapped in literal double quotes for this reason - single bare
+    # words are only safe here if they're genuinely rare/specific
+    # (ATO, ASIC, Berwick), not common words like "policy" or "service".
     TAGS = [
-        ("Tax", "tax return, tax invoice, ATO, superannuation", 1),
-        ("Property", "inspection, property, lease, tenancy, Greenlaw, Berwick", 1),
-        ("Insurance", "insurance, policy", 1),
+        ("Tax", '"tax return", "tax invoice", ATO, superannuation', 1),
+        ("Property", '"property inspection", lease, tenancy, Greenlaw, Berwick', 1),
+        ("Insurance", 'insurance, "insurance policy"', 1),
         ("Contracts", "contract, agreement", 1),
-        ("Business", "I Cubed Consultants, ASIC, ABN, company statement", 1),
-        ("Vehicle", "vehicle, car service", 1),
+        ("Business", '"I Cubed Consultants", ASIC, ABN, "company statement"', 1),
+        ("Vehicle", 'vehicle, "car service"', 1),
         ("Personal", "", 0),
         ("Correspondence", "", 0),
     ]
@@ -39,9 +52,9 @@ data:
 
     DOCTYPES = [
         ("Invoice", "invoice", 1),
-        ("Statement", "statement, tax return, ATO", 1),
+        ("Statement", 'statement, "tax return", ATO', 1),
         ("Contract", "contract, agreement, employment", 1),
-        ("Report", "inspection report, routine inspection", 1),
+        ("Report", '"inspection report", "routine inspection"', 1),
         ("Quote", "quote", 1),
     ]
     for name, match, algo in DOCTYPES:
@@ -55,6 +68,25 @@ data:
             obj.is_insensitive = True
             obj.save()
         print(("created" if created else "updated"), "document type", name)
+
+    # Re-evaluate tags/document type on every EXISTING document against the
+    # rules above, not just future consumption - otherwise fixing a bad
+    # match string here would only stop new mistakes, not correct
+    # documents already mistagged by the old rules. Safe/idempotent to
+    # re-run any time the rules change.
+    retagged = 0
+    for d in Document.objects.all():
+        new_tags = set(match_tags(d, classifier=None))
+        old_tags = set(d.tags.all())
+        if new_tags != old_tags:
+            d.tags.set(new_tags)
+            retagged += 1
+        new_types = match_document_types(d, classifier=None)
+        new_type = new_types[0] if new_types else None
+        if d.document_type != new_type:
+            d.document_type = new_type
+            d.save()
+    print("re-evaluated tags/types on", Document.objects.count(), "documents,", retagged, "had tag changes")
 
     # Jinja2 syntax (raw, no conversion) - contrast with
     # PAPERLESS_FILENAME_FORMAT in paperless-deployment.yml, which uses the
