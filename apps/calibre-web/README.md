@@ -7,6 +7,21 @@ pattern kavita used. Replaces kavita entirely (2026-07-17) - see
 `~/gm-dev/homelab-book/chapters/002-kavita-to-calibre-web.md` for the
 full story of why.
 
+## Login loop fix (2026-08-04)
+
+Reported live: login succeeded and showed the front page, but clicking
+any menu item bounced straight back to the login screen (seen via both
+hostnames above). Cause: `config_session=1` (Flask-Login "Strong"
+session protection) hashes each session to the request's
+`(remote_addr, user_agent)` pair and kills the whole session on any
+mismatch - which happens routinely through a reverse proxy (Traefik
+and/or the Cloudflare Tunnel). Fixed via
+`calibre-web-user-seed-script.yml`'s `configure_session_protection()`,
+same idempotent read-once/flip-if-still-default/self-restart-once
+pattern already used for `config_calibre_dir` below. Verified live:
+`config_session` confirmed `0` on the running pod after its one
+self-triggered restart.
+
 ## Image
 
 `lscr.io/linuxserver/calibre-web:0.6.26-ls391` - confirmed real arm64
