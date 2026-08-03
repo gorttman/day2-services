@@ -13,28 +13,35 @@ metadata:
 data:
   seed_config.py: |
     from documents.models import Tag, DocumentType, StoragePath, Document
-    from documents.matching import match_tags, match_document_types
+    from documents.matching import match_tags, match_document_types, _split_match
 
     # matching_algorithm: 0 = None (manual only), 1 = Any word
     #
-    # IMPORTANT: Paperless's _split_match() (documents/matching.py) only
-    # groups a phrase together if it's double-quoted in the match string -
-    # commas do NOTHING for grouping, they're just more whitespace to the
-    # splitter. "vehicle, car service" was silently three independent
-    # any-word triggers: vehicle, car, and bare service - and "service"
-    # matched almost every consulting-business document. Found live
-    # 2026-08-04 after it tagged an architecture draft and a funeral-
-    # services form as Vehicle. Every multi-word phrase below MUST be
-    # wrapped in literal double quotes for this reason - single bare
-    # words are only safe here if they're genuinely rare/specific
-    # (ATO, ASIC, Berwick), not common words like "policy" or "service".
+    # IMPORTANT, found the hard way in TWO separate live incidents
+    # (2026-08-04): Paperless's _split_match() only groups a phrase
+    # together if it's double-quoted - and COMMAS ARE NOT DELIMITERS AT
+    # ALL, they're just more non-whitespace to the tokenizer.
+    #   Bug 1: 'vehicle, car service' (no quotes) silently became three
+    #   independent any-word triggers - vehicle, car, bare service - and
+    #   "service" matched almost every consulting-business document.
+    #   Bug 2: even after quoting phrases, leaving the COMMAS in between
+    #   them (e.g. '"I Cubed Consultants", ASIC, ...') left a lone ","
+    #   as its own token. \b,\b matches any comma sitting between two
+    #   digits - i.e. every thousands-separator in a dollar figure - so
+    #   a plain financial spreadsheet got tagged Business from comma
+    #   noise, nothing to do with the actual keywords.
+    # Rule going forward: separate terms with SPACES ONLY, never commas.
+    # Wrap multi-word phrases in double quotes. The validation loop
+    # below fails the whole job loudly if any match string still
+    # produces a token with no alphanumeric characters in it, so this
+    # class of bug can't ship silently a third time.
     TAGS = [
-        ("Tax", '"tax return", "tax invoice", ATO, superannuation', 1),
-        ("Property", '"property inspection", lease, tenancy, Greenlaw, Berwick', 1),
-        ("Insurance", 'insurance, "insurance policy"', 1),
-        ("Contracts", "contract, agreement", 1),
-        ("Business", '"I Cubed Consultants", ASIC, ABN, "company statement"', 1),
-        ("Vehicle", 'vehicle, "car service"', 1),
+        ("Tax", '"tax return" "tax invoice" ATO superannuation', 1),
+        ("Property", '"property inspection" lease tenancy Greenlaw Berwick', 1),
+        ("Insurance", 'insurance "insurance policy"', 1),
+        ("Contracts", "contract agreement", 1),
+        ("Business", '"I Cubed Consultants" ASIC ABN "company statement"', 1),
+        ("Vehicle", 'vehicle "car service"', 1),
         ("Personal", "", 0),
         ("Correspondence", "", 0),
     ]
@@ -52,11 +59,31 @@ data:
 
     DOCTYPES = [
         ("Invoice", "invoice", 1),
-        ("Statement", 'statement, "tax return", ATO', 1),
-        ("Contract", "contract, agreement, employment", 1),
-        ("Report", '"inspection report", "routine inspection"', 1),
+        ("Statement", 'statement "tax return" ATO', 1),
+        ("Contract", "contract agreement employment", 1),
+        ("Report", '"inspection report" "routine inspection"', 1),
         ("Quote", "quote", 1),
     ]
+
+    # Validate every match string BEFORE touching the database: fail loud
+    # and early if any produces a token with no alphanumeric characters
+    # (the exact shape of both bugs above - a bare "," or similar).
+    class _Check:
+        def __init__(self, m):
+            self.match = m
+
+    for name, match, algo in TAGS + DOCTYPES:
+        if algo != 1 or not match:
+            continue
+        for token in _split_match(_Check(match)):
+            if not any(c.isalnum() for c in token):
+                raise ValueError(
+                    f"Match string for {name!r} ({match!r}) produces a "
+                    f"non-alphanumeric token {token!r} - this will match "
+                    f"almost any document. Fix the match string before "
+                    f"this job can run.",
+                )
+
     for name, match, algo in DOCTYPES:
         obj, created = DocumentType.objects.get_or_create(
             name=name,
