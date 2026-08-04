@@ -51,16 +51,16 @@ Full inventory (status updated as each is pulled):
 | Business Plan.doc | Plan/Business Plan-budget | done - Paperless #26 |
 | cafe-list | Plan/Business Plan-budget | done - Paperless #24 |
 | cash flow | Plan/Business Plan-budget | done - Paperless #22 (pushed as .txt, same reason as Italian Meatballs) |
-| Finance Plan | Plan/Business Plan-budget | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Trading procedures.docx | Plan/Trading/Records | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Benchmark Target | Plan/Trading/Records | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Trading decisions | Plan/Trading/Records | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Position Calculator | Plan/Trading/Records/Tools | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Position_size5 | Plan/Trading/Records/Tools | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Trading scratch.doc | Plan/Trading | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| 9x Bstevens_Cover_*.doc (near-duplicate cover letter drafts) | C.V./Cover Letters | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| BSTEVENS-20100510a.doc (nested copy, C.V./Resume) + top-level copy | C.V./Resume + top-level | pushed both to inbox/records 2026-08-04 (distinct file IDs despite same name - let Paperless's own duplicate detection resolve it if actually identical, same as it correctly did for the original records batch) |
-| CashFlow (x2, top-level) | top-level | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Finance Plan | Plan/Business Plan-budget | done - Paperless #32 |
+| Trading procedures.docx | Plan/Trading/Records | done - Paperless #33 |
+| Benchmark Target | Plan/Trading/Records | done - Paperless #34 |
+| Trading decisions | Plan/Trading/Records | done - Paperless #35 |
+| Position Calculator | Plan/Trading/Records/Tools | done - Paperless #29 |
+| Position_size5 | Plan/Trading/Records/Tools | done - Paperless #31 |
+| Trading scratch.doc | Plan/Trading | done - Paperless #30 |
+| 7x Bstevens_Cover_*.doc (near-duplicate cover letter drafts) | C.V./Cover Letters | done - Paperless #36-41, #43 |
+| BSTEVENS-20100510a.doc (nested copy, C.V./Resume) + top-level copy | C.V./Resume + top-level | done - Paperless #42, #44, but **mis-tagged** (document_type=Contract, tags=Insurance+Property) by an over-loose "any word" auto-matching rule - see Exceptions below, needs manual fix |
+| CashFlow (x2, top-level) | top-level | done - Paperless #53 (CashFlow-2), #54 (CashFlow-1) |
 | Trading Calculation | top-level | done - pushed as .txt (small inline PDF, same reason as others) |
 | business ideas | top-level | done - pushed as .txt |
 | Cafe business Design | top-level | done - pushed as PDF |
@@ -72,7 +72,7 @@ Full inventory (status updated as each is pulled):
 | stalls | top-level | done - pushed as .txt (condensed table, source spreadsheet may continue past what the text-extraction tool returned) |
 | Untitled document | top-level | skipped - genuinely empty (confirmed via content read) |
 | Untitled Presentation | top-level | skipped - genuinely empty (just slide separators, no content) |
-| Margots_20112010..., Bike_trail_1_14112010... (gpx.txt) | top-level | pending - GPS tracks, low priority |
+| Margots_20112010..., Bike_trail_1_14112010... (gpx.txt) | top-level | done - Paperless #55 (Margots), #56 (Bike_trail) (both pushed as .txt - small inline PDF exports, used read_file_content text extraction) |
 | neobox.zip, vespa-love-10.zip, seashore.zip, primepress.zip, Peruns_Weblog.zip, abstractblu.zip, rihanna.zip | top-level | pending decision - old WordPress theme files, ~2010, low value, asked user whether these are actually wanted |
 | General, Cafe training (outer), Themes | folders | not yet found any content with matching parentId - genuinely may be empty, or not yet reached in pagination |
 
@@ -86,6 +86,8 @@ Full inventory (status updated as each is pulled):
 | IT_Ops_Realignment_Strategy_Document V1.5.docx | i3sec.com.au records | same | same |
 | brett stevens contract.docx | i3sec.com.au records | same | same |
 | USA Canada Alaska Trip Planner...xlsx | i3sec.com.au records | same | same |
+| BSTEVENS-20100510a-CV-Resume (#44) and BSTEVENS-20100510a-toplevel (#42) | gmail.com top-level + C.V./Resume | Auto-matching rule false positive: `Contract` doc-type and `Insurance`/`Property` tags use "any word" matching against generic terms (`employment`, `Berwick`, `insurance`, etc.) that also appear in your resume text | Manually clear document_type/tags on #42 and #44 in Paperless UI. Longer-term: tighten those 3 matching rules (all-words/exact-phrase/regex instead of any-word) - flagged for discussion 2026-08-04, not yet actioned pending your call on approach |
+| Routine Inspection - 13 Greenlaw Cres, Berwick (1).pdf | i3sec.com.au records | Correctly rejected as a duplicate of existing doc #15, but Paperless leaves the file sitting in the consume folder afterward instead of cleaning it up | Manually delete the file from the QNAP `/paperless/consume` folder (harmless to leave, but will look like a stuck import if not explained) |
 
 (10MB Drive-download tool cap itself hasn't blocked anything yet in this
 log - noted here as a standing constraint, not a specific exception:
