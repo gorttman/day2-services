@@ -78,16 +78,25 @@ Full inventory (status updated as each is pulled):
 
 ## Exceptions (blocked by tool limits, need manual handling)
 
+Resolved 2026-08-05: Tika + Gotenberg deployed (`apps/paperless/paperless-tika-deployment.yml`,
+`paperless-gotenberg-deployment.yml`), and the orphaned duplicate PDF
+manually removed - both items below moved from "exception" to "done".
+
+| File | Source | Status |
+|---|---|---|
+| 2023-04-28 Kemner Job Description.docx | i3sec.com.au records | done - Paperless #57 (Tika/Gotenberg now deployed) |
+| brett stevens contract.docx | i3sec.com.au records | done - Paperless #58 |
+| DC Quote 337Brett.docx | i3sec.com.au records | done - Paperless #59 |
+| I CUBED CONSULTANTS...docx | i3sec.com.au records | done - Paperless #60 |
+| IT_Ops_Realignment_Strategy_Document V1.5.docx | i3sec.com.au records | done - Paperless #61 |
+| USA Canada Alaska Trip Planner...xlsx | i3sec.com.au records | done - Paperless #62 |
+| Routine Inspection - 13 Greenlaw Cres, Berwick (1).pdf | i3sec.com.au records | done - orphaned duplicate deleted from consume folder |
+
+**Still open:**
+
 | File | Source | Reason | What to do |
 |---|---|---|---|
-| 2023-04-28 Kemner Job Description.docx | i3sec.com.au records | Paperless can't consume Office formats without Tika/Gotenberg (not deployed) | Deploy Tika/Gotenberg, or manually convert to PDF |
-| DC Quote 337Brett.docx | i3sec.com.au records | same | same |
-| I CUBED CONSULTANTS...docx | i3sec.com.au records | same | same |
-| IT_Ops_Realignment_Strategy_Document V1.5.docx | i3sec.com.au records | same | same |
-| brett stevens contract.docx | i3sec.com.au records | same | same |
-| USA Canada Alaska Trip Planner...xlsx | i3sec.com.au records | same | same |
 | BSTEVENS-20100510a-CV-Resume (#44) and BSTEVENS-20100510a-toplevel (#42) | gmail.com top-level + C.V./Resume | Auto-matching rule false positive: `Contract` doc-type and `Insurance`/`Property` tags use "any word" matching against generic terms (`employment`, `Berwick`, `insurance`, etc.) that also appear in your resume text | Manually clear document_type/tags on #42 and #44 in Paperless UI. Longer-term: tighten those 3 matching rules (all-words/exact-phrase/regex instead of any-word) - flagged for discussion 2026-08-04, not yet actioned pending your call on approach |
-| Routine Inspection - 13 Greenlaw Cres, Berwick (1).pdf | i3sec.com.au records | Correctly rejected as a duplicate of existing doc #15, but Paperless leaves the file sitting in the consume folder afterward instead of cleaning it up | Manually delete the file from the QNAP `/paperless/consume` folder (harmless to leave, but will look like a stuck import if not explained) |
 
 (10MB Drive-download tool cap itself hasn't blocked anything yet in this
 log - noted here as a standing constraint, not a specific exception:
