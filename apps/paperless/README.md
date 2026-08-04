@@ -98,6 +98,16 @@ document import pass (tax returns, ASIC statements, property inspection
 reports, contracts, trade quotes) — expect to add/adjust tags as more
 document types show up, not a fixed final set.
 
+## Office format support via Tika/Gotenberg (2026-08-05)
+`gotenberg` and `tika` (own Deployments/Services in this namespace,
+`paperless-gotenberg-deployment.yml` / `paperless-tika-deployment.yml`)
+convert Office formats (.docx/.xlsx/.pptx/.odt/etc.) to PDF and extract
+their text, wired via `PAPERLESS_TIKA_ENABLED`/`PAPERLESS_TIKA_ENDPOINT`/
+`PAPERLESS_TIKA_GOTENBERG_ENDPOINT` in `paperless-deployment.yml`.
+Without these, Office formats land in `consume/` and are never picked
+up — six files did exactly this from the first i3sec.com.au records
+import pass, sitting untouched until this landed.
+
 ## Deliberately unconfigured (separate pass)
 - OCR language at default (`eng`)
 - No Cloudflare Tunnel exposure (tunnel path blocked)

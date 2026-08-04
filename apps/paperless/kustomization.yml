@@ -6,6 +6,8 @@ resources:
   - paperless-sealed-secret.yml
   - paperless-pvcs.yml
   - paperless-redis-deployment.yml
+  - paperless-gotenberg-deployment.yml
+  - paperless-tika-deployment.yml
   - paperless-deployment.yml
   - paperless-service.yml
   - paperless-ingress.yml

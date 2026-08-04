@@ -89,6 +89,16 @@ spec:
           value: "{document_type}/{created_year}/{correspondent}-{title}"
         # OCR language left at default (eng) - no non-English documents
         # expected.
+        # Added 2026-08-05: without these, Office formats (.docx/.xlsx/
+        # .pptx/.odt/etc.) can't be consumed at all - see
+        # paperless-gotenberg-deployment.yml and
+        # paperless-tika-deployment.yml for what these actually are.
+        - name: PAPERLESS_TIKA_ENABLED
+          value: "1"
+        - name: PAPERLESS_TIKA_ENDPOINT
+          value: http://tika:9998
+        - name: PAPERLESS_TIKA_GOTENBERG_ENDPOINT
+          value: http://gotenberg:3000
         volumeMounts:
         - name: data
           mountPath: /usr/src/paperless/data
