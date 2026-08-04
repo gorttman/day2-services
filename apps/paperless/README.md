@@ -125,21 +125,51 @@ tag had to be split.
   changes, then update the Tag's regex in Paperless to match. Don't
   edit the regex directly without updating this table, they'll drift.
 
-  | Category | Current provider | Notes |
+  | Category | Confirmed current provider | Notes |
   |---|---|---|
   | Council (rates) | Casey Council / City of Casey | Fixed - Berwick/Hepburn Ct is in this LGA, won't change unless they move |
-  | Electricity | *(not yet provided)* | |
-  | Gas | *(not yet provided)* | |
-  | Water | *(not yet provided)* | |
-  | Home/contents insurance | *(not yet provided)* | |
+  | Water | South East Water | Fixed - statutory retailer for this whole region, same reasoning as council |
+  | Electricity | *(not yet confirmed)* | Matches against the known-provider list below in the meantime |
+  | Gas | *(not yet confirmed)* | Matches against the known-provider list below in the meantime |
+  | Home/contents insurance | *(not yet confirmed)* | Matches against the known-provider list below in the meantime |
 
-  Generic fallback terms also in the current regex until real provider
-  names are filled in above: `electricity`, `gas supply`, `water usage`,
-  `home insurance`, `contents insurance`, `mortgage`, `renovation`,
-  `strata`, `real estate`, `plumber`, `electrician`, `concrete`,
-  `landscap*`, `building` - these are weaker (category words, not named
-  entities) and should be replaced by the actual provider name once
-  known, same reasoning as why `hepburn` alone couldn't be used.
+  **Known Australian provider names actually in the regex** (2026-08-05,
+  from general knowledge, not user-confirmed) - the point of this list
+  is to make matching survive a provider *switch* without needing a
+  manual update: any of these appearing alongside `hepburn` is treated
+  as a real match. Not exhaustive - if a genuine bill from a provider
+  not listed here shows up, add it here. **Trimmed hard to fit
+  Paperless's 256-char limit on the Tag.match field** - this is the
+  actual constraint that decides what stays in the list, not relevance;
+  a longer curated wishlist was cut down to this:
+  - Electricity/gas: AGL, Origin Energy, EnergyAustralia, Red Energy,
+    Alinta
+  - Insurance: AAMI, NRMA, RACV, Allianz, Suncorp
+  - Fixed (see table above): South East Water, Casey Council
+
+  Generic category-word fallback also in the regex: `electricity`,
+  `gas`, `water usage`, `home insurance`, `contents insurance`,
+  `mortgage`, `plumber`, `electrician`, `concrete`, `building` - catches
+  anything the named list misses (tradespeople, mortgage don't really
+  have a fixed "provider" to name). **Bare `insurance` and `rates` were
+  tried and rejected** - both are common in totally unrelated documents
+  (a car finance contract has "insurance" and "interest rates" in it
+  too), so they're phrased as specific multi-word terms instead.
+
+  **Real gotcha hit building this**: the rule structure is two lookaheads,
+  `(?=.*hepburn)(?=.*(...))` - by default `.` doesn't match newlines, so
+  if the address and the provider term land on different lines (normal
+  in real documents), the rule silently never matches at all. Needs the
+  `(?s)` flag prefix for `.` to span newlines. First version of this
+  rule looked reasonable and was never actually tested against real
+  regex evaluation before being treated as correct - caught by testing
+  against the one real example document, not by inspection.
+
+  Current full match string, for reference:
+  `(?s)(?=.*hepburn)(?=.*(agl|origin energy|energyaustralia|red
+  energy|alinta|south east water|casey council|aami|nrma|racv|allianz|
+  suncorp|electricity|gas|water usage|home insurance|contents
+  insurance|mortgage|plumber|electrician|concrete|building))`
 
 ## Deliberately unconfigured (separate pass)
 - OCR language at default (`eng`)

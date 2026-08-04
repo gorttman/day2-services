@@ -121,27 +121,43 @@ Restructured:
   tightened to the single distinctive token `greenlaw` (any-word) -
   street name is specific enough on its own, unlike "Berwick" (a whole
   suburb). Kept on #5, #9, #15 only; stripped from the other 18.
-- New **`Property - Hepburn (Home)`** tag created. First attempt (bare
-  `hepburn` word) rejected immediately - same address-in-letterhead
-  problem, would have flooded every personal document again. Second
-  attempt (hepburn + generic "provider info" words) also had a real
-  counterexample: doc #59 (a contractor's concrete-replacement quote -
-  genuinely Hepburn-relevant) vs #60 (I CUBED's own ASIC filing, uses
-  Hepburn as registered business address) and #58 (a car purchase
-  contract, uses Hepburn as customer address) - both of the latter also
-  have "provider info" (customer numbers, dealer licences) despite being
-  nothing to do with the house. Final rule (regex, requires `hepburn`
-  AND at least one home-domain term): `rates`, `casey council`/`city of
-  casey` (Berwick is in the City of Casey LGA - verified, safe to hardcode),
-  `electricity`, `gas supply`, `water usage`, `home insurance`,
-  `contents insurance`, `mortgage`, `renovation`, `strata`,
-  `real estate`, `plumber`, `electrician`, `concrete`, `landscap*`,
-  `building`. Correctly tags #59, correctly excludes #58/#60. Retagged
-  #59 as the first real example.
-- **Still open**: actual gas/electricity/insurance provider names -
-  asked user, not yet answered. Once known, add as exact-name terms to
-  the Hepburn regex (far more precise than the generic category words
-  currently doing that job).
+- New **`Property - Hepburn (Home)`** tag created, several iterations:
+  1. Bare `hepburn` word - rejected immediately, same address-in-letterhead
+     problem, would have flooded every personal document again.
+  2. `hepburn` + generic "provider info" words - real counterexample
+     found: doc #59 (a contractor's concrete-replacement quote,
+     genuinely Hepburn-relevant) vs #60 (I CUBED's own ASIC filing) and
+     #58 (a car purchase contract) - both of the latter also have
+     "provider info" (customer numbers, dealer licences) despite being
+     nothing to do with the house.
+  3. User wanted this to survive a provider *switch* automatically, not
+     need re-confirming every time - expanded to a real list of major
+     Australian electricity/gas/insurance providers (general knowledge,
+     not user-confirmed) plus Casey Council and South East Water (both
+     geography-fixed, safe to hardcode). Documented as an explicit table
+     in `apps/paperless/README.md` rather than left buried in the regex,
+     per user's point that the regex itself is a bad way to track "which
+     providers do we match on."
+  4. Hit Paperless's 256-char limit on `Tag.match` - had to trim the
+     provider list hard to fit, prioritizing more common providers.
+  5. **Real bug caught only by actually testing the regex**, not by
+     inspection: the two-lookahead structure (`(?=.*hepburn)(?=.*(...))`)
+     silently never matches when the address and the provider term are
+     on different lines, since `.` doesn't cross newlines by default -
+     which is the normal case for real documents. I'd manually
+     force-tagged #59 earlier and claimed the rule "correctly tags #59"
+     without ever actually running the regex against it - it would have
+     matched nothing on the next real document. Fixed with the `(?s)`
+     flag. Re-tested against every document that mentions "hepburn" at
+     all (12 total) after the fix - correct on all 12.
+  6. That same test run also caught bare `rates`/`insurance` as too
+     generic (matched the car finance contract on "interest rates" and
+     "comprehensive insurance") - replaced with specific phrases
+     (`home insurance`, `contents insurance`).
+- **Still open**: real (not general-knowledge-guessed) gas/electricity/
+  insurance provider confirmation - asked user, not yet answered. Once
+  known, the confirmed provider replaces the guessed list entries for
+  that category (frees up character budget too).
 
 (10MB Drive-download tool cap itself hasn't blocked anything yet in this
 log - noted here as a standing constraint, not a specific exception:
