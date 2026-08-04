@@ -41,11 +41,23 @@ data:
       psql -v ON_ERROR_STOP=1 -d postgres -c "CREATE DATABASE immich OWNER immich;"
     fi
 
-    echo "[*] Ensuring pgvector extension is enabled in 'immich'"
-    # Requires the postgres-pgvector image (apps/postgres's
+    echo "[*] Ensuring required extensions are enabled in 'immich'"
+    # vector requires the postgres-pgvector image (apps/postgres's
     # postgres-statefulset.yml, 2026-08-04) - CREATE EXTENSION is
     # database-scoped, so this has no effect on any other database on
     # this shared instance.
+    #
+    # cube/earthdistance (geo-proximity search) are standard contrib
+    # extensions already bundled in postgres:16-alpine, no image change
+    # needed - but Immich's own migration runs as the unprivileged
+    # 'immich' role, which can't CREATE EXTENSION itself (confirmed
+    # live 2026-08-04: immich-server crashed on first boot with
+    # "permission denied to create extension earthdistance - Must be
+    # superuser"). Same fix as pg_trgm in the books database: create
+    # these here, as the postgres superuser, before immich-server ever
+    # tries. cube must come first - earthdistance depends on it.
     psql -v ON_ERROR_STOP=1 -d immich -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    psql -v ON_ERROR_STOP=1 -d immich -c "CREATE EXTENSION IF NOT EXISTS cube;"
+    psql -v ON_ERROR_STOP=1 -d immich -c "CREATE EXTENSION IF NOT EXISTS earthdistance;"
 
     echo "[*] Done - immich database ready, migrations will run from immich-server itself"
