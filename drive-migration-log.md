@@ -56,8 +56,8 @@ Full inventory (status updated as each is pulled):
 | Benchmark Target | Plan/Trading/Records | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | Trading decisions | Plan/Trading/Records | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | Position Calculator | Plan/Trading/Records/Tools | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Position_size5 | Plan/Trading/Records/Tools | pending |
-| Trading scratch.doc | Plan/Trading | pending |
+| Position_size5 | Plan/Trading/Records/Tools | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Trading scratch.doc | Plan/Trading | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | ~10x Bstevens_Cover_*.doc (near-duplicate cover letter drafts) | C.V./Cover Letters | pending |
 | BSTEVENS-20100510a.doc (nested copy, C.V./Resume) | C.V./Resume | pending - likely duplicate of top-level BSTEVENS-20100510a.doc, dedupe before pulling both |
 | CashFlow (x2, top-level), Trading Calculation, business ideas, Cafe business Design, PC config, Exercise, BSTEVENS-20100510a.doc (top-level), 2x "Imported from Google Notebook" notes, stalls, Untitled document, Untitled Presentation | top-level individual docs/sheets | pending |
