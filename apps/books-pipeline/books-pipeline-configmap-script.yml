@@ -507,24 +507,32 @@ data:
             return
 
         if meta["format"] == "pdf":
-            # PDF conversion is explicitly out of scope here (see README's
-            # "PDF triage subagent" note) - Calibre's PDF handling is the
-            # known weak point, and a PDF-sourced conversion was never going
-            # to get auto-promoted regardless (the convert-failure and
-            # quality-failure branches below both already refused to
-            # auto-promote one). Attempting ebook-convert anyway just burns
-            # up to a 600s timeout per file for no benefit. Quarantine
-            # immediately instead - same reviewability, none of the wait.
-            # Found live 2026-07-18: this was the actual reason the
-            # ~4,480-file import backlog (mostly PDFs) was barely draining.
-            quarantine(
-                path,
-                "PDF - triage not automated (Calibre's PDF handling is the known weak "
-                "point; see README's 'PDF triage subagent' note). Original may be "
-                "promotable as-is after human review (library policy: EPUB-preferred, "
-                "PDF-tolerated), but requires manual confirmation, not automatic promotion.",
-                config["quarantine_dir"], counters,
-            )
+            # Changed 2026-08-04: PDFs now promote directly, same bypass
+            # shape as comics below (skip conversion + quality-check
+            # entirely, go straight to backfill + promote). This retires
+            # the old "always quarantine, needs human review" policy -
+            # promote() itself was already fully format-agnostic
+            # (calibredb add handles PDF natively; the library policy
+            # comment used to say "EPUB-preferred, PDF-tolerated" and
+            # this makes "tolerated" mean "actually promoted", not just
+            # "allowed to sit in quarantine forever"). Conversion is
+            # still explicitly skipped - ebook-convert on a PDF is still
+            # out of scope, Calibre's PDF->EPUB conversion remains the
+            # known weak point - PDFs are promoted as PDFs, not
+            # converted. Stage 1/2 (metadata + dedup) already ran above
+            # unconditionally regardless of format, so PDFs get the same
+            # duplicate/format-upgrade protection as everything else
+            # before ever reaching here.
+            #
+            # inbox-router's own routing now backs this up on the intake
+            # side (inbox-router-configmap-routes.yml, same date): a
+            # bare/undeclared PDF defaults to Paperless (documents), not
+            # here at all - only a PDF a human explicitly placed in
+            # inbox/books ever reaches this promotion path.
+            meta = backfill_metadata(meta, config)
+            ok, promote_reason = promote(conn, meta, path, name, config, counters)
+            if not ok:
+                quarantine(path, promote_reason, config["quarantine_dir"], counters)
             return
 
         with tempfile.TemporaryDirectory() as workdir:

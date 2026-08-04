@@ -15,10 +15,12 @@ not flat files) through six stages and promotes clean results into
 Calibre's own library at `/books` via `calibredb add` (books and comics
 share one library - see "Resolved 2026-07-18" below):
 
-0. **PDFs skip straight to quarantine** - PDF triage is explicitly out
-   of scope for this pipeline (see the "PDF triage subagent" note
-   below); attempting `ebook-convert` on one anyway just burns its
-   timeout for a result that was never going to auto-promote regardless.
+0. **PDFs skip conversion, not promotion** (changed 2026-08-04, see
+   "PDF promotion path" below) - `ebook-convert` is still never
+   attempted on a PDF (Calibre's PDF handling remains the known weak
+   point for *conversion*), but after stage 1/2 (metadata + dedup)
+   pass, a PDF promotes directly via `calibredb add` instead of always
+   quarantining. Retires the old "PDF triage subagent" plan entirely.
 1. **Extract metadata** (`ebook-meta`) - title, author, ISBN.
 2. **Dedup check** against the `fingerprints` Postgres table - exact
    ISBN match first, then `pg_trgm`-narrowed candidates scored with
@@ -46,9 +48,39 @@ webhook - never auto-corrects.
 `paperless/consume`-adjacent logic (the `office-to-records` MIME rule
 in the upstream inbox-router) is dormant by design - this pipeline
 only ever sees files inbox-router already routed to `books/import`,
-so it's unaffected either way. PDF conversion is explicitly **not**
-automated (Calibre's PDF handling is the known weak point) - PDFs are
-handled by the separate PDF triage subagent (proposal not yet applied).
+so it's unaffected either way. PDF *conversion* is explicitly **not**
+automated (Calibre's PDF handling is the known weak point for that
+specifically) - see "PDF promotion path" below for what does happen to
+PDFs now.
+
+## PDF promotion path (2026-08-04)
+
+Retires the "PDF triage subagent" plan (was proposal-only, and
+`inbox/triage` - where undeclared bare-root PDFs used to land - had no
+downstream consumer at all; anything routed there just sat forever).
+Replaced with the same "presence in a directory is the declaration"
+convention `inbox-router` already uses everywhere else, rather than
+building a content-based classifier:
+
+- A PDF a human explicitly places in `inbox/books` is unambiguously a
+  book - it flows through here, gets metadata extraction + dedup
+  checked exactly like every other format (stages 1/2, unconditional),
+  skips conversion (stage 3) and quality-check (stage 4, EPUB-only
+  anyway), then promotes directly via `calibredb add` (stage 6) as a
+  native PDF - `promote()` was already fully format-agnostic, this
+  only removed the unconditional quarantine that used to sit in front
+  of it.
+- A bare/undeclared PDF (dropped straight in the inbox root, no
+  explicit subdirectory) now defaults to Paperless instead
+  (`inbox-router-configmap-routes.yml`'s `pdf-to-records` rule,
+  replacing the old `pdf-to-triage` one) - Paperless handles PDFs
+  natively and automatically, no review step needed. This never
+  reaches books-pipeline at all.
+
+Quarantine for a PDF now only happens on a genuine `promote()` failure
+(insufficient metadata after backfill, or a real `calibredb` error) -
+same failure handling every other format already gets, not a blanket
+policy against the format.
 
 ## Image
 

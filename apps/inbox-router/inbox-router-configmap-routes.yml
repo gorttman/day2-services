@@ -63,15 +63,21 @@ data:
           - application/vnd.oasis.opendocument.presentation
         dest: /mnt/paperless/consume
     
-      # Re-added 2026-07-17 (prompt 6 landed): a bare-root PDF is ambiguous
-      # (could be a book or a Paperless document), so it goes to the PDF
-      # triage subagent rather than either destination directly. Note
-      # inbox/records above already bypasses this entirely - a PDF placed
-      # there by directory convention goes straight to Paperless, no
-      # triage. This rule only ever catches undeclared PDFs.
-      - name: pdf-to-triage
+      # Changed 2026-08-04: retires the "PDF triage subagent" plan (was
+      # "proposal not yet applied" per books-pipeline's README, and
+      # inbox/triage had no downstream consumer at all - PDFs landing
+      # there just sat forever). Simpler resolution: a bare/undeclared
+      # PDF defaults to being a document, same as office-to-records
+      # above - Paperless handles PDFs natively and automatically, no
+      # review step needed. A PDF that's actually a book still has a
+      # clear, unambiguous path: place it in inbox/books (explicit_dirs
+      # above), same "presence in directory is the declaration"
+      # convention as everything else here - see
+      # books-pipeline-configmap-script.yml's PDF promotion path for
+      # that side of this change.
+      - name: pdf-to-records
         mime: [application/pdf]
-        dest: /mnt/inbox/triage
+        dest: /mnt/paperless/consume
     
     # No match on any explicit_dir or mime_default rule -> quarantine.
     # Includes photos/video/audio/archives - no subagent exists yet for
