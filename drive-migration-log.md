@@ -44,18 +44,18 @@ Full inventory (status updated as each is pulled):
 
 | Item | Folder | Status |
 |---|---|---|
-| Coq Au Vin | Recipes | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Raspberry & White Chocolate Muffins | Recipes | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Moroccan Meatballs | Recipes | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| Italian Meatballs | Recipes | pushed to inbox/records 2026-08-04 as .txt (PDF export was too small to trigger the safe file-overflow path and I won't manually transcribe base64 - used read_file_content's text extraction instead, same content, safe method) |
-| Business Plan.doc | Plan/Business Plan-budget | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| cafe-list | Plan/Business Plan-budget | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| cash flow | Plan/Business Plan-budget | pushed to inbox/records 2026-08-04 as .txt (same reason as Italian Meatballs - PDF export too small to trigger safe overflow, used read_file_content instead) |
-| Finance Plan | Plan/Business Plan-budget | pending |
-| Trading procedures.docx | Plan/Trading/Records | pending |
-| Benchmark Target | Plan/Trading/Records | pending |
-| Trading decisions | Plan/Trading/Records | pending |
-| Position Calculator | Plan/Trading/Records/Tools | pending |
+| Coq Au Vin | Recipes | done - Paperless #23 |
+| Raspberry & White Chocolate Muffins | Recipes | done - Paperless #28 |
+| Moroccan Meatballs | Recipes | done - Paperless #25 |
+| Italian Meatballs | Recipes | done - Paperless #27 (pushed as .txt - PDF export was too small to trigger the safe file-overflow path and I won't manually transcribe base64; used read_file_content's text extraction instead, same content, safe method) |
+| Business Plan.doc | Plan/Business Plan-budget | done - Paperless #26 |
+| cafe-list | Plan/Business Plan-budget | done - Paperless #24 |
+| cash flow | Plan/Business Plan-budget | done - Paperless #22 (pushed as .txt, same reason as Italian Meatballs) |
+| Finance Plan | Plan/Business Plan-budget | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Trading procedures.docx | Plan/Trading/Records | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Benchmark Target | Plan/Trading/Records | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Trading decisions | Plan/Trading/Records | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Position Calculator | Plan/Trading/Records/Tools | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | Position_size5 | Plan/Trading/Records/Tools | pending |
 | Trading scratch.doc | Plan/Trading | pending |
 | ~10x Bstevens_Cover_*.doc (near-duplicate cover letter drafts) | C.V./Cover Letters | pending |
