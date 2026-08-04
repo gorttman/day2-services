@@ -48,9 +48,9 @@ Full inventory (status updated as each is pulled):
 | Raspberry & White Chocolate Muffins | Recipes | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | Moroccan Meatballs | Recipes | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | Italian Meatballs | Recipes | pushed to inbox/records 2026-08-04 as .txt (PDF export was too small to trigger the safe file-overflow path and I won't manually transcribe base64 - used read_file_content's text extraction instead, same content, safe method) |
-| Business Plan.doc | Plan/Business Plan-budget | pending |
-| cafe-list | Plan/Business Plan-budget | pending |
-| cash flow | Plan/Business Plan-budget | pending |
+| Business Plan.doc | Plan/Business Plan-budget | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| cafe-list | Plan/Business Plan-budget | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| cash flow | Plan/Business Plan-budget | pushed to inbox/records 2026-08-04 as .txt (same reason as Italian Meatballs - PDF export too small to trigger safe overflow, used read_file_content instead) |
 | Finance Plan | Plan/Business Plan-budget | pending |
 | Trading procedures.docx | Plan/Trading/Records | pending |
 | Benchmark Target | Plan/Trading/Records | pending |
