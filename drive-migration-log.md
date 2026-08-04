@@ -33,21 +33,37 @@ Not started. Domain was untouched until Immich was deployed 2026-08-04.
 
 ## gmail.com shared content (shared to i3sec.com.au 2026-08-04)
 
-Top-level survey only so far - folders not yet opened:
+Note: the Drive tool's `parentId` query doesn't reliably traverse into
+these shared folders (a real tool limitation, confirmed - the folders
+are NOT actually empty). Workaround: paginating the full
+`owner = 'gorttman@gmail.com'` listing surfaces everything, including
+each item's real parentId, so the tree gets reconstructed from the
+flat list instead of by querying folders directly.
 
-| Item | Type | Notes |
+Full inventory (status updated as each is pulled):
+
+| Item | Folder | Status |
 |---|---|---|
-| Cover Letters | folder | not opened |
-| General | folder | not opened |
-| Plan | folder | not opened |
-| Cafe training | folder | not opened |
-| Recipes | folder | not opened |
-| Resume | folder | not opened |
-| Themes | folder | not opened |
-| Business Plan | folder | not opened |
-| C.V. | folder | not opened |
-| CashFlow (x2), Trading Calculation, business ideas, Cafe business Design, PC config, Exercise, BSTEVENS-20100510a.doc (x2), 2x "Imported from Google Notebook" notes | individual docs/sheets | not yet pulled |
-| neobox.zip, vespa-love-10.zip, seashore.zip, primepress.zip, Peruns_Weblog.zip, abstractblu.zip, rihanna.zip | small zips (~70-230KB) | old WordPress theme files, ~2010 - low value, not yet triaged for whether worth pulling at all |
+| Coq Au Vin | Recipes | pending |
+| Raspberry & White Chocolate Muffins | Recipes | pending |
+| Moroccan Meatballs | Recipes | pending |
+| Italian Meatballs | Recipes | pending |
+| Business Plan.doc | Plan/Business Plan-budget | pending |
+| cafe-list | Plan/Business Plan-budget | pending |
+| cash flow | Plan/Business Plan-budget | pending |
+| Finance Plan | Plan/Business Plan-budget | pending |
+| Trading procedures.docx | Plan/Trading/Records | pending |
+| Benchmark Target | Plan/Trading/Records | pending |
+| Trading decisions | Plan/Trading/Records | pending |
+| Position Calculator | Plan/Trading/Records/Tools | pending |
+| Position_size5 | Plan/Trading/Records/Tools | pending |
+| Trading scratch.doc | Plan/Trading | pending |
+| ~10x Bstevens_Cover_*.doc (near-duplicate cover letter drafts) | C.V./Cover Letters | pending |
+| BSTEVENS-20100510a.doc (nested copy, C.V./Resume) | C.V./Resume | pending - likely duplicate of top-level BSTEVENS-20100510a.doc, dedupe before pulling both |
+| CashFlow (x2, top-level), Trading Calculation, business ideas, Cafe business Design, PC config, Exercise, BSTEVENS-20100510a.doc (top-level), 2x "Imported from Google Notebook" notes, stalls, Untitled document, Untitled Presentation | top-level individual docs/sheets | pending |
+| Margots_20112010..., Bike_trail_1_14112010... (gpx.txt) | top-level | pending - GPS tracks, low priority |
+| neobox.zip, vespa-love-10.zip, seashore.zip, primepress.zip, Peruns_Weblog.zip, abstractblu.zip, rihanna.zip | top-level | pending - old WordPress theme files, ~2010, low value but included per "migrate all data" |
+| General, Cafe training (outer), Themes | folders | not yet found any content with matching parentId - genuinely may be empty, or not yet reached in pagination |
 
 ## Exceptions (blocked by tool limits, need manual handling)
 
