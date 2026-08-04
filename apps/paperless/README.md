@@ -108,6 +108,39 @@ Without these, Office formats land in `consume/` and are never picked
 up — six files did exactly this from the first i3sec.com.au records
 import pass, sitting untouched until this landed.
 
+## Property tags: Greenlaw vs Hepburn (2026-08-05)
+Two separate addresses, deliberately kept as separate tags rather than
+one generic "Property" tag - see `drive-migration-log.md`'s "Property
+tag restructure" section for the full story of why the original generic
+tag had to be split.
+
+- **`Property - Greenlaw (Rental)`** - former rental, matches on the
+  street name alone (`greenlaw`, any-word) - distinctive enough on its
+  own, no false positives found.
+- **`Property - Hepburn (Home)`** - current private home. The address
+  itself is unsafe to match on alone (it's in the letterhead of nearly
+  every personal document) - the actual matching rule requires the
+  address *plus* one of the terms in the table below. **This table is
+  the real source of truth** - update it here first when a provider
+  changes, then update the Tag's regex in Paperless to match. Don't
+  edit the regex directly without updating this table, they'll drift.
+
+  | Category | Current provider | Notes |
+  |---|---|---|
+  | Council (rates) | Casey Council / City of Casey | Fixed - Berwick/Hepburn Ct is in this LGA, won't change unless they move |
+  | Electricity | *(not yet provided)* | |
+  | Gas | *(not yet provided)* | |
+  | Water | *(not yet provided)* | |
+  | Home/contents insurance | *(not yet provided)* | |
+
+  Generic fallback terms also in the current regex until real provider
+  names are filled in above: `electricity`, `gas supply`, `water usage`,
+  `home insurance`, `contents insurance`, `mortgage`, `renovation`,
+  `strata`, `real estate`, `plumber`, `electrician`, `concrete`,
+  `landscap*`, `building` - these are weaker (category words, not named
+  entities) and should be replaced by the actual provider name once
+  known, same reasoning as why `hepburn` alone couldn't be used.
+
 ## Deliberately unconfigured (separate pass)
 - OCR language at default (`eng`)
 - No Cloudflare Tunnel exposure (tunnel path blocked)
