@@ -58,8 +58,8 @@ Full inventory (status updated as each is pulled):
 | Position Calculator | Plan/Trading/Records/Tools | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | Position_size5 | Plan/Trading/Records/Tools | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | Trading scratch.doc | Plan/Trading | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
-| ~10x Bstevens_Cover_*.doc (near-duplicate cover letter drafts) | C.V./Cover Letters | pending |
-| BSTEVENS-20100510a.doc (nested copy, C.V./Resume) | C.V./Resume | pending - likely duplicate of top-level BSTEVENS-20100510a.doc, dedupe before pulling both |
+| 9x Bstevens_Cover_*.doc (near-duplicate cover letter drafts) | C.V./Cover Letters | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| BSTEVENS-20100510a.doc (nested copy, C.V./Resume) + top-level copy | C.V./Resume + top-level | pushed both to inbox/records 2026-08-04 (distinct file IDs despite same name - let Paperless's own duplicate detection resolve it if actually identical, same as it correctly did for the original records batch) |
 | CashFlow (x2, top-level), Trading Calculation, business ideas, Cafe business Design, PC config, Exercise, BSTEVENS-20100510a.doc (top-level), 2x "Imported from Google Notebook" notes, stalls, Untitled document, Untitled Presentation | top-level individual docs/sheets | pending |
 | Margots_20112010..., Bike_trail_1_14112010... (gpx.txt) | top-level | pending - GPS tracks, low priority |
 | neobox.zip, vespa-love-10.zip, seashore.zip, primepress.zip, Peruns_Weblog.zip, abstractblu.zip, rihanna.zip | top-level | pending - old WordPress theme files, ~2010, low value but included per "migrate all data" |
