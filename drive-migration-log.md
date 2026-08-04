@@ -73,8 +73,8 @@ Full inventory (status updated as each is pulled):
 | Untitled document | top-level | skipped - genuinely empty (confirmed via content read) |
 | Untitled Presentation | top-level | skipped - genuinely empty (just slide separators, no content) |
 | Margots_20112010..., Bike_trail_1_14112010... (gpx.txt) | top-level | done - Paperless #55 (Margots), #56 (Bike_trail) (both pushed as .txt - small inline PDF exports, used read_file_content text extraction) |
-| neobox.zip, vespa-love-10.zip, seashore.zip, primepress.zip, Peruns_Weblog.zip, abstractblu.zip, rihanna.zip | top-level | pending decision - old WordPress theme files, ~2010, low value, asked user whether these are actually wanted |
-| General, Cafe training (outer), Themes | folders | not yet found any content with matching parentId - genuinely may be empty, or not yet reached in pagination |
+| neobox.zip, vespa-love-10.zip, seashore.zip, primepress.zip, Peruns_Weblog.zip, abstractblu.zip, rihanna.zip, Maggo.zip (8th found on the final full-inventory pass) | top-level | skipped - user decision 2026-08-05, old WordPress theme files not wanted |
+| General, Cafe training (outer), Themes | folders | confirmed genuinely empty 2026-08-05 - full owner='gorttman@gmail.com' flat listing paginated to exhaustion, no item anywhere has a parentId matching any of these 3 folder IDs |
 
 ## Exceptions (blocked by tool limits, need manual handling)
 
@@ -92,11 +92,18 @@ manually removed - both items below moved from "exception" to "done".
 | USA Canada Alaska Trip Planner...xlsx | i3sec.com.au records | done - Paperless #62 |
 | Routine Inspection - 13 Greenlaw Cres, Berwick (1).pdf | i3sec.com.au records | done - orphaned duplicate deleted from consume folder |
 
-**Still open:**
-
-| File | Source | Reason | What to do |
-|---|---|---|---|
-| BSTEVENS-20100510a-CV-Resume (#44) and BSTEVENS-20100510a-toplevel (#42) | gmail.com top-level + C.V./Resume | Auto-matching rule false positive: `Contract` doc-type and `Insurance`/`Property` tags use "any word" matching against generic terms (`employment`, `Berwick`, `insurance`, etc.) that also appear in your resume text | Manually clear document_type/tags on #42 and #44 in Paperless UI. Longer-term: tighten those 3 matching rules (all-words/exact-phrase/regex instead of any-word) - flagged for discussion 2026-08-04, not yet actioned pending your call on approach |
+Resolved 2026-08-05: tag/doc-type matching rules tightened (Contract ->
+"all words" instead of "any word"; Insurance/Property -> specific
+multi-word phrases instead of generic single words/address tokens), and
+document_type + tags force-cleared on #42/#44 via a queryset `.update()`
+(a plain `.save()` was silently reverting the change - Paperless has
+some save-path logic that reasserts fields, worth remembering if this
+comes up again). Watch #42/#44 on the next reprocess/redo-OCR to confirm
+the tightened Contract rule (now "all words": contract+agreement+
+employment) doesn't retrigger - Brett's IT-contracting background makes
+it plausible the resume text genuinely contains all three words, in
+which case this specific false positive may need a document-level
+exclude rather than a global rule change.
 
 (10MB Drive-download tool cap itself hasn't blocked anything yet in this
 log - noted here as a standing constraint, not a specific exception:
