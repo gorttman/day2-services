@@ -60,9 +60,20 @@ Full inventory (status updated as each is pulled):
 | Trading scratch.doc | Plan/Trading | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | 9x Bstevens_Cover_*.doc (near-duplicate cover letter drafts) | C.V./Cover Letters | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
 | BSTEVENS-20100510a.doc (nested copy, C.V./Resume) + top-level copy | C.V./Resume + top-level | pushed both to inbox/records 2026-08-04 (distinct file IDs despite same name - let Paperless's own duplicate detection resolve it if actually identical, same as it correctly did for the original records batch) |
-| CashFlow (x2, top-level), Trading Calculation, business ideas, Cafe business Design, PC config, Exercise, BSTEVENS-20100510a.doc (top-level), 2x "Imported from Google Notebook" notes, stalls, Untitled document, Untitled Presentation | top-level individual docs/sheets | pending |
+| CashFlow (x2, top-level) | top-level | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Trading Calculation | top-level | done - pushed as .txt (small inline PDF, same reason as others) |
+| business ideas | top-level | done - pushed as .txt |
+| Cafe business Design | top-level | done - pushed as PDF |
+| PC config | top-level | done - pushed as PDF |
+| Exercise | top-level | done - pushed as .txt |
+| BSTEVENS-20100510a.doc (top-level) | top-level | done - included in the cover-letters batch above |
+| Imported from Google Notebook - Solaris Notes | top-level | done - pushed as .txt |
+| Imported from Google Notebook - Ubuntu/Debian | top-level | done - pushed as .txt |
+| stalls | top-level | done - pushed as .txt (condensed table, source spreadsheet may continue past what the text-extraction tool returned) |
+| Untitled document | top-level | skipped - genuinely empty (confirmed via content read) |
+| Untitled Presentation | top-level | skipped - genuinely empty (just slide separators, no content) |
 | Margots_20112010..., Bike_trail_1_14112010... (gpx.txt) | top-level | pending - GPS tracks, low priority |
-| neobox.zip, vespa-love-10.zip, seashore.zip, primepress.zip, Peruns_Weblog.zip, abstractblu.zip, rihanna.zip | top-level | pending - old WordPress theme files, ~2010, low value but included per "migrate all data" |
+| neobox.zip, vespa-love-10.zip, seashore.zip, primepress.zip, Peruns_Weblog.zip, abstractblu.zip, rihanna.zip | top-level | pending decision - old WordPress theme files, ~2010, low value, asked user whether these are actually wanted |
 | General, Cafe training (outer), Themes | folders | not yet found any content with matching parentId - genuinely may be empty, or not yet reached in pagination |
 
 ## Exceptions (blocked by tool limits, need manual handling)
