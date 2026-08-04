@@ -1,7 +1,8 @@
 # Postgres (shared instance)
 
 **Status:** ACTIVE
-**Version:** 16.9 (postgres:16.9-alpine)
+**Version:** 16.9, pgvector 0.8.6 (ghcr.io/gorttman/postgres-pgvector:1.0.0,
+see images/postgres-pgvector - built 2026-08-04 for apps/immich)
 **Namespace:** postgres
 **Sync Wave:** 0 (namespace only)
 **Tags:** `database` `infra` `shared`
@@ -55,5 +56,53 @@ ingress. Superuser password in the `postgres-superuser` sealed secret.
 | database      | owner         | used by                                  |
 |----------------|---------------|-------------------------------------------|
 | paperless      | paperless     | apps/paperless (day2)                     |
-| cloudflare_tf  | cloudflare_tf | day1-foundation apps/cloudflare-tf (Terraform state, `pg` backend) |
-| books          | books         | apps/books-pipeline (day2) - `fingerprints` table + `pg_trgm`, provisioned via the automated Job above |
+| homeassistant  | homeassistant | apps/homeassistant (day2) - Recorder, long-lived SQLAlchemy session |
+| n8n            | n8n           | apps/n8n (day2) - long-lived connection pool |
+| cloudflare_tf  | cloudflare_tf | day1-foundation apps/cloudflare-tf (Terraform state, `pg` backend) - connects only during `apply`, no persistent process |
+| books          | books         | apps/books-pipeline (day2) - `fingerprints` table + `pg_trgm`, provisioned via the automated Job above - fresh connection per CronJob run, no persistent pool |
+
+## pgvector, and what a shared instance actually costs (2026-08-04)
+
+Added the `pgvector` extension (via `images/postgres-pgvector`, built on
+this exact `postgres:16.9-alpine` base rather than switching to the
+upstream Debian/glibc `pgvector/pgvector:pg16` image - see that
+Dockerfile's own comments for why a libc/collation change on a shared
+instance with 5 existing databases was the real risk, not the extension
+itself) so `apps/immich` could use this instance instead of standing up
+its own. This is the textbook case for **why per-app databases are
+usually the better default**: a change made for one app (Immich) required
+restarting Postgres for **every** app on the instance, and two of them -
+`homeassistant` and `n8n` - hold long-lived connections that don't
+automatically survive that. Regression-tested all five consumers
+immediately after the restart:
+
+| App | Connection pattern | Result |
+|---|---|---|
+| paperless | fresh connection per request (Django default) | self-healed - errors only during the actual restart window, none after |
+| n8n | persistent pool | self-healed - pool evicted the dead clients on its own within ~1 min |
+| homeassistant | persistent SQLAlchemy session (Recorder) | **did not self-heal** - stuck in `sqlalchemy.exc.PendingRollbackError` indefinitely; required a manual pod restart to clear |
+| books-pipeline | fresh connection per CronJob run | unaffected by design |
+| cloudflare_tf | Terraform `apply` only | no live process to affect |
+
+If this were N separate Postgres instances, only Immich's own restart
+would have mattered, and Home Assistant's recorder would never have
+noticed. That blast radius is the real cost of "shared" - not disk, not
+CPU, but every dependent app's *connection-handling code* becoming a
+shared risk surface, invisible until something like an image swap
+actually exercises it.
+
+**Why we still do it as one shared instance anyway, in this environment
+specifically**: this is a single-operator home lab cluster, not a team
+with a platform-ops function - running N independent instances is a real
+ongoing cost (patching, backup, monitoring, sealed-secret rotation,
+PVC/storage overhead) for a workload where every one of these databases
+is small and low-QPS, and none of them need dedicated tuning or isolation
+for performance. One instance to patch and back up beats five. The tradeoff only stays acceptable
+because of two things demonstrated live here: (1) regression-testing
+every dependent app after any shared-instance change, not just assuming
+"the DB came back up so we're fine" - the two self-healing apps *looked*
+identical to the one that wasn't from the outside (pod stayed `Running`
+the whole time) until logs were actually checked; and (2) knowing in
+advance which consumers use long-lived connections (need active
+attention after any restart) versus per-request/per-run connections
+(self-heal, no action needed).
