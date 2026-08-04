@@ -1,0 +1,21 @@
+# Model cache only (downloaded CLIP/face-recognition weights) -
+# re-derivable, not real data, so this belongs on k8smaster's own disk
+# (nfs-client), not the QNAP - same rule as every other genuinely
+# cluster-internal volume in this repo. Persisting it just avoids
+# re-downloading ~1GB+ of models on every pod restart.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-ml-cache
+  namespace: immich
+  labels:
+    app: immich-machine-learning
+    app.kubernetes.io/name: immich-machine-learning
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 5Gi

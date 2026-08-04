@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: immich
+  namespace: immich
+  labels:
+    app: immich
+    app.kubernetes.io/name: immich
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "private-ca"
+spec:
+  # Internal-only for now, same as paperless/calibre-web's internal
+  # hostname - no Cloudflare Tunnel annotation. DNS entry needed in
+  # dns-conf (pihole + coredns) before this actually resolves.
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - immich.i3sec.com.au
+    secretName: immich-tls
+  rules:
+  - host: immich.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: immich-server
+            port:
+              number: 2283

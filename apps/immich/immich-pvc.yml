@@ -1,0 +1,20 @@
+# Claims the static qnap-immich PV (day1-foundation/apps/qnap-storage).
+# Same binding pattern as calibre-web-books-pvc.yml / obsidian's vault
+# claim - storageClassName + volumeName, not the default provisioner.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-library
+  namespace: immich
+  labels:
+    app: immich
+    app.kubernetes.io/name: immich
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: qnap-static
+  volumeName: qnap-immich
+  resources:
+    requests:
+      storage: 1Ti

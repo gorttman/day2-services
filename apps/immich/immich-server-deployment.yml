@@ -1,0 +1,102 @@
+# Pinned to k8smaster - same tmpfs/RAM reasoning as every other heavy
+# image in this cluster (paperless, books-pipeline, immich-machine-learning).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-server
+  namespace: immich
+  labels:
+    app: immich-server
+    app.kubernetes.io/name: immich-server
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: immich
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: immich-server
+  template:
+    metadata:
+      labels:
+        app: immich-server
+        app.kubernetes.io/name: immich-server
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
+      enableServiceLinks: false
+      containers:
+      - name: immich-server
+        image: ghcr.io/immich-app/immich-server:v3.1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 2283
+        env:
+        - name: TZ
+          value: Australia/Sydney
+        - name: DB_HOSTNAME
+          value: postgres.postgres.svc.cluster.local
+        - name: DB_USERNAME
+          value: immich
+        - name: DB_DATABASE_NAME
+          value: immich
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: immich-secret
+              key: DB_PASSWORD
+        - name: REDIS_HOSTNAME
+          value: immich-redis
+        # IMMICH_MACHINE_LEARNING_URL deliberately unset - defaults to
+        # http://immich-machine-learning:3003, which matches this
+        # Service's actual name (see immich-ml-deployment.yml's own
+        # comment).
+        volumeMounts:
+        - name: library
+          mountPath: /data
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 250m
+          limits:
+            memory: 2Gi
+            cpu: "2"
+        readinessProbe:
+          httpGet:
+            path: /api/server/ping
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /api/server/ping
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: library
+        persistentVolumeClaim:
+          claimName: immich-library
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: immich-server
+  namespace: immich
+  labels:
+    app: immich-server
+    app.kubernetes.io/name: immich-server
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  selector:
+    app: immich-server
+  ports:
+  - name: http
+    port: 2283
+    targetPort: http

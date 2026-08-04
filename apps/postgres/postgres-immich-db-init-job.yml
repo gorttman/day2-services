@@ -1,0 +1,49 @@
+# Same pattern as postgres-books-db-init-job.yml. Jobs are immutable
+# once created: delete (`kubectl delete job postgres-immich-db-init
+# -n postgres`) and let Argo CD recreate it to force a re-run - the
+# script itself is idempotent either way.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-immich-db-init
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: init-immich-db
+          # Plain postgres:16.9-alpine, not the pgvector image - this
+          # only needs the psql client, and pgvector only has to exist
+          # on the server side (already true post-2026-08-04 cutover).
+          image: postgres:16.9-alpine
+          command: ["/bin/sh", "/scripts/init-immich-db.sh"]
+          env:
+            - name: PGHOST
+              value: postgres.postgres.svc.cluster.local
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-superuser
+                  key: POSTGRES_PASSWORD
+            - name: IMMICH_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-superuser
+                  key: IMMICH_DB_PASSWORD
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: postgres-immich-db-init
+            defaultMode: 0555

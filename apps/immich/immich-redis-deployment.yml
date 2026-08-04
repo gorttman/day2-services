@@ -1,0 +1,64 @@
+# Dedicated in-namespace Redis, same pattern as paperless-redis: broker
+# only, no persistence. Immich's own compose file uses valkey (a redis
+# fork), but redis:7.4-alpine is RESP-protocol compatible and matches
+# what this repo already runs elsewhere - not introducing a second
+# cache/broker image for one app.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-redis
+  namespace: immich
+  labels:
+    app: immich-redis
+    app.kubernetes.io/name: immich-redis
+    app.kubernetes.io/component: broker
+    app.kubernetes.io/part-of: immich
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-redis
+  template:
+    metadata:
+      labels:
+        app: immich-redis
+        app.kubernetes.io/name: immich-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.4-alpine
+        imagePullPolicy: IfNotPresent
+        args: ["--save", "", "--appendonly", "no"]
+        ports:
+        - name: redis
+          containerPort: 6379
+        resources:
+          requests:
+            memory: 32Mi
+            cpu: 25m
+          limits:
+            memory: 128Mi
+            cpu: 250m
+        readinessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: immich-redis
+  namespace: immich
+  labels:
+    app: immich-redis
+    app.kubernetes.io/name: immich-redis
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  selector:
+    app: immich-redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis

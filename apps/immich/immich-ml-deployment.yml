@@ -1,0 +1,91 @@
+# Service MUST be named exactly "immich-machine-learning" - immich-server
+# defaults IMMICH_MACHINE_LEARNING_URL to
+# http://immich-machine-learning:3003 (confirmed in server/src/config.ts)
+# and this repo relies on that default rather than setting the env var
+# explicitly, matching Immich's own docker-compose service-name
+# convention.
+#
+# CPU-only image (no -cuda/-openvino/-armnn/-rocm/-rknn suffix) - this
+# cluster has no GPU. Pinned to k8smaster for the same tmpfs/RAM reasons
+# as every other heavy image here (paperless, books-pipeline) - expect
+# CPU-only CLIP/face-recognition inference to be genuinely slow on Pi
+# hardware, especially the first backfill over an existing library; see
+# README.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-machine-learning
+  namespace: immich
+  labels:
+    app: immich-machine-learning
+    app.kubernetes.io/name: immich-machine-learning
+    app.kubernetes.io/component: ml
+    app.kubernetes.io/part-of: immich
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: immich-machine-learning
+  template:
+    metadata:
+      labels:
+        app: immich-machine-learning
+        app.kubernetes.io/name: immich-machine-learning
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
+      enableServiceLinks: false
+      containers:
+      - name: immich-machine-learning
+        image: ghcr.io/immich-app/immich-machine-learning:v3.1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3003
+        volumeMounts:
+        - name: cache
+          mountPath: /cache
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 250m
+          limits:
+            memory: 3Gi
+            cpu: "3"
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: cache
+        persistentVolumeClaim:
+          claimName: immich-ml-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: immich-machine-learning
+  namespace: immich
+  labels:
+    app: immich-machine-learning
+    app.kubernetes.io/name: immich-machine-learning
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  selector:
+    app: immich-machine-learning
+  ports:
+  - name: http
+    port: 3003
+    targetPort: http

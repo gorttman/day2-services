@@ -1,0 +1,51 @@
+# Idempotent - safe to leave in place and re-run (e.g. after deleting
+# the completed Job to force a re-check). Same pattern as
+# postgres-books-db-init-configmap.yml.
+#
+# Only creates the role/database/extension - unlike books, no
+# application tables are pre-created here. Immich runs its own
+# migrations against the immich role on server startup and will own
+# everything it creates itself, so there's no ALTER TABLE ... OWNER TO
+# step needed (that was only necessary for books because this script
+# itself created the fingerprints table as the postgres superuser).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-immich-db-init
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+data:
+  init-immich-db.sh: |
+    #!/bin/sh
+    set -eu
+
+    echo "[*] Ensuring role 'immich' exists"
+    # $IMMICH_DB_PASSWORD comes from openssl rand -base64 32 - see
+    # postgres-books-db-init-configmap.yml's own comment on why direct
+    # interpolation of that specific charset is safe here.
+    psql -v ON_ERROR_STOP=1 -d postgres <<-SQL
+      DO \$\$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'immich') THEN
+          CREATE ROLE immich LOGIN PASSWORD '${IMMICH_DB_PASSWORD}';
+        END IF;
+      END
+      \$\$;
+    SQL
+
+    echo "[*] Ensuring database 'immich' exists"
+    if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'immich'" | grep -q 1; then
+      psql -v ON_ERROR_STOP=1 -d postgres -c "CREATE DATABASE immich OWNER immich;"
+    fi
+
+    echo "[*] Ensuring pgvector extension is enabled in 'immich'"
+    # Requires the postgres-pgvector image (apps/postgres's
+    # postgres-statefulset.yml, 2026-08-04) - CREATE EXTENSION is
+    # database-scoped, so this has no effect on any other database on
+    # this shared instance.
+    psql -v ON_ERROR_STOP=1 -d immich -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+    echo "[*] Done - immich database ready, migrations will run from immich-server itself"

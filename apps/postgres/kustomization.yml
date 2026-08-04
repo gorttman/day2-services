@@ -10,3 +10,5 @@ resources:
   - postgres-adminer.yml
   - postgres-books-db-init-configmap.yml
   - postgres-books-db-init-job.yml
+  - postgres-immich-db-init-configmap.yml
+  - postgres-immich-db-init-job.yml
