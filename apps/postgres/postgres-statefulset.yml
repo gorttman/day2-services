@@ -23,7 +23,17 @@ spec:
     spec:
       containers:
       - name: postgres
-        image: postgres:16.9-alpine
+        # Adds the pgvector extension for Immich's ML/smart-search
+        # features (apps/immich) - built from postgres:16.9-alpine itself
+        # (images/postgres-pgvector), not the upstream Debian/glibc-based
+        # pgvector/pgvector:pg16 image, to avoid a musl->glibc collation
+        # change corrupting existing text-column indexes. Extension is
+        # additive and per-database (CREATE EXTENSION is scoped to
+        # whichever DB calls it) - paperless/homeassistant/n8n/books/
+        # cloudflare_tf are all unaffected either way. See
+        # images/postgres-pgvector/Dockerfile for the full build story
+        # (2026-08-04) and README.md's Postgres section.
+        image: ghcr.io/gorttman/postgres-pgvector:1.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - name: postgres
