@@ -31,7 +31,7 @@ spec:
         kubernetes.io/hostname: k8smaster
       containers:
       - name: tika
-        image: ghcr.io/paperless-ngx/paperless-tika:latest
+        image: docker.io/apache/tika:2.9.2.1-full
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
