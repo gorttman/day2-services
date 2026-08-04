@@ -19,8 +19,8 @@ in Exceptions (Office formats, blocked pending Tika/Gotenberg). See
 | Source | Drive account | Destination | Status |
 |---|---|---|---|
 | Sinner Takes All - Tera Patrick | i3sec.com.au | Calibre #8041 | done (already present from unrelated earlier bulk import, confirmed duplicate) |
-| CCNA Study Guide.pdf | i3sec.com.au | Calibre | pending (re-queued in `/books/import` 2026-08-04, awaiting pipeline run with new PDF promotion path) |
-| CCNA Review Guide.pdf | i3sec.com.au | Calibre | pending (same as above) |
+| CCNA Study Guide.pdf | i3sec.com.au | Calibre #10967 | done (confirmed 2026-08-04, first real use of the new PDF promotion path) |
+| CCNA Review Guide.pdf | i3sec.com.au | Calibre #10966 | done (same run) |
 | Secrets of Mental Math | i3sec.com.au | Calibre | pending (not yet attempted) |
 | Getting Things Done | i3sec.com.au | Calibre | pending (not yet checked against existing library - a same-titled book already exists from an unrelated bulk import, needs duplicate-check before pulling) |
 | The Power of Habit | i3sec.com.au | Calibre | pending (same caveat as above) |
