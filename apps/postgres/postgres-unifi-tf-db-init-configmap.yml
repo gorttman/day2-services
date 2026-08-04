@@ -1,0 +1,38 @@
+# Idempotent - safe to leave in place and re-run (e.g. after deleting
+# the completed Job to force a re-check). Same pattern as
+# postgres-immich-db-init-configmap.yml - just role/database, no
+# extensions or pre-created tables, same as cloudflare_tf's onboarding.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-unifi-tf-db-init
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+data:
+  init-unifi-tf-db.sh: |
+    #!/bin/sh
+    set -eu
+
+    echo "[*] Ensuring role 'unifi_tf' exists"
+    # $UNIFI_TF_DB_PASSWORD comes from openssl rand -base64 32 - see
+    # postgres-books-db-init-configmap.yml's own comment on why direct
+    # interpolation of that specific charset is safe here.
+    psql -v ON_ERROR_STOP=1 -d postgres <<-SQL
+      DO \$\$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'unifi_tf') THEN
+          CREATE ROLE unifi_tf LOGIN PASSWORD '${UNIFI_TF_DB_PASSWORD}';
+        END IF;
+      END
+      \$\$;
+    SQL
+
+    echo "[*] Ensuring database 'unifi_tf' exists"
+    if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'unifi_tf'" | grep -q 1; then
+      psql -v ON_ERROR_STOP=1 -d postgres -c "CREATE DATABASE unifi_tf OWNER unifi_tf;"
+    fi
+
+    echo "[*] Done - unifi_tf database ready for the pg Terraform backend"
