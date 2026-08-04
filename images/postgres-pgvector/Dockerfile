@@ -26,13 +26,25 @@ FROM postgres:16.9-alpine
 
 ARG PGVECTOR_VERSION=v0.8.6
 
+# Build-tested live (2026-08-04) against this exact image tag: it has
+# --with-llvm JIT support baked in, and pg_config reports
+# LLVM_CONFIG=/usr/lib/llvm19/bin/llvm-config - PGXS's bitcode step
+# invokes `clang-19` specifically (matching that LLVM build), not
+# whatever version a generic `clang`/`llvm-dev` apk alias resolves to.
+# First attempt used llvm15-dev/bare `clang` (apk resolved that to
+# clang20) and failed with `clang-19: No such file or directory` -
+# confirmed empirically, not a guess. llvm19-dev + clang19 exist as
+# exact-version Alpine packages; using them fixed it. After that,
+# CREATE EXTENSION vector and a real distance query
+# ('[1,2,3]' <-> '[4,5,6]' = 5.196152422706632, correct) were verified
+# against a live instance built from this Dockerfile before trusting it.
 RUN apk add --no-cache --virtual .build-deps \
       git \
       make \
       gcc \
       musl-dev \
-      clang \
-      llvm15-dev \
+      llvm19-dev \
+      clang19 \
     && cd /tmp \
     && git clone --branch ${PGVECTOR_VERSION} --depth 1 https://github.com/pgvector/pgvector.git \
     && cd pgvector \
