@@ -6,11 +6,9 @@ import os
 import time
 
 import psycopg2
-import requests
 import yaml
 
 CONFIG_PATH = os.environ["PIPELINE_CONFIG"]
-WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL")
 
 DB_ENV = dict(
     host=os.environ.get("BOOKS_DB_HOST", "postgres.postgres.svc.cluster.local"),
@@ -86,17 +84,6 @@ def main():
         log("WARN", f"untracked file (no row): {p}")
 
     log("INFO", f"reconcile summary: stale={len(stale)} untracked={len(untracked)}")
-
-    summary = {"stale": stale, "untracked": untracked}
-    if not WEBHOOK_URL:
-        log("INFO", "N8N_WEBHOOK_URL not set, skipping notification")
-        return
-
-    try:
-        resp = requests.post(WEBHOOK_URL, json=summary, timeout=10)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        log("WARN", f"failed to post reconcile summary to webhook: {e}")
 
 
 if __name__ == "__main__":

@@ -8,7 +8,12 @@ metadata:
     app.kubernetes.io/name: n8n
     argocd.argoproj.io/managed-by: argocd
 spec:
-  replicas: 1
+  # Scaled to 0 2026-08-05: not ready for use yet (writing/research
+  # workflows only, never wired into books-pipeline/inbox-router
+  # ingestion - that dependency never existed), so it's pure idle
+  # resource cost on a Pi cluster in the meantime. PVC/secrets/config
+  # left in place - flip back to 1 whenever it's actually needed.
+  replicas: 0
   strategy:
     type: Recreate
   selector:

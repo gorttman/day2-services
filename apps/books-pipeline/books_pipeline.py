@@ -12,13 +12,11 @@ import time
 import zipfile
 
 import psycopg2
-import requests
 import yaml
 
 import bookutils
 
 CONFIG_PATH = os.environ["PIPELINE_CONFIG"]
-WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL")
 
 COMIC_FORMATS = {"cbz", "cbr"}
 INCOMING_PREFIX = ".incoming-"
@@ -557,10 +555,10 @@ def process_file(conn, path, config, counters):
 
 
 # ---------------------------------------------------------------------------
-# Webhook summary
+# Run summary
 # ---------------------------------------------------------------------------
 
-def post_summary(counters):
+def log_summary(counters):
     summary = {
         "promoted": counters["routes"].get("promoted", 0),
         "duplicates": counters.get("duplicates", 0),
@@ -568,16 +566,6 @@ def post_summary(counters):
         "quarantined": counters["quarantined"],
     }
     log("INFO", f"run summary: {summary}")
-
-    if not WEBHOOK_URL:
-        log("INFO", "N8N_WEBHOOK_URL not set, skipping notification")
-        return
-
-    try:
-        resp = requests.post(WEBHOOK_URL, json=summary, timeout=10)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        log("WARN", f"failed to post run summary to webhook: {e}")
 
 
 def main():
@@ -631,7 +619,7 @@ def main():
     finally:
         conn.close()
 
-    post_summary(counters)
+    log_summary(counters)
 
 
 if __name__ == "__main__":

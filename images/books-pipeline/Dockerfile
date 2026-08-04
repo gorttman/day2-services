@@ -55,8 +55,7 @@ RUN curl -fsSL https://download.calibre-ebook.com/linux-installer.sh -o /tmp/cal
 
 # Added for prompt 4 (books_pipeline.py): psycopg2-binary bundles its own
 # libpq, no separate libpq-dev/apt package needed. rapidfuzz for dedup
-# scoring, PyYAML/requests matching the inbox-router image's pattern
-# (config file + webhook POST).
+# scoring, PyYAML for the config file.
 #
 # Added for prompt 6 (pdf_triage.py): pypdf, for per-page text
 # extraction and document metadata. Calibre's own CLI tools
@@ -67,7 +66,6 @@ RUN curl -fsSL https://download.calibre-ebook.com/linux-installer.sh -o /tmp/cal
 # stretching Calibre to do something it wasn't built for.
 RUN pip install --no-cache-dir \
       PyYAML==6.0.3 \
-      requests==2.34.2 \
       psycopg2-binary==2.9.12 \
       rapidfuzz==3.14.5 \
       pypdf==6.14.2

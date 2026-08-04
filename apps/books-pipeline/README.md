@@ -39,9 +39,9 @@ share one library - see "Resolved 2026-07-18" below):
    INSERT happens after a successful add, committed only then.
 
 `books-fingerprint-reconcile` (weekly, Sunday 03:00) walks the library
-and the `fingerprints` table in both directions, reporting drift
-(`stale` = row with no file, `untracked` = file with no row) via
-webhook - never auto-corrects.
+and the `fingerprints` table in both directions, logging drift
+(`stale` = row with no file, `untracked` = file with no row) - never
+auto-corrects.
 
 ## Scope: books-only, live
 
@@ -175,12 +175,6 @@ scheme before this fix - those files exist for real but were never
 registered in Calibre's `metadata.db` either. See `HISTORY`/commit log
 for the one-off backfill run, if one was needed at the time this
 landed.
-
-## Webhook
-
-`N8N_WEBHOOK_URL` in `books-pipeline-secret` (shared with
-`books-fingerprint-reconcile`) is currently a placeholder - no real n8n
-workflow exists yet. Failed POSTs log a `WARN`, never fail the job.
 
 ## Real bug found 2026-07-18: NFS ownership never matched the runtime UID
 
