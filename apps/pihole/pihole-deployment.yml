@@ -9,6 +9,17 @@ metadata:
     app.kubernetes.io/component: dns
     app.kubernetes.io/part-of: day2-services
     argocd.argoproj.io/managed-by: argocd
+  annotations:
+    # Reloader (day0-bootstrap/apps/reloader) watches every ConfigMap/
+    # Secret this Deployment references - including pihole-custom-dns,
+    # which lives in the completely separate dns-conf repo/Application -
+    # and rolls this pod automatically on any content change. Fixes the
+    # 2026-08-04 incident where a DNS entry was added and pushed but
+    # FTL never noticed until a manual pod restart, because it loads its
+    # custom list into memory once at startup and never re-reads the
+    # file on its own (unlike CoreDNS's `hosts` plugin, which re-reads
+    # live and needed no such fix).
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   strategy:
