@@ -60,6 +60,8 @@ ingress. Superuser password in the `postgres-superuser` sealed secret.
 | n8n            | n8n           | apps/n8n (day2) - long-lived connection pool |
 | cloudflare_tf  | cloudflare_tf | day1-foundation apps/cloudflare-tf (Terraform state, `pg` backend) - connects only during `apply`, no persistent process |
 | books          | books         | apps/books-pipeline (day2) - `fingerprints` table + `pg_trgm`, provisioned via the automated Job above - fresh connection per CronJob run, no persistent pool |
+| immich         | immich        | apps/immich (day2) - `pgvector`/`cube`/`earthdistance` extensions, provisioned via the automated Job above (table was missing this row until now) |
+| unifi_tf       | unifi_tf      | day1-foundation apps/unifi-tf (Terraform state, `pg` backend) - connects only during `apply`, no persistent process. Provisioned via the automated Job above; app itself is still scaffolding-only as of 2026-08-04, not yet registered in Argo CD |
 
 ## pgvector, and what a shared instance actually costs (2026-08-04)
 

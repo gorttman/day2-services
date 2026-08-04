@@ -1,0 +1,46 @@
+# Same pattern as postgres-immich-db-init-job.yml. Jobs are immutable
+# once created: delete (`kubectl delete job postgres-unifi-tf-db-init
+# -n postgres`) and let Argo CD recreate it to force a re-run - the
+# script itself is idempotent either way.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-unifi-tf-db-init
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: init-unifi-tf-db
+          image: postgres:16.9-alpine
+          command: ["/bin/sh", "/scripts/init-unifi-tf-db.sh"]
+          env:
+            - name: PGHOST
+              value: postgres.postgres.svc.cluster.local
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-superuser
+                  key: POSTGRES_PASSWORD
+            - name: UNIFI_TF_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-superuser
+                  key: UNIFI_TF_DB_PASSWORD
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: postgres-unifi-tf-db-init
+            defaultMode: 0555
