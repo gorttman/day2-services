@@ -44,10 +44,10 @@ Full inventory (status updated as each is pulled):
 
 | Item | Folder | Status |
 |---|---|---|
-| Coq Au Vin | Recipes | pending |
-| Raspberry & White Chocolate Muffins | Recipes | pending |
-| Moroccan Meatballs | Recipes | pending |
-| Italian Meatballs | Recipes | pending |
+| Coq Au Vin | Recipes | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Raspberry & White Chocolate Muffins | Recipes | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Moroccan Meatballs | Recipes | pushed to inbox/records 2026-08-04, awaiting Paperless consume |
+| Italian Meatballs | Recipes | pushed to inbox/records 2026-08-04 as .txt (PDF export was too small to trigger the safe file-overflow path and I won't manually transcribe base64 - used read_file_content's text extraction instead, same content, safe method) |
 | Business Plan.doc | Plan/Business Plan-budget | pending |
 | cafe-list | Plan/Business Plan-budget | pending |
 | cash flow | Plan/Business Plan-budget | pending |
