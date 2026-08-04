@@ -105,6 +105,44 @@ it plausible the resume text genuinely contains all three words, in
 which case this specific false positive may need a document-level
 exclude rather than a global rule change.
 
+## Property tag restructure (2026-08-05)
+
+User clarified Greenlaw and Hepburn are two separate addresses (Greenlaw
+- former rental, Hepburn - current private home) that should never be
+conflated under one generic "Property" tag. Investigated the 20 docs the
+OLD "Property" tag had accumulated: only #15 (Routine Inspection)
+actually contained rental/inspection vocabulary - the other 19 were
+false positives purely from "Berwick"/"lease"/"tenancy" appearing as
+bare words in letterhead addresses on totally unrelated documents (cover
+letters, tax returns, a car purchase contract, an ASIC company filing).
+
+Restructured:
+- `Property` renamed to **`Property - Greenlaw (Rental)`**, match
+  tightened to the single distinctive token `greenlaw` (any-word) -
+  street name is specific enough on its own, unlike "Berwick" (a whole
+  suburb). Kept on #5, #9, #15 only; stripped from the other 18.
+- New **`Property - Hepburn (Home)`** tag created. First attempt (bare
+  `hepburn` word) rejected immediately - same address-in-letterhead
+  problem, would have flooded every personal document again. Second
+  attempt (hepburn + generic "provider info" words) also had a real
+  counterexample: doc #59 (a contractor's concrete-replacement quote -
+  genuinely Hepburn-relevant) vs #60 (I CUBED's own ASIC filing, uses
+  Hepburn as registered business address) and #58 (a car purchase
+  contract, uses Hepburn as customer address) - both of the latter also
+  have "provider info" (customer numbers, dealer licences) despite being
+  nothing to do with the house. Final rule (regex, requires `hepburn`
+  AND at least one home-domain term): `rates`, `casey council`/`city of
+  casey` (Berwick is in the City of Casey LGA - verified, safe to hardcode),
+  `electricity`, `gas supply`, `water usage`, `home insurance`,
+  `contents insurance`, `mortgage`, `renovation`, `strata`,
+  `real estate`, `plumber`, `electrician`, `concrete`, `landscap*`,
+  `building`. Correctly tags #59, correctly excludes #58/#60. Retagged
+  #59 as the first real example.
+- **Still open**: actual gas/electricity/insurance provider names -
+  asked user, not yet answered. Once known, add as exact-name terms to
+  the Hepburn regex (far more precise than the generic category words
+  currently doing that job).
+
 (10MB Drive-download tool cap itself hasn't blocked anything yet in this
 log - noted here as a standing constraint, not a specific exception:
 any file over that size needs a manual browser download instead of me
