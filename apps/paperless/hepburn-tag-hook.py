@@ -21,7 +21,7 @@ import json
 import yaml
 
 PAPERLESS_URL = os.environ.get("PAPERLESS_URL_INTERNAL", "http://localhost:8000")
-API_TOKEN = os.environ["PAPERLESS_API_TOKEN"]
+API_TOKEN = os.environ["PAPERLESS_API_TOKEN"].strip()
 PROVIDERS_PATH = os.environ.get("HEPBURN_PROVIDERS_PATH", "/etc/paperless-hooks/hepburn-providers.yaml")
 TAG_NAME = "Property - Hepburn (Home)"
 ADDRESS_TERM = "hepburn"

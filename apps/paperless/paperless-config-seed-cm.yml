@@ -35,10 +35,31 @@ data:
     # below fails the whole job loudly if any match string still
     # produces a token with no alphanumeric characters in it, so this
     # class of bug can't ship silently a third time.
+    # "Property" (generic, any-word on "lease tenancy Greenlaw Berwick")
+    # retired 2026-08-05 - see drive-migration-log.md's "Property tag
+    # restructure" section. It was catching 19 false positives out of 20
+    # tagged documents (cover letters, tax returns, a car purchase
+    # contract, an ASIC filing - anything with Brett's own address in
+    # the letterhead), because "Berwick"/"lease"/"tenancy" are far too
+    # generic as bare-word matches. Split into two address-specific
+    # tags instead - not reintroduced as a third generic one.
     TAGS = [
         ("Tax", '"tax return" "tax invoice" ATO superannuation', 1),
-        ("Property", '"property inspection" lease tenancy Greenlaw Berwick', 1),
-        ("Insurance", 'insurance "insurance policy"', 1),
+        ("Property - Greenlaw (Rental)", "greenlaw", 1),
+        # Manual-only (algorithm 0) - real matching for this one needs a
+        # provider list far too large for this field (hit Paperless's
+        # 256-char Tag.match limit finding that out) - handled instead by
+        # hepburn-tag-hook.py, a post-consume script, against
+        # hepburn-providers.yaml (no size limit). See
+        # apps/paperless/README.md's "Property tags: Greenlaw vs Hepburn"
+        # section. This entry exists so the tag itself always exists for
+        # the hook to look up and apply, and so this job doesn't
+        # accidentally delete/recreate it.
+        ("Property - Hepburn (Home)", "", 0),
+        # Bare "insurance" (any-word) previously matched anything that
+        # mentioned insurance in passing (e.g. a business plan) - now
+        # requires one of these specific phrases instead.
+        ("Insurance", '"insurance policy" "insurance claim" "insured party"', 1),
         ("Contracts", "contract agreement", 1),
         ("Business", '"I Cubed Consultants" ASIC ABN "company statement"', 1),
         ("Vehicle", 'vehicle "car service"', 1),
@@ -60,7 +81,11 @@ data:
     DOCTYPES = [
         ("Invoice", "invoice", 1),
         ("Statement", 'statement "tax return" ATO', 1),
-        ("Contract", "contract agreement employment", 1),
+        # Was any-word (1) - matched a resume that happened to mention
+        # "employment" alone (e.g. "Employment History"). All-words (2)
+        # requires contract+agreement+employment all present, not just
+        # one - found 2026-08-04, fixed 2026-08-05.
+        ("Contract", "contract agreement employment", 2),
         ("Report", '"inspection report" "routine inspection"', 1),
         ("Quote", "quote", 1),
     ]
