@@ -56,6 +56,17 @@ data:
           - app: lazylibrarian
             category: books
 
+    # 2026-08-05: matches the tv/movies subPath split on the shared
+    # /media NFS export (see arr-stack-deployment.yml) - created once
+    # via POST /api/v3/rootfolder if missing, never updated after (a
+    # root folder's path is its identity; there's nothing else on it
+    # to reconcile).
+    sonarr:
+      rootFolder: /tv
+
+    radarr:
+      rootFolder: /movies
+
     prowlarr:
       # Empty on purpose - which indexer(s) to use is a real choice
       # (cost, retention, reliability), not something to pick a default

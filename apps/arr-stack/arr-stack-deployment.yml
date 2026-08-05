@@ -118,6 +118,9 @@ spec:
         volumeMounts:
         - name: sonarr-config
           mountPath: /config
+        - name: media
+          mountPath: /tv
+          subPath: tv
         readinessProbe:
           tcpSocket: {port: 8989}
           initialDelaySeconds: 20
@@ -137,6 +140,9 @@ spec:
         volumeMounts:
         - name: radarr-config
           mountPath: /config
+        - name: media
+          mountPath: /movies
+          subPath: movies
         readinessProbe:
           tcpSocket: {port: 7878}
           initialDelaySeconds: 20
@@ -175,8 +181,9 @@ spec:
         volumeMounts:
         - name: sabnzbd-config
           mountPath: /config
-        - name: downloads
+        - name: media
           mountPath: /downloads
+          subPath: downloads
         # books-pipeline's own import/ mount, direct - the "books"
         # category's completed-dir points here (Config > Categories >
         # books > Folder/Path = /books-import) so a finished books
@@ -390,7 +397,21 @@ spec:
         nfs:
           server: qnap.i3sec.com.au
           path: /books
-      - name: downloads
+      # 2026-08-05: single /media export, not separate /media +
+      # /downloads exports - subPath below splits it into tv/, movies/,
+      # downloads/complete, downloads/incomplete per container. Because
+      # every subPath here is a bind-mount of this one NFS mount, they
+      # share the same underlying filesystem device from Sonarr/Radarr's
+      # point of view, so importing a finished download is a real
+      # server-side NFS rename, not a cross-export copy+delete (the old
+      # separate /downloads export would have forced the copy path).
+      # Directories pre-created on the QNAP export (tv/, movies/,
+      # downloads/{complete,incomplete}, owner 1000:1000, mode 2775 -
+      # matches PUID/PGID on every container here) since none of these
+      # apps create their own root-folder tree on first boot. The old
+      # standalone /downloads export is now unused by this deployment -
+      # not deleted on the QNAP side, just no longer referenced here.
+      - name: media
         nfs:
           server: qnap.i3sec.com.au
-          path: /downloads
+          path: /media
