@@ -1,0 +1,122 @@
+# Provider list for the "Property - Hepburn (Home)" auto-tag, checked by
+# hepburn-tag-hook.py (Paperless post-consume script) against every newly
+# consumed document's content. Unlike the old approach (a regex baked
+# into Paperless's Tag.match field, capped at 256 characters), this file
+# has no size limit - the point of moving matching out of Paperless's
+# built-in mechanism entirely. See apps/paperless/README.md's "Property
+# tags: Greenlaw vs Hepburn" section for the full design history.
+#
+# Update this file when a provider changes or a new one needs adding -
+# no regex to hand-edit, no character budget to fight. Redeploy
+# (ConfigMap + pod restart) for changes to take effect on new documents;
+# already-consumed documents are untouched (same as Paperless's own
+# matching rules always have been - never retroactive).
+#
+# fixed: geography-determined, safe to treat as permanent unless the
+#   address itself changes.
+# electricity / gas: sourced 2026-08-05 from the Essential Services
+#   Commission (Victoria)'s live licensee register
+#   (esc.vic.gov.au/electricity-and-gas/electricity-and-gas-licences-and-exemptions/electricity-and-gas-licences)
+#   - Victoria runs its own retail licensing regime (not the national
+#     AER/Energy Made Easy framework other states use), confirmed by
+#     checking rather than assuming. Includes every currently licensed
+#     retailer at fetch time, not just well-known household brands -
+#     no reason to pre-filter since a name match on an obscure retailer
+#     is still a real signal, and there's no size cost to keeping them.
+# insurance: no equivalent government-run "home/contents insurers"
+#   registry exists (ASIC's AFS licensee register covers all financial
+#   services broadly, not specifically home insurers, and isn't usable
+#   as a curated list) - this list is general knowledge, not fetched
+#   from an authoritative source, and should be treated as lower
+#   confidence than the electricity/gas lists.
+
+fixed:
+  - casey council
+  - city of casey
+  - south east water
+
+electricity:
+  - agl
+  - origin energy
+  - energyaustralia
+  - red energy
+  - momentum energy
+  - amber electric
+  - discover energy
+  - flo energy
+  - energy locals
+  - flipped energy
+  - active utilities retail
+  - sec energy
+  - cleanpeak energy
+  - cep energy retail
+  - tesla energy ventures
+  - ampol energy
+  - hanwha energy retail
+  - tilt renewables retail
+  - gee power
+  - telstra energy
+  - potentia energy retail
+  - mta energy
+  - acacia energy
+  - cleantech energy
+  - real utilities
+  - veolia energy
+  - smartestenergy
+  - totalenergies
+  - ovo energy
+  - balance commodities and energy
+  - el retail energy
+  - m2 energy
+  - delta power
+  - supa energy
+
+gas:
+  - agl
+  - origin energy
+  - energyaustralia
+  - supa energy
+  - perpetual energy
+  - flo energy
+  - gee power
+  - cleantech energy
+  - real utilities
+  - discover energy
+  - ovo energy
+  - el retail energy
+  - pacific blue retail
+  - energy matrix group
+
+insurance:
+  - aami
+  - budget direct
+  - nrma
+  - racv
+  - allianz
+  - qbe
+  - suncorp
+  - gio
+  - cgu
+  - youi
+  - real insurance
+  - australia post insurance
+  - coles insurance
+  - woolworths insurance
+  - bingle
+  - ahm
+  - virgin money insurance
+  - auto & general
+
+# Category-word fallback for things without a fixed "provider" to name
+# (tradespeople, mortgage, renovation work).
+generic:
+  - home insurance
+  - contents insurance
+  - mortgage
+  - plumber
+  - electrician
+  - concrete
+  - building
+  - renovation
+  - strata
+  - real estate

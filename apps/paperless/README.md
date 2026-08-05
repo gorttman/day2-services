@@ -119,57 +119,55 @@ tag had to be split.
   own, no false positives found.
 - **`Property - Hepburn (Home)`** - current private home. The address
   itself is unsafe to match on alone (it's in the letterhead of nearly
-  every personal document) - the actual matching rule requires the
-  address *plus* one of the terms in the table below. **This table is
-  the real source of truth** - update it here first when a provider
-  changes, then update the Tag's regex in Paperless to match. Don't
-  edit the regex directly without updating this table, they'll drift.
+  every personal document) - real matching requires the address *plus*
+  a known provider/home-domain term.
 
-  | Category | Confirmed current provider | Notes |
-  |---|---|---|
-  | Council (rates) | Casey Council / City of Casey | Fixed - Berwick/Hepburn Ct is in this LGA, won't change unless they move |
-  | Water | South East Water | Fixed - statutory retailer for this whole region, same reasoning as council |
-  | Electricity | *(not yet confirmed)* | Matches against the known-provider list below in the meantime |
-  | Gas | *(not yet confirmed)* | Matches against the known-provider list below in the meantime |
-  | Home/contents insurance | *(not yet confirmed)* | Matches against the known-provider list below in the meantime |
+### Matching now happens outside Paperless entirely (2026-08-05)
 
-  **Known Australian provider names actually in the regex** (2026-08-05,
-  from general knowledge, not user-confirmed) - the point of this list
-  is to make matching survive a provider *switch* without needing a
-  manual update: any of these appearing alongside `hepburn` is treated
-  as a real match. Not exhaustive - if a genuine bill from a provider
-  not listed here shows up, add it here. **Trimmed hard to fit
-  Paperless's 256-char limit on the Tag.match field** - this is the
-  actual constraint that decides what stays in the list, not relevance;
-  a longer curated wishlist was cut down to this:
-  - Electricity/gas: AGL, Origin Energy, EnergyAustralia, Red Energy,
-    Alinta
-  - Insurance: AAMI, NRMA, RACV, Allianz, Suncorp
-  - Fixed (see table above): South East Water, Casey Council
+Paperless's own `Tag.match` field caps at 256 characters - nowhere near
+enough room for a real, comprehensive provider list. Rather than keep
+fighting that limit, matching moved to `hepburn-tag-hook.py`, a
+[post-consume script](https://docs.paperless-ngx.com/advanced_usage/)
+Paperless calls after every successful consumption
+(`PAPERLESS_POST_CONSUME_SCRIPT` in `paperless-deployment.yml`). It
+reads the full provider list from `hepburn-providers.yaml` (no size
+limit - a plain file, not a DB column) and, on a match, tags the
+document via Paperless's own REST API using a token stored in
+`paperless-secret` (`PAPERLESS_API_TOKEN`). Both files are mounted via
+`paperless-hepburn-hook-configmap.yml`.
 
-  Generic category-word fallback also in the regex: `electricity`,
-  `gas`, `water usage`, `home insurance`, `contents insurance`,
-  `mortgage`, `plumber`, `electrician`, `concrete`, `building` - catches
-  anything the named list misses (tradespeople, mortgage don't really
-  have a fixed "provider" to name). **Bare `insurance` and `rates` were
-  tried and rejected** - both are common in totally unrelated documents
-  (a car finance contract has "insurance" and "interest rates" in it
-  too), so they're phrased as specific multi-word terms instead.
+The `Property - Hepburn (Home)` Tag itself is now set to manual-only
+matching (`matching_algorithm: 0`) in Paperless - it still exists and
+can be applied by hand, but the hook script is the actual source of
+truth for automatic tagging, not the Tag's own config.
 
-  **Real gotcha hit building this**: the rule structure is two lookaheads,
-  `(?=.*hepburn)(?=.*(...))` - by default `.` doesn't match newlines, so
-  if the address and the provider term land on different lines (normal
-  in real documents), the rule silently never matches at all. Needs the
-  `(?s)` flag prefix for `.` to span newlines. First version of this
-  rule looked reasonable and was never actually tested against real
-  regex evaluation before being treated as correct - caught by testing
-  against the one real example document, not by inspection.
+**`hepburn-providers.yaml` is the real source of truth for the provider
+list** - edit that file (categories: `fixed`, `electricity`, `gas`,
+`insurance`, `generic`), redeploy, done. No regex, no character budget.
 
-  Current full match string, for reference:
-  `(?s)(?=.*hepburn)(?=.*(agl|origin energy|energyaustralia|red
-  energy|alinta|south east water|casey council|aami|nrma|racv|allianz|
-  suncorp|electricity|gas|water usage|home insurance|contents
-  insurance|mortgage|plumber|electrician|concrete|building))`
+- `electricity`/`gas` are sourced from the Essential Services Commission
+  (Victoria)'s live licensee register, fetched 2026-08-05 - Victoria
+  runs its own retail licensing regime (not the national AER/Energy
+  Made Easy framework other states use, confirmed by checking rather
+  than assuming). Includes every currently licensed retailer at fetch
+  time, not just well-known household brands - no reason to pre-filter
+  a company name match.
+- `insurance` has no equivalent government registry to fetch from
+  (ASIC's AFS licensee list covers all financial services broadly, not
+  specifically home insurers) - general knowledge, lower confidence
+  than the energy lists, not user-confirmed.
+- **Still open**: your actual current electricity/gas/insurance
+  providers - once confirmed, add them explicitly (they're probably
+  already in the list from the ESC fetch, but worth confirming rather
+  than relying on the fetch alone).
+
+**Real gotcha hit building the now-superseded regex version**: a
+two-lookahead structure (`(?=.*hepburn)(?=.*(...))`) silently never
+matches when the address and the provider term land on different lines,
+since `.` doesn't cross newlines by default - the normal case for real
+documents. Caught only by actually testing against a real document, not
+by inspection - worth remembering for any future regex-based Paperless
+matching rule.
 
 ## Deliberately unconfigured (separate pass)
 - OCR language at default (`eng`)

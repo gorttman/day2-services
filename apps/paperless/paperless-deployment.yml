@@ -99,6 +99,20 @@ spec:
           value: http://tika:9998
         - name: PAPERLESS_TIKA_GOTENBERG_ENDPOINT
           value: http://gotenberg:3000
+        # Added 2026-08-05: the "Property - Hepburn (Home)" tag can't use
+        # Paperless's own Tag.match (256-char field, nowhere near enough
+        # room for a real provider list) - hepburn-tag-hook.py does the
+        # matching instead, called via Paperless's own post-consume hook.
+        # See hepburn-providers.yaml (mounted below) and the README's
+        # "Property tags: Greenlaw vs Hepburn" section for the full
+        # design history.
+        - name: PAPERLESS_POST_CONSUME_SCRIPT
+          value: /etc/paperless-hooks/hepburn-tag-hook.py
+        - name: PAPERLESS_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: paperless-secret
+              key: PAPERLESS_API_TOKEN
         volumeMounts:
         - name: data
           mountPath: /usr/src/paperless/data
@@ -107,6 +121,8 @@ spec:
         - name: consume
           mountPath: /usr/src/paperless/consume
           subPath: consume
+        - name: hepburn-hook
+          mountPath: /etc/paperless-hooks
         resources:
           requests:
             memory: 512Mi
@@ -148,3 +164,7 @@ spec:
         nfs:
           server: qnap.i3sec.com.au
           path: /paperless
+      - name: hepburn-hook
+        configMap:
+          name: paperless-hepburn-hook
+          defaultMode: 0555
