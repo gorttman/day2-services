@@ -29,11 +29,6 @@ spec:
               env:
                 - name: ROUTER_CONFIG
                   value: /etc/inbox-router/routes.yaml
-                - name: N8N_WEBHOOK_URL
-                  valueFrom:
-                    secretKeyRef:
-                      name: inbox-router-secret
-                      key: N8N_WEBHOOK_URL
               volumeMounts:
                 - name: script
                   mountPath: /app

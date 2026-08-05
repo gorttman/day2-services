@@ -7,11 +7,9 @@ import time
 from urllib.parse import urlparse
 
 import magic
-import requests
 import yaml
 
 CONFIG_PATH = os.environ["ROUTER_CONFIG"]
-WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL")
 
 INCOMING_PREFIX = ".incoming-"
 
@@ -161,22 +159,12 @@ def process_bare_inbox(config, counters, inbox_root):
             quarantine(fpath, f"no match: mime type {mime} has no configured route", config["quarantine"], counters)
 
 
-def post_summary(counters):
+def log_summary(counters):
     summary = {
         "routes": counters["routes"],
         "quarantined": counters["quarantined"],
     }
     log("INFO", f"run summary: {json.dumps(summary)}")
-
-    if not WEBHOOK_URL:
-        log("INFO", "N8N_WEBHOOK_URL not set, skipping notification")
-        return
-
-    try:
-        resp = requests.post(WEBHOOK_URL, json=summary, timeout=10)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        log("WARN", f"failed to post run summary to webhook: {e}")
 
 
 def main():
@@ -193,7 +181,7 @@ def main():
 
     process_explicit_dirs(config, counters)
     process_bare_inbox(config, counters, inbox_root)
-    post_summary(counters)
+    log_summary(counters)
 
 
 if __name__ == "__main__":

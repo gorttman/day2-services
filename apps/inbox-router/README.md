@@ -69,9 +69,7 @@ designed.
 
 **2026-07-17**: Manually triggered end to end with a real file: dropped
 into `inbox/books`, correctly routed to `books/import` via the
-`explicit:inbox/books` rule, webhook POST attempted and failed
-gracefully (no real n8n workflow exists yet - logged as a `WARN`, did
-not fail the job, exactly as designed).
+`explicit:inbox/books` rule.
 
 **2026-08-01**: `inbox/records` → `paperless/consume`, real file, full
 chain including Paperless's own consumption (not just the routing
@@ -81,9 +79,15 @@ independently hit the same day - see
 `day1-foundation/apps/qnap-storage/README.md`. Fixed, then the route
 worked on the very next scheduled cycle.
 
-## Webhook
+## n8n webhook - removed 2026-08-05
 
-`N8N_WEBHOOK_URL` in `inbox-router-secret` is currently a placeholder
-(`https://n8n.i3sec.com.au/webhook/REPLACE-ME-inbox-router`) - no real
-n8n workflow exists yet. Failed webhook POSTs log a `WARN` and never
-fail the job.
+Used to POST a run summary to a placeholder n8n URL
+(`https://n8n.i3sec.com.au/webhook/REPLACE-ME-inbox-router`) that never
+had a real workflow behind it - every run logged a `WARN` and failed
+silently, by design. Stripped entirely (same cleanup already done for
+`books-pipeline` the same day - see `apps/books-pipeline/README.md`),
+along with `inbox-router-secret` (`N8N_WEBHOOK_URL` was its only key).
+If a real n8n workflow gets built later, this is the natural
+reintroduction point - `main()` already computes a `summary` dict
+(routes taken, quarantined files) right before the run ends, just needs
+a POST added back where `log_summary()` is called.

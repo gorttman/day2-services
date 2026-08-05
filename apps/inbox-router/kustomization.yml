@@ -3,7 +3,6 @@ kind: Kustomization
 
 resources:
   - inbox-router-namespace.yml
-  - inbox-router-sealed-secret.yml
   - inbox-router-configmap-script.yml
   - inbox-router-configmap-routes.yml
   - inbox-router-cronjob.yml
