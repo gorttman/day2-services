@@ -171,6 +171,30 @@ data:
 
 
     # ---------------------------------------------------------------------
+    # Sonarr/Radarr root folders
+    # ---------------------------------------------------------------------
+
+    def reconcile_rootfolders(desired, apikeys):
+        for app in ("sonarr", "radarr"):
+            apikey = apikeys.get(app)
+            if not apikey:
+                continue
+            path = desired.get(app, {}).get("rootFolder")
+            if not path:
+                continue
+            base = f"http://localhost:{APP_PORTS[app]}/api/v3"
+            existing = http_json("GET", f"{base}/rootfolder?apikey={apikey}") or []
+            if any(rf["path"] == path for rf in existing):
+                continue
+            # Fails until the underlying mount actually exists in this
+            # container (Sonarr/Radarr validate accessibility before
+            # accepting a root folder) - that's expected before the
+            # media-mount change lands, not a bug; next pass retries.
+            http_json("POST", f"{base}/rootfolder?apikey={apikey}", body={"path": path})
+            log("INFO", f"{app}: created root folder {path}")
+
+
+    # ---------------------------------------------------------------------
     # Sonarr/Radarr download clients (schema-driven - see module docstring)
     # ---------------------------------------------------------------------
 
@@ -320,6 +344,11 @@ data:
                 log("CRIT", f"sabnzbd server reconcile failed: {e}")
         else:
             log("INFO", "sabnzbd api key not available yet (config.ini not written) - skipping this pass")
+
+        try:
+            reconcile_rootfolders(desired, apikeys)
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            log("CRIT", f"root folder reconcile failed: {e}")
 
         for dc_cfg in desired.get("downloadClients", []):
             if not sab_apikey:
