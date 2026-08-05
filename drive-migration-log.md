@@ -21,11 +21,11 @@ in Exceptions (Office formats, blocked pending Tika/Gotenberg). See
 | Sinner Takes All - Tera Patrick | i3sec.com.au | Calibre #8041 | done (already present from unrelated earlier bulk import, confirmed duplicate) |
 | CCNA Study Guide.pdf | i3sec.com.au | Calibre #10967 | done (confirmed 2026-08-04, first real use of the new PDF promotion path) |
 | CCNA Review Guide.pdf | i3sec.com.au | Calibre #10966 | done (same run) |
-| Secrets of Mental Math | i3sec.com.au | Calibre | pending (not yet attempted) |
-| Getting Things Done | i3sec.com.au | Calibre | pending (not yet checked against existing library - a same-titled book already exists from an unrelated bulk import, needs duplicate-check before pulling) |
-| The Power of Habit | i3sec.com.au | Calibre | pending (same caveat as above) |
-| The Fast Diet | i3sec.com.au | Calibre | pending (not yet attempted) |
-| Making Habits Breaking Habits | i3sec.com.au | Calibre | pending (same caveat - a similarly-titled book already exists from an unrelated bulk import) |
+| Secrets of Mental Math | i3sec.com.au | Calibre #10969 | done 2026-08-05 (PDF, author metadata came back "Unknown" - Calibre-side metadata gap, not a pipeline bug) |
+| Getting Things Done | i3sec.com.au | n/a | correctly quarantined 2026-08-05 as a plain duplicate of existing #4659 - let books-pipeline's own dedup logic decide instead of guessing manually, it called this one right |
+| The Power of Habit | i3sec.com.au | n/a | correctly quarantined 2026-08-05 as a plain duplicate of existing #10963, same as above |
+| The Fast Diet | i3sec.com.au | Calibre #10970 | done 2026-08-05 |
+| Making Habits Breaking Habits | i3sec.com.au | Calibre #10968 | done 2026-08-05 - confirmed genuinely different book from the existing #10962 (that one's "Making Good Habits, Breaking Bad Habits" by Joyce Meyer; this one's "Making Habits, Breaking Habits" by Jeremy Dean - similar title, different author/book, correctly NOT flagged as duplicate) |
 
 ## Photos/videos (→ Immich)
 
@@ -163,3 +163,11 @@ Restructured:
 log - noted here as a standing constraint, not a specific exception:
 any file over that size needs a manual browser download instead of me
 pulling it directly.)
+
+## Small follow-up spotted, not yet actioned (2026-08-05)
+
+`inbox-router` has the exact same dead n8n webhook pattern that was
+stripped from `books-pipeline` on 2026-08-05 (`N8N_WEBHOOK_URL` pointing
+at `n8n.i3sec.com.au/webhook/REPLACE-ME-inbox-router`, fails silently
+every run). Same fix would apply - not done yet, just noted while
+working on the books import so it doesn't get lost.
