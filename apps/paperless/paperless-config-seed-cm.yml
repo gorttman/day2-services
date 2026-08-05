@@ -126,9 +126,21 @@ data:
     # match string here would only stop new mistakes, not correct
     # documents already mistagged by the old rules. Safe/idempotent to
     # re-run any time the rules change.
+    #
+    # Real bug hit 2026-08-05: match_tags() never returns manual-only
+    # (matching_algorithm 0) tags - by definition, nothing auto-matches
+    # them. A plain `d.tags.set(new_tags)` treats that as "this document
+    # should have none of its manual tags" and wipes them - which
+    # destroyed "Property - Hepburn (Home)" (manual-only by design, real
+    # tagging done by hepburn-tag-hook.py's post-consume script) on every
+    # rerun of this job. Fixed by preserving whatever manual-only tags
+    # were already on the document, unioned with the freshly auto-matched
+    # ones, instead of a full replace.
     retagged = 0
     for d in Document.objects.all():
-        new_tags = set(match_tags(d, classifier=None))
+        auto_tags = set(match_tags(d, classifier=None))
+        manual_tags = {t for t in d.tags.all() if t.matching_algorithm == 0}
+        new_tags = auto_tags | manual_tags
         old_tags = set(d.tags.all())
         if new_tags != old_tags:
             d.tags.set(new_tags)
