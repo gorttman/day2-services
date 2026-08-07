@@ -12,9 +12,10 @@ import path every other book-arrival route already uses.
 | Radarr 6.2.1 | https://radarr.i3sec.com.au | 7878 |
 | Prowlarr 2.4.0 | https://prowlarr.i3sec.com.au | 9696 |
 | SABnzbd 5.0.4 | https://sabnzbd.i3sec.com.au | 8080 |
-| Bazarr 1.6.0 | https://bazarr.i3sec.com.au | 6767 |
-| JDownloader2 v26.03.1 | https://jdownloader.i3sec.com.au | 5800 |
 | LazyLibrarian a7c70e36-ls311 | https://lazylibrarian.i3sec.com.au | 5299 |
+
+Bazarr and JDownloader2 used to be here too - removed 2026-08-08, see
+"Removed: bazarr and jdownloader2" below for why.
 
 ## Books extension (2026-07-21)
 
@@ -213,16 +214,62 @@ run `vpn-healer/seal-pia-credentials.sh` to create the PIA credentials
 secret, and add the deploy key's public half (in that sealed secret's
 own header comment) as a write-enabled Deploy Key on this GitHub repo.
 
-## Deliberately unconfigured (install-only)
-- No Prowlarr indexers - see "Cross-app wiring" above, this is the one
-  genuinely manual choice left (which provider/indexer to use); SABnzbd
-  category and Sonarr/Radarr/LazyLibrarian download-client wiring are
-  handled by the reconcilers there
-- No quality profiles, no root folders
-- **No shared media PVC** - where the media library lives is a
-  configuration-time decision, out of scope here
-- SABnzbd will show "hostname verification failed" for
-  sabnzbd.i3sec.com.au until its `host_whitelist` is set - config-pass item
+## Removed: bazarr and jdownloader2 (2026-08-08)
+
+Both worked fine - this was a scope/preference call, not a bug, made
+once the stack was actually in daily use rather than just installed:
+
+- **Bazarr** (subtitles for Sonarr/Radarr) - not wanted; subtitles are
+  more distracting than helpful for this user.
+- **JDownloader2** (direct-download/premium-hoster GUI, noVNC) -
+  fundamentally a manual, paste-a-link tool with no integration into
+  Sonarr/Radarr's automated search-and-grab flow, which runs against
+  the "no manual work" ethos the rest of this stack was built around.
+  No identified use case for it here.
+
+Left commented out, not deleted - `arr-stack-deployment.yml`'s two
+container blocks, and the `bazarr`/`jdownloader2` entries in
+`kustomization.yml` (their own Service/Ingress/PVC files are untouched,
+just excluded from the build). Straightforward to bring either back:
+uncomment both spots, no other changes needed.
+
+## Real gaps found live 2026-08-08 (during actual first use, not
+## install-time review)
+
+Everything below was found by trying to genuinely use the stack (add a
+series/movie, watch it download, check the result) - none of it showed
+up in review or in the apps' own health checks:
+
+- **SABnzbd's `download_dir`/`complete_dir` were relative paths**
+  (`Downloads/incomplete`, `Downloads/complete` - note the capital D
+  and missing leading slash), which resolved under SABnzbd's own
+  `/config` (a small node-local PVC) instead of the real `/downloads`
+  mount onto the QNAP media export. Fixed to absolute paths.
+- **Sonarr and Radarr couldn't see `/downloads` at all** even after
+  that fix - each app's subPath onto the shared media export was
+  scoped too narrowly (`tv`/`movies`/`downloads` as three mutually
+  exclusive directories), so there was nothing for their own import
+  logic to find. Both now also mount `/downloads` (see
+  `arr-stack-deployment.yml`).
+- Sonarr's own auth got misconfigured externally (a password set once,
+  never actually saved anywhere retrievable) - config.xml's
+  `AuthenticationMethod`/`AuthenticationRequired` still doesn't store
+  the username/password itself in this version (that's in Sonarr's own
+  database now), just the auth mode - reset by temporarily setting
+  `AuthenticationMethod` to `None`, restarting just that one container
+  process, then setting fresh credentials via Settings > General >
+  Security in the UI.
+
+## Still true, install-time gaps not yet touched
+- No quality-profile or root-folder customisation beyond Sonarr/
+  Radarr's own shipped defaults (both work fine as-is)
+- Sonarr/Radarr rename-on-import (`renameEpisodes`/`renameMovies`) is
+  off in both - files land under their original release names rather
+  than the clean naming format both already have configured
+- **No shared media PVC decision beyond what's here** - Jellyfin
+  (separate namespace) still has no media volume mounted at all, so
+  nothing can play back what Sonarr/Radarr file into `/tv`/`/movies`
+  yet
 - No workload-affinity block yet (marker comment in the deployment)
 
 ## Storage - PLACEHOLDER

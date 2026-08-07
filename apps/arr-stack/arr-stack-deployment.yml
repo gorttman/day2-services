@@ -226,44 +226,51 @@ spec:
         resources:
           requests: {memory: "128Mi", cpu: "50m"}
           limits: {memory: "1Gi", cpu: "1500m"}
-      - name: bazarr
-        image: lscr.io/linuxserver/bazarr:1.6.0
-        imagePullPolicy: IfNotPresent
-        env:
-        - {name: PUID, value: "1000"}
-        - {name: PGID, value: "1000"}
-        - {name: TZ, value: Australia/Sydney}
-        ports:
-        - {name: bazarr, containerPort: 6767, protocol: TCP}
-        volumeMounts:
-        - name: bazarr-config
-          mountPath: /config
-        readinessProbe:
-          tcpSocket: {port: 6767}
-          initialDelaySeconds: 20
-          periodSeconds: 15
-        resources:
-          requests: {memory: "128Mi", cpu: "50m"}
-          limits: {memory: "512Mi", cpu: "1000m"}
-      - name: jdownloader2
-        image: jlesage/jdownloader-2:v26.03.1
-        imagePullPolicy: IfNotPresent
-        env:
-        - {name: USER_ID, value: "1000"}
-        - {name: GROUP_ID, value: "1000"}
-        - {name: TZ, value: Australia/Sydney}
-        ports:
-        - {name: jdownloader2, containerPort: 5800, protocol: TCP}
-        volumeMounts:
-        - name: jdownloader2-config
-          mountPath: /config
-        readinessProbe:
-          tcpSocket: {port: 5800}
-          initialDelaySeconds: 30
-          periodSeconds: 15
-        resources:
-          requests: {memory: "256Mi", cpu: "50m"}
-          limits: {memory: "1Gi", cpu: "1000m"}
+      # bazarr and jdownloader2 REMOVED 2026-08-08 - deliberate, not a
+      # gap. See README's "Removed: bazarr and jdownloader2" section for
+      # the full reasoning. Left commented rather than deleted: both
+      # worked fine, this is a preference/scope call, not a bug - easy
+      # to bring back if that changes. Their PVCs, Services, and
+      # Ingresses are similarly still defined but excluded from the top-
+      # level kustomization.yml, not deleted, for the same reason.
+      # - name: bazarr
+      #   image: lscr.io/linuxserver/bazarr:1.6.0
+      #   imagePullPolicy: IfNotPresent
+      #   env:
+      #   - {name: PUID, value: "1000"}
+      #   - {name: PGID, value: "1000"}
+      #   - {name: TZ, value: Australia/Sydney}
+      #   ports:
+      #   - {name: bazarr, containerPort: 6767, protocol: TCP}
+      #   volumeMounts:
+      #   - name: bazarr-config
+      #     mountPath: /config
+      #   readinessProbe:
+      #     tcpSocket: {port: 6767}
+      #     initialDelaySeconds: 20
+      #     periodSeconds: 15
+      #   resources:
+      #     requests: {memory: "128Mi", cpu: "50m"}
+      #     limits: {memory: "512Mi", cpu: "1000m"}
+      # - name: jdownloader2
+      #   image: jlesage/jdownloader-2:v26.03.1
+      #   imagePullPolicy: IfNotPresent
+      #   env:
+      #   - {name: USER_ID, value: "1000"}
+      #   - {name: GROUP_ID, value: "1000"}
+      #   - {name: TZ, value: Australia/Sydney}
+      #   ports:
+      #   - {name: jdownloader2, containerPort: 5800, protocol: TCP}
+      #   volumeMounts:
+      #   - name: jdownloader2-config
+      #     mountPath: /config
+      #   readinessProbe:
+      #     tcpSocket: {port: 5800}
+      #     initialDelaySeconds: 30
+      #     periodSeconds: 15
+      #   resources:
+      #     requests: {memory: "256Mi", cpu: "50m"}
+      #     limits: {memory: "1Gi", cpu: "1000m"}
       - name: lazylibrarian
         image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
         imagePullPolicy: IfNotPresent

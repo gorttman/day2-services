@@ -10,8 +10,11 @@ resources:
   - radarr
   - prowlarr
   - sabnzbd
-  - bazarr
-  - jdownloader2
+  # bazarr, jdownloader2 REMOVED 2026-08-08 - deliberate, see README's
+  # "Removed: bazarr and jdownloader2" section. Directories and their
+  # Service/Ingress/PVC files are untouched, just excluded here.
+  # - bazarr
+  # - jdownloader2
   - lazylibrarian
   - wiring
   - vpn-healer
