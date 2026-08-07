@@ -127,6 +127,18 @@ spec:
         - name: media
           mountPath: /tv
           subPath: tv
+        # Same mount SABnzbd itself uses (arr-stack-deployment.yml's
+        # sabnzbd container, subPath: downloads) - without this, Sonarr's
+        # container has zero visibility into completed downloads at all
+        # (its /tv mount is scoped to that one subdirectory), so it can't
+        # import anything SABnzbd finishes. Confirmed live 2026-08-08:
+        # Radarr's own UI surfaced this exact gap ("Download client
+        # SABnzbd places downloads in ... but Radarr cannot see this
+        # directory") once SABnzbd's own download_dir/complete_dir got
+        # fixed from a bad relative path to the real /downloads mount.
+        - name: media
+          mountPath: /downloads
+          subPath: downloads
         readinessProbe:
           tcpSocket: {port: 8989}
           initialDelaySeconds: 20
@@ -149,6 +161,11 @@ spec:
         - name: media
           mountPath: /movies
           subPath: movies
+        # See the same mount on the sonarr container above for why -
+        # identical reasoning, Radarr needs it for the same reason.
+        - name: media
+          mountPath: /downloads
+          subPath: downloads
         readinessProbe:
           tcpSocket: {port: 7878}
           initialDelaySeconds: 20
