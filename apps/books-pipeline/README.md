@@ -82,6 +82,24 @@ Quarantine for a PDF now only happens on a genuine `promote()` failure
 same failure handling every other format already gets, not a blanket
 policy against the format.
 
+## Manual diagnostic: audit_authors.py
+
+Not part of the pipeline itself - a standalone one-off tool for
+auditing the live Calibre library for duplicate/near-duplicate author
+names and exact-duplicate titles. Found running live (2026-08-06,
+during a cluster audit) as a ConfigMap applied by hand with no git
+source anywhere - committed here so the tool itself isn't lost the
+next time someone needs it. Run manually:
+
+```
+kubectl create configmap books-audit-script -n books-pipeline \
+  --from-file=audit_authors.py=audit_authors.py \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl run books-audit --rm -i --restart=Never -n books-pipeline \
+  --image=ghcr.io/gorttman/books-pipeline:0.2.0 \
+  --overrides='{"spec":{"containers":[{"name":"books-audit","image":"ghcr.io/gorttman/books-pipeline:0.2.0","command":["python3","/script/audit_authors.py"],"volumeMounts":[{"name":"script","mountPath":"/script"},{"name":"books","mountPath":"/mnt/books"}]}],"volumes":[{"name":"script","configMap":{"name":"books-audit-script"}},{"name":"books","nfs":{"server":"qnap.i3sec.com.au","path":"/books"}}]}}'
+```
+
 ## Image
 
 `ghcr.io/gorttman/books-pipeline:0.1.0` - Calibre 9.11.0 (official
