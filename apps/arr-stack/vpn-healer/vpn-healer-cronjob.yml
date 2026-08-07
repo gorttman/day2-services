@@ -33,6 +33,13 @@ spec:
           nodeSelector:
             kubernetes.io/hostname: k8smaster
           serviceAccountName: vpn-healer
+          # fsGroup 100 ("users") matches the image's own runtime GID
+          # (see images/gluetun-vpn-healer/Dockerfile) - without it, the
+          # git-deploy-key Secret volume is owned by root and this
+          # container's UID 1000 process can't read its own SSH key
+          # ("Permission denied" from ssh, confirmed live 2026-08-07).
+          securityContext:
+            fsGroup: 100
           containers:
             - name: vpn-healer
               image: ghcr.io/gorttman/gluetun-vpn-healer:0.1.0
@@ -60,4 +67,9 @@ spec:
             - name: git-deploy-key
               secret:
                 secretName: vpn-healer-git-deploy-key
-                defaultMode: 0400
+                # Group-read (not owner-only): fsGroup above makes the
+                # mount's group ownership 100, and the container's own
+                # runtime GID is also 100 - this is what actually lets
+                # UID 1000 read it, not just the fsGroup assignment
+                # alone (base file mode still gates access).
+                defaultMode: 0440

@@ -114,8 +114,21 @@ data:
         return current_ip not in {s["ip"] for s in wg_servers}
 
 
+    def get_arr_stack_pod_name():
+        return kubectl("get", "pods", "-l", POD_SELECTOR,
+                        "-o", "jsonpath={.items[0].metadata.name}")
+
+
     def gluetun_is_restart_looping():
-        logs = kubectl("logs", "-l", POD_SELECTOR, "-c", GLUETUN_CONTAINER,
+        # Deliberately NOT `kubectl logs -l ...` - kubectl silently applies
+        # a default --tail=10 whenever a label selector is used, regardless
+        # of --since, which made this always see ~1 restart line instead of
+        # the dozens actually happening in the window (confirmed live
+        # 2026-08-07: real restart cadence is ~1 every 6-7s, but `-l` +
+        # --since=5m returned only 10 lines total). Resolving the pod name
+        # first and logging that directly avoids the hidden cap.
+        pod_name = get_arr_stack_pod_name()
+        logs = kubectl("logs", pod_name, "-c", GLUETUN_CONTAINER,
                         f"--since={RESTART_LOOP_WINDOW}", check=False)
         count = (logs or "").count("restarting VPN because it failed to pass the healthcheck")
         return count >= RESTART_LOOP_THRESHOLD
@@ -208,9 +221,7 @@ data:
 
 
     def restart_arr_stack():
-        pod_name = kubectl("get", "pods", "-l", POD_SELECTOR,
-                            "-o", "jsonpath={.items[0].metadata.name}")
-        kubectl("delete", "pod", pod_name)
+        kubectl("delete", "pod", get_arr_stack_pod_name())
 
 
     def git_commit_rotation(old_ip, new_ip, configmap_fields, encrypted_private_key):
@@ -295,21 +306,24 @@ data:
             "WIREGUARD_ADDRESSES": f"{registration['peer_ip']}/32",
         }
 
-        patch_configmap(new_fields)
         encrypted_private_key = reseal_private_key(private_key_b64)
+
+        # Git FIRST, live cluster SECOND - deliberately. arr-stack is an
+        # ArgoCD-managed Application: if the live ConfigMap/SealedSecret get
+        # patched before git reflects the same values, ArgoCD's own
+        # self-heal sees that as drift and reverts it back to the stale
+        # peer, undoing the fix - confirmed live 2026-08-07 (a git push
+        # failure here left the tunnel silently re-broken with no error
+        # about IT). Committing first means a git failure aborts before
+        # anything live changes (clean retry next run, no wasted PIA
+        # registration burned for nothing), and once git succeeds, ArgoCD
+        # becomes a backstop instead of an adversary if the live patch step
+        # below has its own hiccup.
+        git_commit_rotation(current_ip, server["ip"], new_fields, encrypted_private_key)
+
+        patch_configmap(new_fields)
         patch_sealed_secret(encrypted_private_key)
         restart_arr_stack()
-
-        try:
-            git_commit_rotation(current_ip, server["ip"], new_fields, encrypted_private_key)
-        except Exception as exc:
-            # Live rotation already succeeded and arr-stack is already back
-            # up - a git push failure here isn't a failed self-heal, but it
-            # DOES leave git drifted from live cluster state until this is
-            # retried or fixed by hand.
-            print(f"WARNING: live rotation succeeded but git commit/push failed: {exc}",
-                  file=sys.stderr)
-            return 2
 
         print(f"Done: rotated {current_ip} -> {server['ip']}, arr-stack restarted, "
               "git updated.")
