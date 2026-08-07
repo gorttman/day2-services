@@ -1,0 +1,34 @@
+# Non-secret half of the PIA WireGuard peer registration - split out of
+# gluetun-vpn (see gluetun-sealed-secret.yml) 2026-08-07 so the
+# vpn-healer CronJob's automated peer rotations show up as plain,
+# readable git diffs instead of an opaque re-encrypted blob every time.
+#
+# None of these fields are actually secret:
+#   WIREGUARD_ENDPOINT_IP/_PORT - come straight out of PIA's own public
+#     server list (serverlist.piaservers.net/vpninfo/servers/v6);
+#     anyone can fetch the same list.
+#   WIREGUARD_PUBLIC_KEY - this is the PIA SERVER's public key, not
+#     ours; public keys are meant to be shared by definition.
+#   WIREGUARD_ADDRESSES - the tunnel IP PIA assigned us; meaningless
+#     without the private key, which stays in gluetun-vpn (Sealed
+#     Secret).
+#
+# Kept in a plain directory-mount ConfigMap (not subPath - subPath
+# ConfigMaps don't hot-reload on this cluster, same gotcha as the
+# Pi-hole DNS ConfigMap), consumed via gluetun's `envFrom` alongside
+# the trimmed gluetun-vpn Secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gluetun-config
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    argocd.argoproj.io/managed-by: argocd
+data:
+  VPN_SERVICE_PROVIDER: "custom"
+  VPN_TYPE: "wireguard"
+  WIREGUARD_ENDPOINT_IP: "220.158.199.137"
+  WIREGUARD_ENDPOINT_PORT: "1337"
+  WIREGUARD_PUBLIC_KEY: "JNt0h6T5IZG945q4w849ZhfOIlhxCYUN/0QCWKxLuHk="
+  WIREGUARD_ADDRESSES: "10.46.6.177/32"

@@ -1,0 +1,63 @@
+# Self-heals arr-stack's PIA WireGuard peer registration - see
+# reconcile_vpn.py's module docstring for the why. Runs as its own
+# CronJob, NOT inside the arr-stack pod: gluetun's firewall
+# force-routes every container in that shared pod's network namespace
+# through the VPN tunnel, so a healer living there would be stuck
+# trying to reach PIA's API through the very tunnel it's fixing.
+#
+# Schedule: every 15 minutes. Frequent enough that a stale peer gets
+# caught and fixed well within an hour of PIA retiring a server
+# (instead of however long it takes someone to notice sabnzbd/prowlarr
+# have no internet), infrequent enough not to hammer PIA's account API
+# or the git remote.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vpn-healer
+  namespace: arr-stack
+  labels:
+    app: vpn-healer
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: k8smaster
+          serviceAccountName: vpn-healer
+          containers:
+            - name: vpn-healer
+              image: ghcr.io/gorttman/gluetun-vpn-healer:0.1.0
+              command: ["python3", "/app/reconcile_vpn.py"]
+              resources:
+                requests: {memory: "32Mi", cpu: "10m"}
+                limits: {memory: "256Mi", cpu: "500m"}
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                  readOnly: true
+                - name: pia-credentials
+                  mountPath: /run/secrets/pia
+                  readOnly: true
+                - name: git-deploy-key
+                  mountPath: /run/secrets/git-deploy-key
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: vpn-healer-script
+            - name: pia-credentials
+              secret:
+                secretName: pia-account-credentials
+            - name: git-deploy-key
+              secret:
+                secretName: vpn-healer-git-deploy-key
+                defaultMode: 0400

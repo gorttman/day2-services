@@ -1,0 +1,67 @@
+# Narrow, resourceName-scoped RBAC for vpn-healer - same "grant exactly
+# what's needed, nothing else" philosophy as arr-stack-rbac.yml, just a
+# few more verbs since this ServiceAccount does real self-healing work
+# (patch the live ConfigMap/SealedSecret, read gluetun's logs, restart
+# the pod) instead of just self-deleting.
+#
+# Deliberately does NOT reuse arr-stack-seed: that ServiceAccount can
+# only delete pods, and giving it patch access to Secrets/ConfigMaps
+# too would widen what every config-seed sidecar in the shared
+# arr-stack pod could do, not just vpn-healer.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vpn-healer
+  namespace: arr-stack
+  labels:
+    app: vpn-healer
+    argocd.argoproj.io/managed-by: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vpn-healer
+  namespace: arr-stack
+  labels:
+    app: vpn-healer
+    argocd.argoproj.io/managed-by: argocd
+rules:
+  # Read the current peer, patch it after a rotation.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["gluetun-config"]
+    verbs: ["get", "patch"]
+  # Patch the SealedSecret CR (not the plain Secret) so the
+  # sealed-secrets controller re-decrypts and updates the real Secret
+  # itself - keeps that controller as the only thing that ever writes
+  # the live Secret, same invariant as everywhere else in this repo.
+  - apiGroups: ["bitnami.com"]
+    resources: ["sealedsecrets"]
+    resourceNames: ["gluetun-vpn"]
+    verbs: ["get", "patch"]
+  # Find the arr-stack pod, read gluetun's logs (restart-loop check),
+  # delete it to pick up a rotated peer. Not resourceName-scoped: the
+  # pod name changes on every Deployment revision.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vpn-healer
+  namespace: arr-stack
+  labels:
+    app: vpn-healer
+    argocd.argoproj.io/managed-by: argocd
+subjects:
+  - kind: ServiceAccount
+    name: vpn-healer
+    namespace: arr-stack
+roleRef:
+  kind: Role
+  name: vpn-healer
+  apiGroup: rbac.authorization.k8s.io

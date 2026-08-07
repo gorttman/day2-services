@@ -1,0 +1,320 @@
+# reconcile_vpn.py, mounted read-only into the vpn-healer CronJob's
+# pod - see that file's own module docstring for the full design
+# rationale (why this can't live inside arr-stack's own pod, what it
+# checks, what it does on a stale peer).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vpn-healer-script
+  namespace: arr-stack
+  labels:
+    app: vpn-healer
+    argocd.argoproj.io/managed-by: argocd
+data:
+  reconcile_vpn.py: |
+    """
+    vpn-healer: keeps arr-stack's PIA WireGuard peer alive without a human.
+
+    PIA doesn't publish static WireGuard configs - gluetun's "custom"
+    provider pins to one specific server IP, registered once via PIA's own
+    REST API (github.com/pia-foss/manual-connections: get a token -> pick
+    a server from the live list -> generate an X25519 keypair -> /addKey).
+    That registration doesn't expire on its own, but IS tied to one
+    specific server - if PIA ever retires/rotates it, gluetun just
+    crash-loops silently forever ("WireGuard setup is complete... i/o
+    timeout"), indistinguishable from a generic network failure, until
+    someone notices and manually redoes the 4-step flow (this happened
+    twice already: 2026-07-23 -> retired ~12 days later, then again within
+    ~36-48h of the manual fix).
+
+    This script automates that. It deliberately does NOT live inside the
+    arr-stack pod: every container there shares gluetun's network
+    namespace, and gluetun's own firewall force-routes all non-cluster
+    egress through the VPN tunnel - a healer living in there would be
+    stuck trying to reach PIA's API through the very tunnel it's supposed
+    to be fixing. Runs instead as its own CronJob, normal cluster egress.
+
+    Each run: checks whether the currently-configured peer is still valid
+    (primary: is its server IP still in PIA's own live server list -
+    proactive, catches retirement before gluetun even notices; backup:
+    scan gluetun's recent logs for a sustained restart loop, to catch
+    other failure causes too). If stale, redoes the registration, patches
+    the live gluetun-config ConfigMap and gluetun-vpn SealedSecret,
+    restarts the arr-stack pod so gluetun picks it up, and commits the
+    rotation back to git so a future ArgoCD sync doesn't revert to the
+    stale peer.
+    """
+    import base64
+    import json
+    import os
+    import re
+    import shutil
+    import subprocess
+    import sys
+    import urllib.parse
+
+    import requests
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import x25519
+
+    NAMESPACE = os.environ.get("NAMESPACE", "arr-stack")
+    CONFIGMAP_NAME = os.environ.get("CONFIGMAP_NAME", "gluetun-config")
+    SEALEDSECRET_NAME = os.environ.get("SEALEDSECRET_NAME", "gluetun-vpn")
+    POD_SELECTOR = os.environ.get("POD_SELECTOR", "app=arr-stack")
+    GLUETUN_CONTAINER = os.environ.get("GLUETUN_CONTAINER", "gluetun")
+    PIA_REGION = os.environ.get("PIA_REGION", "aus")
+    RESTART_LOOP_WINDOW = os.environ.get("RESTART_LOOP_WINDOW", "5m")
+    RESTART_LOOP_THRESHOLD = int(os.environ.get("RESTART_LOOP_THRESHOLD", "10"))
+    SEALED_SECRETS_CERT_URL = os.environ.get(
+        "SEALED_SECRETS_CERT_URL",
+        "http://sealed-secrets-controller.kube-system.svc.cluster.local:8080/v1/cert.pem",
+    )
+    PIA_CA_CERT = os.environ.get("PIA_CA_CERT", "/etc/ssl/pia-ca.rsa.4096.crt")
+    PIA_CREDENTIALS_DIR = os.environ.get("PIA_CREDENTIALS_DIR", "/run/secrets/pia")
+    GIT_SSH_KEY = os.environ.get("GIT_SSH_KEY", "/run/secrets/git-deploy-key/id_ed25519")
+    GIT_REPO_URL = os.environ.get("GIT_REPO_URL", "git@github.com:gorttman/day2-services.git")
+    GIT_CLONE_DIR = os.environ.get("GIT_CLONE_DIR", "/tmp/day2-services")
+    CONFIGMAP_MANIFEST = "apps/arr-stack/gluetun/gluetun-config.yml"
+    SEALEDSECRET_MANIFEST = "apps/arr-stack/gluetun/gluetun-sealed-secret.yml"
+
+
+    def kubectl(*args, check=True, capture=True):
+        result = subprocess.run(
+            ["kubectl", "-n", NAMESPACE, *args],
+            capture_output=capture, text=True,
+        )
+        if check and result.returncode != 0:
+            raise RuntimeError(f"kubectl {' '.join(args)} failed: {result.stderr}")
+        return result.stdout.strip() if capture else None
+
+
+    def get_current_endpoint_ip():
+        return kubectl("get", "configmap", CONFIGMAP_NAME,
+                        "-o", "jsonpath={.data.WIREGUARD_ENDPOINT_IP}")
+
+
+    def fetch_pia_server_list():
+        resp = requests.get("https://serverlist.piaservers.net/vpninfo/servers/v6", timeout=15)
+        resp.raise_for_status()
+        # First block is JSON; anything after the blank line is a PGP
+        # signature over that JSON - confirmed against the v6 endpoint's
+        # actual response shape (2026-07-23, 2026-08-05 rotations).
+        body = resp.text.split("\n\n", 1)[0]
+        return json.loads(body)
+
+
+    def find_region_wg_servers(server_list, region_id):
+        for region in server_list["regions"]:
+            if region["id"] == region_id:
+                return region["servers"]["wg"]
+        raise RuntimeError(f"region {region_id!r} not found in PIA server list")
+
+
+    def is_endpoint_stale(current_ip, wg_servers):
+        return current_ip not in {s["ip"] for s in wg_servers}
+
+
+    def gluetun_is_restart_looping():
+        logs = kubectl("logs", "-l", POD_SELECTOR, "-c", GLUETUN_CONTAINER,
+                        f"--since={RESTART_LOOP_WINDOW}", check=False)
+        count = (logs or "").count("restarting VPN because it failed to pass the healthcheck")
+        return count >= RESTART_LOOP_THRESHOLD
+
+
+    def read_pia_credentials():
+        with open(os.path.join(PIA_CREDENTIALS_DIR, "PIA_USERNAME")) as f:
+            username = f.read().strip()
+        with open(os.path.join(PIA_CREDENTIALS_DIR, "PIA_PASSWORD")) as f:
+            password = f.read().strip()
+        return username, password
+
+
+    def get_pia_token(username, password):
+        # multipart/form-data, not HTTP Basic Auth - confirmed 2026-08-05
+        # against pia-foss/manual-connections/get_token.sh directly; Basic
+        # Auth got a 401 even with the correct password.
+        resp = requests.post(
+            "https://www.privateinternetaccess.com/api/client/v2/token",
+            files={"username": (None, username), "password": (None, password)},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json()["token"]
+
+
+    def generate_keypair():
+        private_key = x25519.X25519PrivateKey.generate()
+        public_key = private_key.public_key()
+        priv_b64 = base64.b64encode(
+            private_key.private_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PrivateFormat.Raw,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        ).decode()
+        pub_b64 = base64.b64encode(
+            public_key.public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            )
+        ).decode()
+        return priv_b64, pub_b64
+
+
+    def register_key(server, token, pubkey_b64):
+        # Uses curl's --resolve, matching pia-foss/manual-connections
+        # exactly: connect to the server's real IP but present/verify its
+        # real hostname (cn) for TLS SNI + certificate validation against
+        # PIA's own CA. A plain `requests` call can't do this (the URL host
+        # would have to be the IP, which breaks SNI/hostname matching).
+        query = urllib.parse.urlencode({"pt": token, "pubkey": pubkey_b64})
+        url = f"https://{server['cn']}:1337/addKey?{query}"
+        result = subprocess.run(
+            ["curl", "-fsS", "--cacert", PIA_CA_CERT,
+             "--resolve", f"{server['cn']}:1337:{server['ip']}",
+             url],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"PIA /addKey call failed: {result.stderr}")
+        data = json.loads(result.stdout)
+        if data.get("status") != "OK":
+            raise RuntimeError(f"PIA /addKey rejected registration: {data}")
+        return data
+
+
+    def patch_configmap(fields):
+        kubectl("patch", "configmap", CONFIGMAP_NAME, "--type", "merge",
+                "-p", json.dumps({"data": fields}))
+
+
+    def reseal_private_key(private_key_b64):
+        proc = subprocess.run(
+            ["kubeseal", "--raw", "--scope", "strict",
+             "--namespace", NAMESPACE, "--name", SEALEDSECRET_NAME,
+             "--cert", SEALED_SECRETS_CERT_URL,
+             "--from-file", "WIREGUARD_PRIVATE_KEY=/dev/stdin"],
+            input=private_key_b64, capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"kubeseal failed: {proc.stderr}")
+        return proc.stdout.strip()
+
+
+    def patch_sealed_secret(encrypted_private_key):
+        patch = {"spec": {"encryptedData": {"WIREGUARD_PRIVATE_KEY": encrypted_private_key}}}
+        kubectl("patch", "sealedsecrets.bitnami.com", SEALEDSECRET_NAME,
+                "--type", "merge", "-p", json.dumps(patch))
+
+
+    def restart_arr_stack():
+        pod_name = kubectl("get", "pods", "-l", POD_SELECTOR,
+                            "-o", "jsonpath={.items[0].metadata.name}")
+        kubectl("delete", "pod", pod_name)
+
+
+    def git_commit_rotation(old_ip, new_ip, configmap_fields, encrypted_private_key):
+        ssh_cmd = (
+            f"ssh -i {GIT_SSH_KEY} -o StrictHostKeyChecking=yes "
+            f"-o UserKnownHostsFile=/etc/ssh/github_known_hosts"
+        )
+        env = {**os.environ, "GIT_SSH_COMMAND": ssh_cmd}
+
+        def git(*args):
+            subprocess.run(["git", "-C", GIT_CLONE_DIR, *args], check=True, env=env)
+
+        if os.path.isdir(GIT_CLONE_DIR):
+            shutil.rmtree(GIT_CLONE_DIR)
+        subprocess.run(["git", "clone", "--depth", "1", GIT_REPO_URL, GIT_CLONE_DIR],
+                        check=True, env=env)
+        git("config", "user.name", "vpn-healer")
+        git("config", "user.email", "vpn-healer@arr-stack.local")
+
+        configmap_path = os.path.join(GIT_CLONE_DIR, CONFIGMAP_MANIFEST)
+        with open(configmap_path) as f:
+            content = f.read()
+        for key, value in configmap_fields.items():
+            content = re.sub(
+                rf'^(\s*{re.escape(key)}:\s*)"[^"]*"$',
+                rf'\1"{value}"',
+                content, flags=re.MULTILINE,
+            )
+        with open(configmap_path, "w") as f:
+            f.write(content)
+
+        sealedsecret_path = os.path.join(GIT_CLONE_DIR, SEALEDSECRET_MANIFEST)
+        with open(sealedsecret_path) as f:
+            content = f.read()
+        content = re.sub(
+            r"^(\s*WIREGUARD_PRIVATE_KEY:\s*).*$",
+            rf"\1{encrypted_private_key}",
+            content, count=1, flags=re.MULTILINE,
+        )
+        with open(sealedsecret_path, "w") as f:
+            f.write(content)
+
+        git("add", CONFIGMAP_MANIFEST, SEALEDSECRET_MANIFEST)
+        git("commit", "-m",
+            f"arr-stack: vpn-healer auto-rotated PIA WireGuard peer\n\n"
+            f"PIA's pinned server ({old_ip}) went stale - re-registered "
+            f"against {new_ip} automatically, no human involved.")
+        git("push", "origin", "HEAD:main")
+
+
+    def main():
+        current_ip = get_current_endpoint_ip()
+        server_list = fetch_pia_server_list()
+        wg_servers = find_region_wg_servers(server_list, PIA_REGION)
+
+        stale = is_endpoint_stale(current_ip, wg_servers)
+        looping = gluetun_is_restart_looping()
+
+        if not stale and not looping:
+            print(f"OK: peer {current_ip} still listed in PIA's {PIA_REGION!r} region, "
+                  "no restart loop detected.")
+            return 0
+
+        reason = "server no longer in PIA's live list" if stale else "gluetun stuck in a restart loop"
+        print(f"Rotating PIA WireGuard peer - {reason} (current: {current_ip}).")
+
+        username, password = read_pia_credentials()
+        token = get_pia_token(username, password)
+
+        candidates = [s for s in wg_servers if s["ip"] != current_ip] or wg_servers
+        server = candidates[0]
+
+        private_key_b64, public_key_b64 = generate_keypair()
+        registration = register_key(server, token, public_key_b64)
+
+        new_fields = {
+            "VPN_SERVICE_PROVIDER": "custom",
+            "VPN_TYPE": "wireguard",
+            "WIREGUARD_ENDPOINT_IP": server["ip"],
+            "WIREGUARD_ENDPOINT_PORT": str(registration["server_port"]),
+            "WIREGUARD_PUBLIC_KEY": registration["server_key"],
+            "WIREGUARD_ADDRESSES": f"{registration['peer_ip']}/32",
+        }
+
+        patch_configmap(new_fields)
+        encrypted_private_key = reseal_private_key(private_key_b64)
+        patch_sealed_secret(encrypted_private_key)
+        restart_arr_stack()
+
+        try:
+            git_commit_rotation(current_ip, server["ip"], new_fields, encrypted_private_key)
+        except Exception as exc:
+            # Live rotation already succeeded and arr-stack is already back
+            # up - a git push failure here isn't a failed self-heal, but it
+            # DOES leave git drifted from live cluster state until this is
+            # retried or fixed by hand.
+            print(f"WARNING: live rotation succeeded but git commit/push failed: {exc}",
+                  file=sys.stderr)
+            return 2
+
+        print(f"Done: rotated {current_ip} -> {server['ip']}, arr-stack restarted, "
+              "git updated.")
+        return 0
+
+
+    if __name__ == "__main__":
+        sys.exit(main())

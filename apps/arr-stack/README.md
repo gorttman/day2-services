@@ -115,13 +115,16 @@ Ingress; the Services all select the same pod on different ports.
 
 ## LIVE 2026-07-23: real PIA (Private Internet Access) via WireGuard
 
-`gluetun/gluetun-sealed-secret.yml` holds a real, working WireGuard
-peer registration for PIA (`VPN_SERVICE_PROVIDER=custom`,
-`VPN_TYPE=wireguard`, `WIREGUARD_ENDPOINT_IP`/`_PORT`/`_PUBLIC_KEY`/
-`_PRIVATE_KEY`/`_ADDRESSES`). Confirmed live: gluetun logs a real
-tunnel-up event and a PIA exit IP (`117.120.9.36`, Sydney), and every
-other container in the pod (checked: sonarr, sabnzbd, lazylibrarian)
-gets real internet egress through it with that same exit IP.
+`gluetun/gluetun-config.yml` (plain) and `gluetun/gluetun-sealed-secret.yml`
+(sealed) together hold a real, working WireGuard peer registration for
+PIA (`VPN_SERVICE_PROVIDER=custom`, `VPN_TYPE=wireguard`,
+`WIREGUARD_ENDPOINT_IP`/`_PORT`/`_PUBLIC_KEY`/`_PRIVATE_KEY`/
+`_ADDRESSES` - split between the two 2026-08-07, see "LIVE 2026-08-07:
+automated self-healing" below for why). Confirmed live: gluetun logs a
+real tunnel-up event and a PIA exit IP (`117.120.9.36`, Sydney), and
+every other container in the pod (checked: sonarr, sabnzbd,
+lazylibrarian) gets real internet egress through it with that same
+exit IP.
 
 WireGuard was reached in two steps:
 1. **2026-07-22, PIA via OpenVPN** - switched from Mullvad/WireGuard
@@ -150,13 +153,65 @@ not because it's still true:
 - no indexers or download clients were wired up in the install-only
   pass - still true, see "Deliberately unconfigured" below.
 
-The WireGuard peer is tied to one specific PIA server IP
-(`117.120.9.43`, AU Sydney) - if PIA ever retires/rotates that server,
-the tunnel needs a fresh registration. See the header comment in
-`gluetun-sealed-secret.yml` for the exact 4-step flow to repeat and
-which fields to reseal (`kubeseal --raw`, scope strict, namespace
-`arr-stack`, name `gluetun-vpn`) - same pattern as every other
-multi-field sealed secret in this repo.
+The WireGuard peer is tied to one specific PIA server IP - if PIA ever
+retires/rotates that server, the tunnel needs a fresh registration.
+This happened twice (2026-07-23's server was gone 12 days later;
+2026-08-05's replacement went stale within ~36-48h) before it was
+automated away - see "LIVE 2026-08-07: automated self-healing" below.
+Manual rotation is still possible if ever needed: see the header
+comment in `gluetun-sealed-secret.yml` for the exact 4-step flow and
+which field to reseal.
+
+## LIVE 2026-08-07: automated self-healing (vpn-healer)
+
+Manually noticing the tunnel was dead, then redoing PIA's 4-step
+registration by hand, wasn't sustainable - PIA's server rotation isn't
+predictable enough. `vpn-healer/` now does this automatically:
+
+- **Split the secret** (`gluetun/gluetun-config.yml` +
+  `gluetun/gluetun-sealed-secret.yml`): only `WIREGUARD_PRIVATE_KEY` is
+  a genuine secret (equivalent to a password). Endpoint IP/port and the
+  PIA server's own public key aren't - they come straight from PIA's
+  own public server list, and public keys are meant to be shared by
+  definition - so those live in a plain ConfigMap instead. This also
+  means an automated rotation is a readable git diff, not an opaque
+  re-encrypted blob.
+- **`vpn-healer-cronjob.yml`** runs every 15 minutes, as its own
+  CronJob - deliberately NOT inside the arr-stack pod, since every
+  container there shares gluetun's network namespace and its firewall
+  force-routes all non-cluster egress through the VPN tunnel. A healer
+  living in there would be stuck trying to reach PIA's API through the
+  very tunnel it's supposed to be fixing.
+- **`reconcile_vpn.py`** (see its own module docstring for the full
+  design) checks whether the current peer's server IP is still in
+  PIA's live server list (proactive - catches a retirement before
+  gluetun even notices) plus a gluetun-log restart-loop scan as a
+  backup. On a stale peer: redoes the registration, patches the live
+  ConfigMap + SealedSecret, restarts the arr-stack pod, and commits the
+  rotation back to this repo (its own git deploy key, GitHub identity
+  verified via a baked-in known_hosts, not trust-on-first-connect) so a
+  future ArgoCD sync can't revert to the stale peer.
+- **Two new sealed secrets it needs**, both narrowly scoped and used
+  for nothing else: `gluetun/pia-account-credentials-sealed-secret.yml`
+  (the PIA account login, for re-registration - sealed locally via
+  `vpn-healer/seal-pia-credentials.sh`, never typed into a chat
+  session) and `vpn-healer/vpn-healer-git-deploy-key-sealed-secret.yml`
+  (a dedicated SSH deploy key, write access on this repo only).
+- **RBAC** (`vpn-healer-rbac.yml`): its own ServiceAccount, resourceName-scoped
+  to exactly `gluetun-config` and `gluetun-vpn` - deliberately not
+  reusing `arr-stack-seed`, so this doesn't widen what the config-seed
+  sidecars in the shared pod can touch.
+- **Image** (`images/gluetun-vpn-healer/`): python3 + `cryptography`
+  (X25519 keypair generation, same reasoning as the original manual
+  registration) + `kubectl`/`kubeseal` + `git`/`curl`. Built and pushed
+  to `ghcr.io/gorttman/gluetun-vpn-healer` the same way as every other
+  in-house image here - push a `gluetun-vpn-healer-vX.Y.Z` tag, or run
+  the workflow manually.
+
+**Bootstrap steps still needed before this can run** (both one-time):
+run `vpn-healer/seal-pia-credentials.sh` to create the PIA credentials
+secret, and add the deploy key's public half (in that sealed secret's
+own header comment) as a write-enabled Deploy Key on this GitHub repo.
 
 ## Deliberately unconfigured (install-only)
 - No Prowlarr indexers - see "Cross-app wiring" above, this is the one

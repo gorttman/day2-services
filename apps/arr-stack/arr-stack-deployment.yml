@@ -66,8 +66,14 @@ spec:
           capabilities:
             add: ["NET_ADMIN"]
         envFrom:
+        # Split 2026-08-07: non-secret peer fields (endpoint IP/port,
+        # server pubkey, assigned address) in the plain gluetun-config
+        # ConfigMap; only WIREGUARD_PRIVATE_KEY stays in the Sealed
+        # Secret. See gluetun-config.yml / gluetun-sealed-secret.yml.
+        - configMapRef:
+            name: gluetun-config
         - secretRef:
-            name: gluetun-vpn   # real PIA WireGuard peer config sealed 2026-07-23 - see gluetun-sealed-secret.yml
+            name: gluetun-vpn
         env:
         - name: TZ
           value: Australia/Sydney
@@ -85,11 +91,11 @@ spec:
         # Switched 2026-07-23 to WireGuard via gluetun's "custom"
         # provider (native PIA WireGuard support doesn't exist in
         # gluetun - upstream confirms this is still work in progress).
-        # The peer registration (keypair + PIA's /addKey API) was done
-        # once, out of band, using PIA's own documented flow
-        # (pia-foss/manual-connections) - see gluetun-sealed-secret.yml
-        # for the full rundown and what to do if this peer ever needs
-        # to be re-registered.
+        # The peer registration (keypair + PIA's /addKey API) is now
+        # kept fresh automatically by the vpn-healer CronJob
+        # (../vpn-healer/) - see gluetun-sealed-secret.yml for the full
+        # rundown and what to do if a manual re-registration is ever
+        # needed instead.
         # Admit the arr UIs through gluetun's firewall (inbound)
         - name: FIREWALL_INPUT_PORTS
           value: "8989,7878,9696,8080,6767,5800,5299"
