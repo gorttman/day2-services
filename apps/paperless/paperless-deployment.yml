@@ -162,7 +162,7 @@ spec:
       # "paperless directory" section (2026-08-01).
       - name: consume
         nfs:
-          server: qnap.i3sec.com.au
+          server: qnap
           path: /paperless
       - name: hepburn-hook
         configMap:

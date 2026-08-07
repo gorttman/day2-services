@@ -54,13 +54,13 @@ spec:
                 name: inbox-router-routes
             - name: inbox
               nfs:
-                server: qnap.i3sec.com.au
+                server: qnap
                 path: /inbox
             - name: books
               nfs:
-                server: qnap.i3sec.com.au
+                server: qnap
                 path: /books
             - name: paperless
               nfs:
-                server: qnap.i3sec.com.au
+                server: qnap
                 path: /paperless

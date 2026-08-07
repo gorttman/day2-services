@@ -78,5 +78,5 @@ spec:
                 name: books-pipeline-config
             - name: books
               nfs:
-                server: qnap.i3sec.com.au
+                server: qnap
                 path: /books

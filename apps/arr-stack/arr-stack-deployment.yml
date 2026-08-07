@@ -395,7 +395,7 @@ spec:
       # each mount just restricts its own view.
       - name: books-import
         nfs:
-          server: qnap.i3sec.com.au
+          server: qnap
           path: /books
       # 2026-08-05: single /media export, not separate /media +
       # /downloads exports - subPath below splits it into tv/, movies/,
@@ -413,5 +413,5 @@ spec:
       # not deleted on the QNAP side, just no longer referenced here.
       - name: media
         nfs:
-          server: qnap.i3sec.com.au
+          server: qnap
           path: /media
