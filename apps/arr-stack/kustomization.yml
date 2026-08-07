@@ -11,8 +11,13 @@ resources:
   - prowlarr
   - sabnzbd
   # bazarr, jdownloader2 REMOVED 2026-08-08 - deliberate, see README's
-  # "Removed: bazarr and jdownloader2" section. Directories and their
-  # Service/Ingress/PVC files are untouched, just excluded here.
+  # "Removed: bazarr and jdownloader2" section. The .yml files
+  # themselves are untouched (still in bazarr/, jdownloader2/), but
+  # excluding the directories here means ArgoCD's prune:true deletes
+  # their live Service/Ingress/PVC objects too, not just the
+  # containers - confirmed live, both config PVCs were gone within
+  # a minute of this taking effect. Re-enabling means fresh config for
+  # both, not resuming old state.
   # - bazarr
   # - jdownloader2
   - lazylibrarian

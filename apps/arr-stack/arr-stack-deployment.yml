@@ -394,10 +394,12 @@ spec:
         persistentVolumeClaim: {claimName: prowlarr-config}
       - name: sabnzbd-config
         persistentVolumeClaim: {claimName: sabnzbd-config}
-      - name: bazarr-config
-        persistentVolumeClaim: {claimName: bazarr-config}
-      - name: jdownloader2-config
-        persistentVolumeClaim: {claimName: jdownloader2-config}
+      # bazarr-config/jdownloader2-config volumes removed with their
+      # PVCs (see the container blocks above) - a Pod spec referencing
+      # a PVC that no longer exists blocks scheduling entirely, not
+      # just the two removed containers. Confirmed live 2026-08-08:
+      # leaving these in after ArgoCD pruned the PVCs stuck the whole
+      # arr-stack pod at 0/8 Pending.
       - name: lazylibrarian-config
         persistentVolumeClaim: {claimName: lazylibrarian-config}
       - name: lazylibrarian-config-seed-script

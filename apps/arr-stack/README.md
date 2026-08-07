@@ -229,9 +229,14 @@ once the stack was actually in daily use rather than just installed:
 
 Left commented out, not deleted - `arr-stack-deployment.yml`'s two
 container blocks, and the `bazarr`/`jdownloader2` entries in
-`kustomization.yml` (their own Service/Ingress/PVC files are untouched,
-just excluded from the build). Straightforward to bring either back:
-uncomment both spots, no other changes needed.
+`kustomization.yml` (the `.yml` files themselves are untouched, still
+in `bazarr/`/`jdownloader2/`). Bringing either back is a two-line
+uncomment in each spot - but note ArgoCD's `prune: true` deleted both
+apps' config PVCs within a minute of this landing (confirmed live),
+since excluding the directories pulled their Service/Ingress/PVC
+objects out of the declared state too, not just the containers. Both
+PVCs were empty anyway (neither app had anything configured beyond
+install), but re-enabling either one starts fresh, not resumed.
 
 ## Real gaps found live 2026-08-08 (during actual first use, not
 ## install-time review)
