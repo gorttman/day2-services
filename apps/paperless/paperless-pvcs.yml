@@ -31,6 +31,7 @@ spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: qnap-static
   volumeName: qnap-paperless
+  volumeMode: Filesystem
   resources:
     requests:
       storage: 10Gi
