@@ -13,6 +13,12 @@ spec:
     requests:
       storage: 2Gi
 ---
+# Migrated to the QNAP 2026-08-08 - real financial/legal documents had
+# zero backup coverage on nfs-client (k8smaster's own local disk), same
+# "wrong home" pattern already fixed for Obsidian's vault. Existing
+# content copied and verified before this PVC was repointed - see
+# day1-foundation/apps/qnap-storage/README.md's "paperless-media
+# migrated to the QNAP" section for the full migration record.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -23,7 +29,8 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: nfs-client
+  storageClassName: qnap-static
+  volumeName: qnap-paperless
   resources:
     requests:
       storage: 10Gi

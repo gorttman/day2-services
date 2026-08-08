@@ -33,10 +33,14 @@ empty and removed rather than migrated. See
 `day1-foundation/apps/qnap-storage/README.md` ("paperless directory")
 and `day2-services/apps/inbox-router/README.md` for the routing side.
 
-`data` and `media` are still on the `nfs-client` StorageClass (backed by
-k8smaster's own local-disk export, not the QNAP) — same "wrong home"
-pattern flagged and fixed for Obsidian's vault. Not migrated here; out
-of scope for the consumer-folder pass, flagged for a later one.
+`media` was migrated to a QNAP-backed static PV (`qnap-paperless`,
+`/paperless/media`) 2026-08-08 — the "wrong home" gap this section used
+to flag, closed the same way Obsidian's vault was. See
+`day1-foundation/apps/qnap-storage/README.md`'s "paperless-media
+migrated to the QNAP" section for the migration record. `data` (cache/
+index, not primary documents) stays on `nfs-client` — not worth
+migrating, and separately covered by the Postgres backup for anything
+in it that actually matters.
 
 **`PAPERLESS_CONSUMER_POLLING=30` is required**, not optional, for this
 setup — Paperless defaults to inotify-based watching, which only fires
