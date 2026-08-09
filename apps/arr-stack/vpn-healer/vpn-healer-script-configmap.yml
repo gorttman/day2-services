@@ -220,8 +220,41 @@ data:
                 "--type", "merge", "-p", json.dumps(patch))
 
 
-    def restart_arr_stack():
-        kubectl("delete", "pod", get_arr_stack_pod_name())
+    def restart_arr_stack(expected_endpoint_ip, attempts=4, settle_timeout=60):
+        # A single delete-and-hope isn't enough: confirmed live 2026-08-09
+        # that a concurrent restart (ArgoCD self-heal, or an overlapping
+        # healer run - manually triggering a Job alongside this CronJob
+        # doesn't prevent overlap, concurrencyPolicy: Forbid only blocks the
+        # controller's own scheduled runs, not hand-created ones) can win the
+        # race and leave a pod running with the stale endpoint baked into its
+        # env - patching the ConfigMap alone never restarts anything, so a
+        # pod created from a transient/stale ConfigMap state stays wrong
+        # forever with no error anywhere. Verify the replacement actually
+        # picked up what we just wrote, and retry the delete if not.
+        for attempt in range(1, attempts + 1):
+            kubectl("delete", "pod", get_arr_stack_pod_name(), "--wait=true",
+                    f"--timeout={settle_timeout}s", check=False)
+            pod_name = wait_for_pod_ready(GLUETUN_CONTAINER, timeout=settle_timeout)
+            if pod_name is None:
+                continue
+            actual_ip = kubectl("exec", pod_name, "-c", GLUETUN_CONTAINER,
+                                 "--", "printenv", "WIREGUARD_ENDPOINT_IP", check=False)
+            if actual_ip == expected_endpoint_ip:
+                return
+            print(f"restart attempt {attempt}/{attempts}: pod {pod_name} came up with "
+                  f"endpoint {actual_ip!r}, expected {expected_endpoint_ip!r} - retrying")
+        raise RuntimeError(
+            f"arr-stack pod never came up with endpoint {expected_endpoint_ip!r} "
+            f"after {attempts} restart attempts - needs a human look")
+
+
+    def wait_for_pod_ready(container, timeout):
+        result = kubectl("wait", "pods", "-l", POD_SELECTOR,
+                          "--for=condition=Ready",
+                          f"--timeout={timeout}s", check=False)
+        if result is None:
+            return None
+        return get_arr_stack_pod_name()
 
 
     def git_commit_rotation(old_ip, new_ip, configmap_fields, encrypted_private_key):
@@ -323,7 +356,7 @@ data:
 
         patch_configmap(new_fields)
         patch_sealed_secret(encrypted_private_key)
-        restart_arr_stack()
+        restart_arr_stack(new_fields["WIREGUARD_ENDPOINT_IP"])
 
         print(f"Done: rotated {current_ip} -> {server['ip']}, arr-stack restarted, "
               "git updated.")
