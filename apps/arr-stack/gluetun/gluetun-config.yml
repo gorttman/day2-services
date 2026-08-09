@@ -17,6 +17,20 @@
 # ConfigMaps don't hot-reload on this cluster, same gotcha as the
 # Pi-hole DNS ConfigMap), consumed via gluetun's `envFrom` alongside
 # the trimmed gluetun-vpn Secret.
+#
+# WIREGUARD_PERSISTENT_KEEPALIVE_INTERVAL: found set to 0 (disabled)
+# 2026-08-09, very likely the REAL root cause of the "peer keeps going
+# stale every ~15min" pattern vpn-healer had been papering over since
+# it was built - without a keepalive, the tunnel sends nothing during
+# idle moments, and this network's router (or any NAT in the path)
+# silently drops the UDP connection-tracking entry after some timeout,
+# breaking the tunnel regardless of which PIA server it points at -
+# indistinguishable from "server went bad" to gluetun's own
+# healthcheck, and indistinguishable to vpn-healer's own detection,
+# which is exactly why rotating to a "fresh" server never durably
+# fixed anything: the problem was never the server. 25s is WireGuard's
+# own standard recommendation for exactly this NAT-traversal case -
+# comfortably shorter than virtually any router's UDP timeout.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -32,3 +46,4 @@ data:
   WIREGUARD_ENDPOINT_PORT: "1337"
   WIREGUARD_PUBLIC_KEY: "KHuG+jBjPzK4xhYAhw7ASKB7hn+sm9AJizNK//deXmw="
   WIREGUARD_ADDRESSES: "10.149.1.162/32"
+  WIREGUARD_PERSISTENT_KEEPALIVE_INTERVAL: "25"
