@@ -64,11 +64,25 @@ CONFIGMAP_MANIFEST = "apps/arr-stack/gluetun/gluetun-config.yml"
 SEALEDSECRET_MANIFEST = "apps/arr-stack/gluetun/gluetun-sealed-secret.yml"
 
 
-def kubectl(*args, check=True, capture=True):
-    result = subprocess.run(
-        ["kubectl", "-n", NAMESPACE, *args],
-        capture_output=capture, text=True,
-    )
+def kubectl(*args, check=True, capture=True, timeout=30):
+    # Confirmed live 2026-08-10: three separate runs hit the Job's own
+    # activeDeadlineSeconds (300s) with no rotation ever happening - a
+    # plain kubectl call (get/logs, not even the restart path) had
+    # silently hung with nothing to bound it except that coarse,
+    # 5-minutes-later pod kill. A client-side timeout here means a
+    # stuck call fails fast with a clear error instead of burning the
+    # whole deadline silently. wait_for_pod_ready passes its own longer
+    # timeout since it already waits up to `settle_timeout`s via
+    # kubectl's own --timeout flag - this one just has to be a bit
+    # longer than that, not the default.
+    try:
+        result = subprocess.run(
+            ["kubectl", "-n", NAMESPACE, *args],
+            capture_output=capture, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"kubectl {' '.join(args)} timed out after {timeout}s "
+                            "- API server or network likely unresponsive")
     if check and result.returncode != 0:
         raise RuntimeError(f"kubectl {' '.join(args)} failed: {result.stderr}")
     return result.stdout.strip() if capture else None
@@ -169,10 +183,10 @@ def register_key(server, token, pubkey_b64):
     query = urllib.parse.urlencode({"pt": token, "pubkey": pubkey_b64})
     url = f"https://{server['cn']}:1337/addKey?{query}"
     result = subprocess.run(
-        ["curl", "-fsS", "--cacert", PIA_CA_CERT,
+        ["curl", "-fsS", "--max-time", "15", "--cacert", PIA_CA_CERT,
          "--resolve", f"{server['cn']}:1337:{server['ip']}",
          url],
-        capture_output=True, text=True,
+        capture_output=True, text=True, timeout=20,
     )
     if result.returncode != 0:
         raise RuntimeError(f"PIA /addKey call failed: {result.stderr}")
@@ -193,7 +207,7 @@ def reseal_private_key(private_key_b64):
          "--namespace", NAMESPACE, "--name", SEALEDSECRET_NAME,
          "--cert", SEALED_SECRETS_CERT_URL,
          "--from-file", "WIREGUARD_PRIVATE_KEY=/dev/stdin"],
-        input=private_key_b64, capture_output=True, text=True,
+        input=private_key_b64, capture_output=True, text=True, timeout=20,
     )
     if proc.returncode != 0:
         raise RuntimeError(f"kubeseal failed: {proc.stderr}")
@@ -219,7 +233,7 @@ def restart_arr_stack(expected_endpoint_ip, attempts=4, settle_timeout=60):
     # picked up what we just wrote, and retry the delete if not.
     for attempt in range(1, attempts + 1):
         kubectl("delete", "pod", get_arr_stack_pod_name(), "--wait=true",
-                f"--timeout={settle_timeout}s", check=False)
+                f"--timeout={settle_timeout}s", check=False, timeout=settle_timeout + 10)
         pod_name = wait_for_pod_ready(GLUETUN_CONTAINER, timeout=settle_timeout)
         if pod_name is None:
             continue
@@ -235,28 +249,36 @@ def restart_arr_stack(expected_endpoint_ip, attempts=4, settle_timeout=60):
 
 
 def wait_for_pod_ready(container, timeout):
+    # `kubectl()` always returns a string when capture=True (the
+    # default) - even a timed-out `wait` with check=False just returns
+    # empty stdout, never None. Checking for None here never actually
+    # caught a failure; checking for an empty/falsy result does.
     result = kubectl("wait", "pods", "-l", POD_SELECTOR,
                       "--for=condition=Ready",
-                      f"--timeout={timeout}s", check=False)
-    if result is None:
+                      f"--timeout={timeout}s", check=False, timeout=timeout + 10)
+    if not result:
         return None
     return get_arr_stack_pod_name()
 
 
 def git_commit_rotation(old_ip, new_ip, configmap_fields, encrypted_private_key):
+    # ConnectTimeout bounds the SSH handshake itself; the subprocess
+    # timeout below is the backstop for a connection that hangs *after*
+    # connecting (a stalled transfer, not just a slow/dead handshake).
     ssh_cmd = (
         f"ssh -i {GIT_SSH_KEY} -o StrictHostKeyChecking=yes "
-        f"-o UserKnownHostsFile=/etc/ssh/github_known_hosts"
+        f"-o UserKnownHostsFile=/etc/ssh/github_known_hosts "
+        f"-o ConnectTimeout=10"
     )
     env = {**os.environ, "GIT_SSH_COMMAND": ssh_cmd}
 
-    def git(*args):
-        subprocess.run(["git", "-C", GIT_CLONE_DIR, *args], check=True, env=env)
+    def git(*args, timeout=30):
+        subprocess.run(["git", "-C", GIT_CLONE_DIR, *args], check=True, env=env, timeout=timeout)
 
     if os.path.isdir(GIT_CLONE_DIR):
         shutil.rmtree(GIT_CLONE_DIR)
     subprocess.run(["git", "clone", "--depth", "1", GIT_REPO_URL, GIT_CLONE_DIR],
-                    check=True, env=env)
+                    check=True, env=env, timeout=30)
     git("config", "user.name", "vpn-healer")
     git("config", "user.email", "vpn-healer@arr-stack.local")
 
