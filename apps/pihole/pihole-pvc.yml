@@ -1,3 +1,13 @@
+# Despite the name, this isn't just a "backup" volume - it's pihole's
+# actual persistent config (setupVars.conf, custom lists, dhcp.leases,
+# dnsmasq confs) plus the gravity-backup.db safety copy the
+# gravity-backup sidecar maintains for the RAM-tmpfs gravity.db.
+#
+# Migrated to the QNAP 2026-08-10 - nfs-client is k8smaster's own local
+# disk, same "wrong home" pattern already fixed for several other
+# apps. Existing content (19 files, 7.7M) copied and verified before
+# this PVC was repointed - see day1-foundation/apps/qnap-storage/
+# README.md's qnap-pihole entry.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -10,7 +20,9 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-client
+  storageClassName: qnap-static
+  volumeName: qnap-pihole
+  volumeMode: Filesystem
   resources:
     requests:
       storage: 2Gi
