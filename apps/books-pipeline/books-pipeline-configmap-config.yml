@@ -7,9 +7,7 @@ data:
   config.yaml: |
     settle_seconds: 120   # same convention as the inbox-router, single stat check
 
-    # TEMPORARY 2026-08-10: retiring Public/Books one-off run - see
-    # books-pipeline-cronjob.yml's matching comment for why/revert plan.
-    import_dir: /mnt/public/Books
+    import_dir: /mnt/books/import
     # Single shared root, not separate books/comics trees - calibredb add
     # (2026-07-18) owns file placement now, and calibre-web's own
     # config_calibre_dir already points at this same NFS root (see
