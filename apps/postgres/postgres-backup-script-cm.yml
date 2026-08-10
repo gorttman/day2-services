@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-backup-script
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+data:
+  backup.sh: |
+    #!/bin/sh
+    # Per-database pg_dump (custom format, -Fc) rather than one combined
+    # pg_dumpall - so a single app's data can be pg_restore'd on its own,
+    # without hand-editing a giant SQL file. Roles/passwords aren't in a
+    # per-db dump, hence the separate globals-only pass below.
+    set -eu
+
+    # Guard against /mnt/backup silently being an unmounted local
+    # directory rather than the real QNAP export. hostPath just
+    # bind-mounts whatever's really at this path on the node - the
+    # host's own fstab entry uses nofail/_netdev deliberately (a QNAP
+    # outage must not hang k8smaster's boot), but that also means a
+    # dead mount fails silent, not loud (confirmed live 2026-08-08: a
+    # QNAP-side NFS service restart dropped this exact mount and
+    # nothing noticed until checked by hand). A device-id comparison
+    # against the container's own root would always show "different"
+    # here regardless of host state, since hostPath is a bind mount
+    # either way - checking for real QNAP content instead.
+    # k8smaster-credentials is genuine pre-existing data at the export
+    # root that can only be there if this is really the QNAP.
+    if [ ! -d /mnt/backup/k8smaster-credentials ]; then
+      echo "[!] /mnt/backup does not look like the real QNAP export (k8smaster-credentials missing) - refusing to run, this would otherwise silently write to k8smaster's own local disk instead of the QNAP" >&2
+      exit 1
+    fi
+
+    BACKUP_ROOT=/mnt/backup/active_backup/postgres
+    DAILY_DIR="$BACKUP_ROOT/daily"
+    WEEKLY_DIR="$BACKUP_ROOT/weekly"
+    MONTHLY_DIR="$BACKUP_ROOT/monthly"
+
+    DATE=$(date +%F)
+    DOW=$(date +%u)          # 1=Mon .. 7=Sun
+    DOM=$(date +%d)
+    WEEK_TAG=$(date +%G-W%V)
+    MONTH_TAG=$(date +%Y-%m)
+
+    DAILY_KEEP=7
+    WEEKLY_KEEP=4
+    MONTHLY_KEEP=13          # 12 completed months + the current in-progress one
+
+    DATABASES="paperless homeassistant n8n cloudflare_tf books immich unifi_tf"
+
+    mkdir -p "$DAILY_DIR" "$WEEKLY_DIR" "$MONTHLY_DIR"
+
+    # prune_generations <dir> <name> <keep>
+    # ls -t on the whole dir would interleave every db's filenames, so
+    # this always globs on one db's name prefix and prunes within that.
+    prune_generations() {
+      dir="$1"; name="$2"; keep="$3"
+      i=0
+      for f in $(ls -1t "$dir/${name}-"* 2>/dev/null); do
+        i=$((i + 1))
+        if [ "$i" -gt "$keep" ]; then
+          rm -f "$f"
+        fi
+      done
+    }
+
+    # promote <daily_file> <name> <ext>
+    # Copies (not re-dumps) today's daily file into the weekly tier on
+    # Sundays and the monthly tier on the 1st, so each db is only ever
+    # queried once per run no matter how many tiers it lands in.
+    promote() {
+      daily_file="$1"; name="$2"; ext="$3"
+      if [ "$DOW" = "7" ]; then
+        cp "$daily_file" "$WEEKLY_DIR/${name}-${WEEK_TAG}.${ext}"
+      fi
+      if [ "$DOM" = "01" ]; then
+        cp "$daily_file" "$MONTHLY_DIR/${name}-${MONTH_TAG}.${ext}"
+      fi
+    }
+
+    dump_database() {
+      name="$1"
+      daily_file="$DAILY_DIR/${name}-${DATE}.dump"
+      pg_dump -Fc -d "$name" -f "$daily_file"
+      promote "$daily_file" "$name" "dump"
+    }
+
+    dump_globals() {
+      daily_file="$DAILY_DIR/globals-${DATE}.sql.gz"
+      pg_dumpall --globals-only | gzip > "$daily_file"
+      promote "$daily_file" "globals" "sql.gz"
+    }
+
+    for db in $DATABASES; do
+      echo "[*] Dumping $db"
+      dump_database "$db"
+    done
+    dump_globals
+
+    for db in $DATABASES globals; do
+      prune_generations "$DAILY_DIR" "$db" "$DAILY_KEEP"
+      prune_generations "$WEEKLY_DIR" "$db" "$WEEKLY_KEEP"
+      prune_generations "$MONTHLY_DIR" "$db" "$MONTHLY_KEEP"
+    done
+
+    echo "[*] Postgres backup complete: $(date)"
