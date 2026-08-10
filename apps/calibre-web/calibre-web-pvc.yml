@@ -1,7 +1,13 @@
 # calibre-web's own config/database runs in a RAM emptyDir (same
 # pihole/kavita/grafana pattern - SQLite must never sit on NFS). This
-# PVC holds the periodic tar backups; nfs-client is safe here since
-# these are plain tar files, not a live SQLite DB.
+# PVC holds the periodic tar backups.
+#
+# Migrated to the QNAP 2026-08-10 - nfs-client is k8smaster's own local
+# disk, so these "backups" had zero durability against the one failure
+# mode a backup is supposed to survive. Existing content (2 files, 884K)
+# copied and verified before this PVC was repointed - see
+# day1-foundation/apps/qnap-storage/README.md's qnap-calibre-web-backup
+# entry.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -14,7 +20,9 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: nfs-client
+  storageClassName: qnap-static
+  volumeName: qnap-calibre-web-backup
+  volumeMode: Filesystem
   resources:
     requests:
       storage: 2Gi
