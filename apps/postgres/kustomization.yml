@@ -14,3 +14,5 @@ resources:
   - postgres-immich-db-init-job.yml
   - postgres-unifi-tf-db-init-configmap.yml
   - postgres-unifi-tf-db-init-job.yml
+  - postgres-backup-script-cm.yml
+  - postgres-backup-cronjob.yml

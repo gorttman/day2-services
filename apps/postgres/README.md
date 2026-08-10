@@ -52,6 +52,34 @@ route for any new database going forward.
 `postgres.postgres.svc.cluster.local:5432` — cluster-internal only, no
 ingress. Superuser password in the `postgres-superuser` sealed secret.
 
+## Backups (added 2026-08-07)
+
+**Before this, there was none.** The instance's only durability was its
+single `nfs-client` PVC, itself backed by a single hostPath export on
+k8smaster's own disk (see `day0-infra-build/docs/storage-ha-proposals.md`
+section 1) - a k8smaster disk failure would have taken out the only copy
+of every database on this instance simultaneously, "backup" or not.
+
+`postgres-backup-cronjob.yml` runs daily (`0 2 * * *`) via the script in
+`postgres-backup-script-cm.yml`: one `pg_dump -Fc` (custom format,
+self-compressing) per database, plus a separate `pg_dumpall
+--globals-only` for roles/passwords (not captured by any per-db dump).
+Custom format, not plain SQL, specifically so a single database can be
+`pg_restore`'d on its own without hand-editing a combined dump file.
+
+Writes to the QNAP `backup` export, under `active_backup/postgres/` -
+**not** the export root. That disk still has an old, pre-this-project
+backup sitting at its root (a rushed copy made after a prior disk loss)
+that hasn't been verified as fully recovered yet - nothing automated
+touches the root until that's cleared by hand. Mounted as a pod-level
+`nfs:` volume (same pattern as `apps/inbox-router`'s CronJob), not a
+static PV, since `/backup` isn't a single-consumer claim.
+
+Retention: 7 daily, 4 weekly (promoted Sundays), 13 monthly (promoted on
+the 1st - 12 completed months plus the current in-progress one), pruned
+per-database each run so one large/frequently-changing db's file count
+doesn't crowd out another's.
+
 ## Current databases
 | database      | owner         | used by                                  |
 |----------------|---------------|-------------------------------------------|

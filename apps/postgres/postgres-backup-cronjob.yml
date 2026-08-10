@@ -1,0 +1,102 @@
+# Writes under active_backup/ on the QNAP 'backup' export deliberately,
+# not the export root - that disk still has an old rushed backup sitting
+# at its root from before this project existed, and nothing automated is
+# allowed to touch that until it's been manually verified and cleared.
+#
+# hostPath, not a pod-level nfs: volume (unlike apps/inbox-router's
+# pattern for /inbox and /books) - confirmed live 2026-08-07 that
+# kubelet's own per-pod NFS volume mechanism fails a plain mkdir/touch
+# against this export with a persistent "Permission denied", on *every*
+# node tested (k8smaster and pinode-01), regardless of container image,
+# root vs non-root, or NFS protocol version - all ruled out one at a
+# time, including a full QNAP NFS service restart to rule out
+# accumulated server-side state. Meanwhile every plain, non-kubelet
+# mount of the exact same export (manual host-level mounts on both
+# nodes, and k8smaster's existing fstab-managed /mnt/backup mount from
+# roles/qnap_client) succeeded every single time, with identical
+# resulting squashed credentials. The common factor in every failure
+# was kubelet's own nfs: volume implementation specifically - root
+# cause not fully isolated (would need kernel-level NFS tracing to go
+# further), but the working alternative was already sitting right
+# there: qnap_client's host-level mount is real, systemd-managed, and
+# already proven in production by the sealed-secrets credentials rsync.
+# nodeSelector: k8smaster is now load-bearing for this reason too, not
+# just convention - hostPath requires the target path to actually exist
+# on whichever node the pod lands on, and only k8smaster has this mount.
+# See project_qnap_backup_design memory for the full debugging trail.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # 600 (10min) proved too tight under real I/O contention - a run
+      # was still mid-dump on immich/unifi_tf when killed at exactly
+      # the deadline (confirmed live 2026-08-08). 1800 gives real
+      # headroom without being unbounded.
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: k8smaster
+          # Runs as the postgres image's own built-in uid/gid (70:70,
+          # confirmed via `getent passwd postgres` inside the image)
+          # rather than root - our command: override bypasses the
+          # image's usual entrypoint privilege-drop, so without this
+          # the container would otherwise run as root.
+          #
+          # This uid IS load-bearing for the NFS write, and the QNAP
+          # side has to match it (active_backup/postgres chowned
+          # 70:70). /backup's export was briefly all_squash
+          # (AnonUID=1000/AnonGID=100) during initial debugging, which
+          # made the container's own uid irrelevant - but that setting
+          # turned out to be the actual root cause of kubelet's
+          # pod-level nfs: volumes failing entirely (see the file-level
+          # comment above), and was switched to no_root_squash
+          # 2026-08-09, now managed by day0-infra-build's qnap_exports
+          # Ansible role rather than left as a one-off manual fix.
+          # Under no_root_squash, writes land under the uid the
+          # container actually runs as - hence this must stay 70:70.
+          securityContext:
+            runAsUser: 70
+            runAsGroup: 70
+          containers:
+            - name: postgres-backup
+              image: postgres:16.9-alpine
+              command: ["/bin/sh", "/scripts/backup.sh"]
+              env:
+                - name: PGHOST
+                  value: postgres.postgres.svc.cluster.local
+                - name: PGUSER
+                  value: postgres
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-superuser
+                      key: POSTGRES_PASSWORD
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                - name: backup
+                  mountPath: /mnt/backup
+          volumes:
+            - name: scripts
+              configMap:
+                name: postgres-backup-script
+                defaultMode: 0555
+            - name: backup
+              hostPath:
+                path: /mnt/backup
+                type: Directory
