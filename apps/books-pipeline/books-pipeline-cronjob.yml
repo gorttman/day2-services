@@ -17,17 +17,6 @@
 # images are in the same weight class as n8n/homeassistant/grafana,
 # which all needed this same pin after landing on pinode-01's tmpfs
 # image store the hard way.
-#
-# TEMPORARY one-off change 2026-08-10: retiring Public/Books (an aborted,
-# now-redundant copy of the real library - see HISTORY/session notes) by
-# pointing import_dir at it directly instead of the normal books/import
-# path (see books-pipeline-configmap-config.yml). activeDeadlineSeconds
-# and resources bumped to push through the ~23.8k-file backlog in fewer,
-# longer runs instead of getting chopped up every 30 min - node has
-# plenty of idle headroom (14% CPU, ~6.4Gi free of 16Gi at the time this
-# was made). Revert all of this (deadline, resources, the public volume/
-# mount, and import_dir) once the backlog is drained - do not leave this
-# pointed at Public/Books permanently.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -41,7 +30,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      activeDeadlineSeconds: 21600
+      activeDeadlineSeconds: 1800
       template:
         spec:
           restartPolicy: Never
@@ -74,15 +63,13 @@ spec:
                   mountPath: /etc/books-pipeline
                 - name: books
                   mountPath: /mnt/books
-                - name: public
-                  mountPath: /mnt/public
               resources:
                 requests:
                   memory: 512Mi
                   cpu: 250m
                 limits:
-                  memory: 5Gi
-                  cpu: 3000m
+                  memory: 4Gi
+                  cpu: 2000m
           volumes:
             - name: script
               configMap:
@@ -95,7 +82,3 @@ spec:
               nfs:
                 server: qnap
                 path: /books
-            - name: public
-              nfs:
-                server: qnap
-                path: /Public
