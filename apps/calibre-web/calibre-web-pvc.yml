@@ -4,10 +4,16 @@
 #
 # Migrated to the QNAP 2026-08-10 - nfs-client is k8smaster's own local
 # disk, so these "backups" had zero durability against the one failure
-# mode a backup is supposed to survive. Existing content (2 files, 884K)
-# copied and verified before this PVC was repointed - see
-# day1-foundation/apps/qnap-storage/README.md's qnap-calibre-web-backup
-# entry.
+# mode a backup is supposed to survive.
+#
+# Repointed again 2026-08-13, off the backup disk's
+# active_backup/calibre-web and onto the QNAP main pool's /calibre-web
+# export - the backup disk is the one directory tree the QNAP snapshot
+# job can't back up (it excludes itself), so these tar backups had zero
+# generational history and zero protection if the backup disk itself
+# failed. Existing content (3 files, 908K) copied and verified before
+# this PVC was repointed - see day1-foundation/apps/qnap-storage/
+# README.md's pihole/calibre-web migration section.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -21,7 +27,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   storageClassName: qnap-static
-  volumeName: qnap-calibre-web-backup
+  volumeName: qnap-calibre-web-live
   volumeMode: Filesystem
   resources:
     requests:
