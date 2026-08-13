@@ -4,10 +4,16 @@
 # gravity-backup sidecar maintains for the RAM-tmpfs gravity.db.
 #
 # Migrated to the QNAP 2026-08-10 - nfs-client is k8smaster's own local
-# disk, same "wrong home" pattern already fixed for several other
-# apps. Existing content (19 files, 7.7M) copied and verified before
-# this PVC was repointed - see day1-foundation/apps/qnap-storage/
-# README.md's qnap-pihole entry.
+# disk, same "wrong home" pattern already fixed for several other apps.
+#
+# Repointed again 2026-08-13, off the backup disk's active_backup/pihole
+# and onto the QNAP main pool's /pihole export - the backup disk is the
+# one directory tree the QNAP snapshot job can't back up (it excludes
+# itself), so this had zero generational history and zero protection if
+# the backup disk itself failed. Existing content (22 files, 7.9M)
+# copied and verified before this PVC was repointed - see
+# day1-foundation/apps/qnap-storage/README.md's pihole/calibre-web
+# migration section.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -21,7 +27,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   storageClassName: qnap-static
-  volumeName: qnap-pihole
+  volumeName: qnap-pihole-live
   volumeMode: Filesystem
   resources:
     requests:
