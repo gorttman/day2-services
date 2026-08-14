@@ -99,6 +99,14 @@ spec:
           value: http://tika:9998
         - name: PAPERLESS_TIKA_GOTENBERG_ENDPOINT
           value: http://gotenberg:3000
+        # Added 2026-08-14: several real academic PDFs (ScienceDirect
+        # journal articles) failed PDF/A conversion with "Ghostscript PDF/A
+        # rendering failed" - root cause was a malformed internal pdfmark
+        # (bookmark pointing past the PDF's actual page count), a "soft"
+        # error that doesn't affect readable content. ocrmypdf's own error
+        # message names this exact setting as the fix.
+        - name: PAPERLESS_OCR_USER_ARGS
+          value: '{"continue_on_soft_render_error": true}'
         # Added 2026-08-05: the "Property - Hepburn (Home)" tag can't use
         # Paperless's own Tag.match (256-char field, nowhere near enough
         # room for a real provider list) - hepburn-tag-hook.py does the
