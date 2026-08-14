@@ -38,11 +38,17 @@ spec:
           containerPort: 9998
         resources:
           requests:
-            memory: 128Mi
+            memory: 256Mi
             cpu: 50m
           limits:
-            memory: 512Mi
-            cpu: 500m
+            # Raised 512Mi -> 2Gi 2026-08-14: real runs OOMKilled Tika 60x in a
+            # row (dmesg-confirmed) doing Tesseract OCR on real scanned
+            # documents from the icloud-raw triage batch - 512Mi never had
+            # enough headroom for the JVM baseline plus actual OCR work on a
+            # non-trivial scan. Same failure shape as books-pipeline's
+            # PDF-conversion OOM fix (2Gi -> 4Gi, 2026-07-23).
+            memory: 2Gi
+            cpu: "1"
         readinessProbe:
           httpGet:
             path: /
