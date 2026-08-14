@@ -29,7 +29,13 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      backoffLimit: 0
+      # backoffLimit was 0 (zero retries) until 2026-08-14 - a single
+      # transient blip (a "No route to host" connecting to
+      # postgres.postgres.svc.cluster.local, seen live) was a hard
+      # failure with no second attempt. 3 retries with Kubernetes' own
+      # default exponential backoff (10s/20s/40s) is trivial against
+      # the 30-minute deadline below.
+      backoffLimit: 3
       activeDeadlineSeconds: 1800
       template:
         spec:

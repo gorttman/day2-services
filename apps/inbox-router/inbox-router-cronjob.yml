@@ -17,7 +17,14 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      backoffLimit: 0
+      # backoffLimit was 0 (zero retries) until 2026-08-14 - a single
+      # transient blip (an NFS permission hiccup, seen live hitting
+      # /mnt/inbox/triage) was a hard failure with no second attempt.
+      # 3 retries with Kubernetes' own default exponential backoff
+      # (10s/20s/40s) adds well under 2 minutes worst-case, comfortably
+      # inside both the 4-minute deadline below and the 5-minute cron
+      # interval (concurrencyPolicy: Forbid, so no overlap risk).
+      backoffLimit: 3
       activeDeadlineSeconds: 240
       template:
         spec:

@@ -27,7 +27,12 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      backoffLimit: 0
+      # backoffLimit was 0 (zero retries) until 2026-08-14 - same
+      # reasoning as books-pipeline-cronjob.yml (shares the same
+      # Postgres connection, same class of transient-blip exposure).
+      # 3 retries with Kubernetes' default backoff is trivial against
+      # the 15-minute deadline below, and this only runs weekly.
+      backoffLimit: 3
       activeDeadlineSeconds: 900
       template:
         spec:
