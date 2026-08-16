@@ -1,0 +1,32 @@
+# Workload-affinity soft node placement for paperless - see
+# components/workload-affinity/README.md for the full convention.
+# Wired in 2026-08-17 once pinode-01 became a real second applications
+# node (was previously a no-op per the component's own status note,
+# since paperless only ever had one applications node to land on
+# anyway).
+#
+# Deliberately preferredDuringScheduling (soft), never
+# requiredDuringScheduling: if pinode-01 is down the pod must still
+# schedule on whatever node is available.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unused-set-by-kustomize-target
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/paperless
+                    operator: In
+                    values: ["primary"]
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/paperless
+                    operator: In
+                    values: ["secondary"]

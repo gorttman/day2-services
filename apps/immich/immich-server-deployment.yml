@@ -24,8 +24,13 @@ spec:
         app: immich-server
         app.kubernetes.io/name: immich-server
     spec:
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Hard pin to k8smaster removed 2026-08-17: same reasoning as
+      # paperless-deployment.yml's identical change - pinode-01's
+      # RAM-tmpfs image-store constraint that motivated this pin no
+      # longer exists (real persistent iSCSI root as of that same
+      # night), and soft workload-affinity (affinity-patch.yml) now
+      # handles placement instead, without giving up failover if
+      # pinode-01 is down.
       enableServiceLinks: false
       containers:
       - name: immich-server

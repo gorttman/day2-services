@@ -10,3 +10,9 @@ resources:
   - immich-ml-deployment.yml
   - immich-server-deployment.yml
   - immich-ingress.yml
+
+patches:
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: immich-server
