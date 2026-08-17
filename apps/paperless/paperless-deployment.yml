@@ -22,12 +22,15 @@ spec:
         app: paperless
         app.kubernetes.io/name: paperless
     spec:
-      # pinode-01's k3s root is RAM-backed tmpfs (see
-      # day2-services/apps/books-pipeline for the same fix) - this image
-      # (OCR + scipy/numpy deps) is too large to unpack there: "no space
-      # left on device" on 2026-08-01 confirmed this isn't hypothetical.
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Hard pin to k8smaster removed 2026-08-17: pinode-01's k3s root
+      # used to be RAM-backed tmpfs (this image - OCR + scipy/numpy deps
+      # - is too large to unpack there: "no space left on device" on
+      # 2026-08-01 confirmed this wasn't hypothetical), but pinode-01 was
+      # rebuilt onto a real, persistent iSCSI-backed root that same night
+      # (see day0-infra-build's iscsi_netboot role) - that constraint no
+      # longer applies. Soft workload-affinity (affinity-patch.yml) now
+      # does the placement job instead: prefers pinode-01, but - unlike
+      # this hard pin - still schedules somewhere if pinode-01 is down.
       # The 'paperless' Service otherwise injects PAPERLESS_PORT=tcp://...
       # (legacy Docker service links), which Paperless misreads as its own
       # port config and crashes granian on boot

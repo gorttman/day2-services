@@ -14,3 +14,9 @@ resources:
   - paperless-ingress.yml
   - paperless-config-seed-cm.yml
   - paperless-config-seed-job.yml
+
+patches:
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: paperless
