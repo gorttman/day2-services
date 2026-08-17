@@ -20,3 +20,15 @@ patches:
     target:
       kind: Deployment
       name: paperless
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: gotenberg
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: tika
+  - path: affinity-patch.yml
+    target:
+      kind: Job
+      name: paperless-config-seed

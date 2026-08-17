@@ -1,0 +1,29 @@
+# Workload-affinity soft node placement for calibre-web - see
+# components/workload-affinity/README.md for the full convention.
+# Wired in 2026-08-17 alongside removing the hard nodeSelector:
+# k8smaster pin - same resolved pinode-01 RAM-tmpfs constraint as
+# every other app rebalanced this session. calibre-web's own PVCs are
+# qnap-static (NFS-backed, fully portable), so no data-locality
+# concern here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unused-set-by-kustomize-target
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/calibre-web
+                    operator: In
+                    values: ["primary"]
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/calibre-web
+                    operator: In
+                    values: ["secondary"]

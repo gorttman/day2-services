@@ -23,8 +23,9 @@ spec:
         app.kubernetes.io/name: vscode-server
         app.kubernetes.io/component: dev-tools
     spec:
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Hard nodeSelector removed 2026-08-17: same resolved pinode-01
+      # tmpfs constraint as every other app rebalanced this session.
+      # Workload-affinity (vscode group) now handles placement.
       containers:
       - name: vscode-server
         image: ghcr.io/gorttman/vscode-server:latest

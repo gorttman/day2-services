@@ -1,0 +1,35 @@
+# Workload-affinity soft node placement for pihole - see
+# components/workload-affinity/README.md for the full convention.
+# Wired in 2026-08-17, replacing a TEMPORARY (2026-07-11) hard pin to
+# k8smaster that was redirecting pihole away from its original home
+# (pinode-01) during a disk-pressure incident. That constraint is
+# resolved (real persistent storage as of 2026-08-16/17); pihole's own
+# PVC is qnap-static (NFS-backed, fully portable between nodes), so
+# unlike jellyfin/arr-stack there's no data-locality reason to keep
+# this hard-pinned. Verified live after this landed: DNS resolution
+# from a real WLAN client still works correctly once pihole actually
+# moved - the pod's own comment had flagged this as "an inference, not
+# yet confirmed" (kube-proxy forwards the DNS VIP to wherever the pod
+# runs, regardless of node).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unused-set-by-kustomize-target
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/pihole
+                    operator: In
+                    values: ["primary"]
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/pihole
+                    operator: In
+                    values: ["secondary"]

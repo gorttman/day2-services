@@ -16,3 +16,7 @@ patches:
     target:
       kind: Deployment
       name: immich-server
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: immich-machine-learning

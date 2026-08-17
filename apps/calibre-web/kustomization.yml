@@ -12,3 +12,9 @@ resources:
   - calibre-web-service.yml
   - calibre-web-ingress.yml
   - calibre-web-books-ingress.yml
+
+patches:
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: calibre-web

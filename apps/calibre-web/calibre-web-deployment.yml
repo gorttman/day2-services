@@ -36,11 +36,11 @@ spec:
         app.kubernetes.io/name: calibre-web
         app.kubernetes.io/component: reading-server
     spec:
-      # Same reasoning as kavita's pin: this image needs to reliably
-      # fit pinode-01's 4G tmpfs image store, and config is RAM+backup
-      # so the pod would otherwise be free to float.
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Hard nodeSelector removed 2026-08-17: pinode-01's tmpfs
+      # constraint that motivated this pin is resolved. Workload-
+      # affinity (kustomization.yml's patch) now handles placement -
+      # config was already RAM+backup and PVCs are NFS-backed
+      # (qnap-static), so the pod really is free to float now.
       enableServiceLinks: false
       serviceAccountName: calibre-web-seed
       initContainers:

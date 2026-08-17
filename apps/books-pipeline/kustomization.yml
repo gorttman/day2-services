@@ -8,3 +8,13 @@ resources:
   - books-pipeline-configmap-config.yml
   - books-pipeline-cronjob.yml
   - reconcile-cronjob.yml   # prompt 5 - weekly fingerprint drift check
+
+patches:
+  - path: affinity-patch.yml
+    target:
+      kind: CronJob
+      name: books-pipeline
+  - path: affinity-patch.yml
+    target:
+      kind: CronJob
+      name: books-fingerprint-reconcile

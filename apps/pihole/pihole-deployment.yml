@@ -38,18 +38,15 @@ spec:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
-      # TEMPORARY 2026-07-11: pinode-01 is in DiskPressure (image-store
-      # eviction loop), so this pod is redirected to k8smaster to restore
-      # service. kube-proxy forwards traffic for the DNS VIP (192.168.2.245,
-      # still ARP-answered from pinode-01's wlan0 static binding) to
-      # wherever the pod actually runs, so this should not affect
-      # reachability - but that's an inference, not yet confirmed against a
-      # real WLAN client. Revert to pinode-01 once the permanent
-      # pihole-primary/pihole-secondary split (docs/storage-ha-proposals.md
-      # section 4) lands and pinode-01's disk pressure is resolved
-      # (section 2's containerd-image-store-on-NFS fix).
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Hard nodeSelector removed 2026-08-17: the DiskPressure condition
+      # this was redirecting around (2026-07-11) is resolved - pinode-01
+      # has real persistent storage now. Workload-affinity
+      # (kustomization.yml's patch) restores pinode-01 as the preferred
+      # home instead, without losing failover if it's ever down. The
+      # WLAN-reachability question this comment used to flag as
+      # unconfirmed has now been verified live: kube-proxy correctly
+      # forwards the DNS VIP (192.168.2.245) to wherever the pod
+      # actually runs.
       dnsPolicy: None
       dnsConfig:
         nameservers:
