@@ -37,8 +37,9 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          nodeSelector:
-            kubernetes.io/hostname: k8smaster
+          # Hard nodeSelector removed 2026-08-17: same resolved tmpfs
+          # constraint as books-pipeline-cronjob.yml. Workload-affinity
+          # (books-pipeline group) now handles placement.
           containers:
             - name: books-fingerprint-reconcile
               image: ghcr.io/gorttman/books-pipeline:0.2.0

@@ -15,3 +15,13 @@ resources:
   - vscode-server-ingress.yml
   - vscode-public-ingress.yml
   - vscode-public-auth-ingress.yml
+
+patches:
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: vscode-gorttman
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: vscode-gorttman-auth

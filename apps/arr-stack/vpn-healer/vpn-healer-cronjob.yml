@@ -30,8 +30,15 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          nodeSelector:
-            kubernetes.io/hostname: k8smaster
+          # Hard nodeSelector removed 2026-08-17: was pinned for the
+          # same resolved tmpfs constraint as everything else, but
+          # unlike arr-stack itself this CronJob has no PVC of its own
+          # (just a configMap-mounted script) - nothing ties it to
+          # arr-stack's node, and arr-stack stays hard-pinned regardless
+          # (its config PVCs are local-path, not portable - see
+          # arr-stack-deployment.yml). Left unpinned rather than given
+          # a workload-affinity preference: no co-location requirement,
+          # free to land wherever the scheduler puts it.
           serviceAccountName: vpn-healer
           # fsGroup 100 ("users") matches the image's own runtime GID
           # (see images/gluetun-vpn-healer/Dockerfile) - without it, the

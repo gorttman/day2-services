@@ -8,3 +8,9 @@ resources:
   - pihole-deployment.yml
   - pihole-service.yml
   - pihole-ingress.yml
+
+patches:
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: pihole

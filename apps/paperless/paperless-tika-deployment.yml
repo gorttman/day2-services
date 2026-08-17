@@ -25,10 +25,11 @@ spec:
         app: tika
         app.kubernetes.io/name: tika
     spec:
-      # Same pinode-01 RAM-tmpfs concern as paperless/gotenberg - JVM
-      # base image is not small either.
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Hard nodeSelector removed 2026-08-17: same resolved tmpfs
+      # constraint as paperless/gotenberg (JVM base image is not small
+      # either) - see paperless-deployment.yml's note. Workload-affinity
+      # (paperless group) now handles placement, still co-locating with
+      # paperless/gotenberg since they share the same preference.
       containers:
       - name: tika
         image: docker.io/apache/tika:2.9.2.1-full

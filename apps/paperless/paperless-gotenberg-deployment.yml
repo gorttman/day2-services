@@ -31,12 +31,13 @@ spec:
         app: gotenberg
         app.kubernetes.io/name: gotenberg
     spec:
-      # Same pinode-01 RAM-tmpfs concern as paperless itself
-      # (LibreOffice + Chromium bundled in this image are not small) -
-      # colocating with paperless on k8smaster also avoids a pointless
-      # cross-node hop for every conversion call.
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Hard nodeSelector removed 2026-08-17: same resolved tmpfs
+      # constraint as paperless itself (LibreOffice + Chromium bundled
+      # in this image are not small). Workload-affinity (paperless
+      # group, kustomization.yml) now handles placement instead - still
+      # co-locates with paperless/tika since they share the same
+      # preference, preserving the point of the original note without
+      # a hard pin.
       containers:
       - name: gotenberg
         image: docker.io/gotenberg/gotenberg:8.7

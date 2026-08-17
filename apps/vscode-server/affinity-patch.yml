@@ -1,0 +1,28 @@
+# Workload-affinity soft node placement for vscode - see
+# components/workload-affinity/README.md for the full convention.
+# Wired in 2026-08-17 alongside removing the hard nodeSelector:
+# k8smaster pins that used to be on both Deployments in this app,
+# same resolved pinode-01 RAM-tmpfs constraint as every other app
+# rebalanced this session.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unused-set-by-kustomize-target
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/vscode
+                    operator: In
+                    values: ["primary"]
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/vscode
+                    operator: In
+                    values: ["secondary"]

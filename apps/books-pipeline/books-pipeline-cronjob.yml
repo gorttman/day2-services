@@ -12,11 +12,14 @@
 # 16Gi allocatable, so 4Gi leaves comfortable headroom without starving
 # anything else on k8smaster.
 #
-# nodeSelector: pinned to k8smaster preemptively, matching the
-# precautionary note in the prompt-3 image README - Calibre-bundled
-# images are in the same weight class as n8n/homeassistant/grafana,
-# which all needed this same pin after landing on pinode-01's tmpfs
-# image store the hard way.
+# Hard nodeSelector removed 2026-08-17: was pinned preemptively for the
+# same tmpfs-image-store concern flagged in the prompt-3 image README,
+# now resolved (pinode-01 has real persistent storage). Workload-
+# affinity (books-pipeline group, affinity-patch.yml) now handles
+# placement instead. The 4Gi memory-limit sizing note above was
+# originally justified against k8smaster's 16Gi allocatable -
+# pinode-01 has ~7.8Gi, still comfortable headroom today but worth
+# rechecking if it ever looks pressured during a run.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -40,8 +43,6 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          nodeSelector:
-            kubernetes.io/hostname: k8smaster
           containers:
             - name: books-pipeline
               image: ghcr.io/gorttman/books-pipeline:0.2.0

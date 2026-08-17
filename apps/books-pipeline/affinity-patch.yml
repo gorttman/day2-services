@@ -1,0 +1,37 @@
+# Workload-affinity soft node placement for books-pipeline - see
+# components/workload-affinity/README.md for the full convention.
+# Wired in 2026-08-17 alongside removing the hard nodeSelector:
+# k8smaster pins from both CronJobs in this app - same resolved
+# pinode-01 tmpfs constraint, and both mount their data via a raw NFS
+# export (not a PVC), so there's no data-locality concern either.
+#
+# Sizing note carried over from books-pipeline-cronjob.yml: its 4Gi
+# memory limit was originally justified against k8smaster's 16Gi
+# allocatable. pinode-01 has ~7.8Gi allocatable total - still fits
+# comfortably alongside what's already resident there, but worth
+# knowing if pinode-01 ever looks memory-pressured during a books-
+# pipeline run.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: unused-set-by-kustomize-target
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: workload-affinity/books-pipeline
+                        operator: In
+                        values: ["primary"]
+                - weight: 50
+                  preference:
+                    matchExpressions:
+                      - key: workload-affinity/books-pipeline
+                        operator: In
+                        values: ["secondary"]
