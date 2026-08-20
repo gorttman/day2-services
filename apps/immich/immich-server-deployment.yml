@@ -62,6 +62,15 @@ spec:
         volumeMounts:
         - name: library
           mountPath: /data
+        # Read-only, test-only mount for the new QNAP /photos share -
+        # added 2026-08-20 so a couple of sample files could actually be
+        # seen in Immich as an External Library, without touching the
+        # main /data library or copying anything into it. Deliberately
+        # readOnly: Immich only needs to read/index an external library,
+        # never write back to the source.
+        - name: photos-test
+          mountPath: /photos-test
+          readOnly: true
         resources:
           requests:
             memory: 512Mi
@@ -88,6 +97,11 @@ spec:
       - name: library
         persistentVolumeClaim:
           claimName: immich-library
+      - name: photos-test
+        nfs:
+          server: qnap
+          path: /photos
+          readOnly: true
 ---
 apiVersion: v1
 kind: Service
