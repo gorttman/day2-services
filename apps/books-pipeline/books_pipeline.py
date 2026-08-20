@@ -619,6 +619,21 @@ def main():
     finally:
         conn.close()
 
+    # Signals the QNAP-side nightly snapshot job (roles/qnap_snapshot) to
+    # actually run for this source instead of skipping it - a single stat()
+    # check there vs. this being the thing that decides whether a
+    # multi-hundred-thousand-file --link-dest tree walk happens tonight.
+    # Only touched on a real promotion, not every 15-minute run (most runs
+    # promote nothing), so a quiet week leaves the flag untouched and the
+    # snapshot job keeps skipping - correct, since there's nothing new to
+    # snapshot. library_dir, not import_dir - the flag has to live where
+    # the snapshot source root actually is, not the transient import
+    # staging area.
+    if counters["routes"].get("promoted", 0) > 0:
+        flag_path = os.path.join(config["library_dir"], ".snapshot-pending")
+        with open(flag_path, "a"):
+            os.utime(flag_path, None)
+
     log_summary(counters)
 
 
