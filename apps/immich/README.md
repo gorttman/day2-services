@@ -1,7 +1,8 @@
 # Immich
 
-**Status:** ACTIVE (initial deployment 2026-08-04; Google Photos migration
-and Cloudflare exposure still pending)
+**Status:** ACTIVE (initial deployment 2026-08-04; admin account and a
+proof-of-concept External Library added 2026-08-20; Google Photos
+migration and Cloudflare exposure still pending)
 **Version:** v3.1.0 (ghcr.io/immich-app/immich-server,
 ghcr.io/immich-app/immich-machine-learning)
 **Namespace:** immich
@@ -30,9 +31,14 @@ two legs).
 - Database: `immich` logical DB on the shared Postgres instance (see
   apps/postgres/README.md's "pgvector, and what a shared instance
   actually costs" section) - the reason that extension exists at all
-- Both `immich-server` and `immich-machine-learning` pinned to
-  `k8smaster` (`nodeSelector`) - same tmpfs/RAM reasoning as every other
-  heavy image in this cluster (paperless, books-pipeline)
+- Hard pin to `k8smaster` removed 2026-08-17 (same tmpfs constraint
+  resolved as paperless/books-pipeline) - soft workload-affinity now
+  handles placement, so `immich-server` can land on `pinode-01` too.
+  First time it did (2026-08-20), the pod itself was healthy - the
+  actual problem that day was that pinode-01's WLAN VIP bindings and
+  `proxy_arp` had reset on an earlier reboot, breaking WiFi-client DNS
+  entirely (unrelated to Immich itself, see
+  day0-infra-build/pinode-wlan-vips.yml).
 
 ## Storage
 - `immich-library` PVC claims the static `qnap-immich` PV
@@ -73,22 +79,56 @@ turns out to be a real problem in practice (e.g. disabling face
 recognition specifically, or accepting slower CLIP search) rather than
 pre-tuning speculatively here.
 
+## External Library (proof of concept, 2026-08-20)
+A read-only NFS mount was added to `immich-server-deployment.yml`
+(`photos-test` volume, QNAP `/photos` export, mounted at
+`/photos-test`) to test the QNAP `Public/Photos` -> new `/photos`
+share migration path without touching the main `/data` library. Two
+sample files were copied to `/mnt/photos` on the QNAP side as the
+actual test content.
+
+Immich's own Library API (`/libraries`, `/libraries/{id}/scan`,
+`/libraries/{id}/statistics`) is what actually indexes an external
+path - mounting the volume alone does nothing until a library is
+created and scanned. There is no `immich-admin` CLI command for this;
+it has to go through the authenticated REST API. Confirmed working
+end-to-end via:
+```
+POST /api/libraries        {"ownerId": "...", "name": "...", "importPaths": ["/photos-test"]}
+POST /api/libraries/{id}/scan
+GET  /api/libraries/{id}/statistics   -> {"photos":2,"videos":0,...}
+```
+Getting an authenticated session required a password, and the admin
+account (created via first web-UI signup, `gorttman@i3sec.com.au`) had
+no known password on file. `immich-admin reset-admin-password` exists
+but prompts interactively for a new password over stdin, which
+`kubectl exec` (even with `-i`) wouldn't reliably drive. Worked around
+by generating a bcrypt hash with the server's own bundled `bcrypt`
+node module and writing it directly to the `"user"."password"` column
+on the shared Postgres instance (table name is the literal, unquoted-
+reserved-word `user`, singular) - then logged in via `/api/auth/login`
+as normal. The password currently on that account is a generated temp
+value from that session, not yet replaced with a real one.
+
+Full bulk migration from `Public/Photos` hasn't started - this was
+explicitly scoped as a 2-file smoke test while a QNAP RAID sync was in
+progress; the sync finished 2026-08-21, so the constraint no longer
+applies, but scope/approach for the real migration is still undecided.
+
 ## Deliberately unconfigured (separate pass)
 - No Cloudflare Tunnel exposure yet (internal-only ingress for now,
   same posture Paperless started with)
-- No admin bootstrap - Immich's first real difference from Paperless:
-  the first account created via the web UI's own signup flow becomes
-  the admin, no `IMMICH_ADMIN_PASSWORD`-style env var to seed
-- No external-library configuration (mounting an existing photo tree
-  read-only) - out of scope for this initial deployment; the actual
-  Google Photos migration (downloading and importing content) is a
-  separate, not-yet-started piece of work
+- The bulk Google Photos / QNAP Photos share migration (downloading
+  and importing the real content) hasn't started - see the External
+  Library section above for the proof-of-concept groundwork done so far
 - Storage template / library structure defaults untouched
 
 ## Access
 - https://immich.i3sec.com.au - DNS entry live in `dns-conf` (pihole +
   coredns), 192.168.2.241
-- No seeded admin account - sign up via the web UI on first visit
+- Admin account exists (`gorttman@i3sec.com.au`, created via first
+  web-UI signup) - see the External Library section above for the
+  current password state
 
 ## Secrets
 `immich-secret` (sealed, immich namespace): `DB_PASSWORD`. Same value
