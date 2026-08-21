@@ -5,3 +5,5 @@ resources:
   - selfsigned-clusterissuer.yml
   - private-ca.yml
   - cert-manager-app.yml
+  - cloudflare-api-token-sealedsecret.yml
+  - letsencrypt-clusterissuer.yml
