@@ -71,18 +71,6 @@ spec:
         - name: photos-test
           mountPath: /photos-test
           readOnly: true
-        # The real photo backlog on the QNAP `Public` share, mounted at
-        # /photos. Read-only for now: the first-pass job is IMPORT + index
-        # only, and read-only guarantees the scan can't corrupt source
-        # files. The settled edit-in-place design will need this
-        # read-write eventually, but only after the tag/identity-preserving
-        # rescan behaviour is verified on a throwaway file - a separate
-        # step. Import paths are scoped per-year in the external library
-        # itself (Photo/master/2012, Photo/Master.ld/2012, …), not by
-        # mounting subfolders, so widening scope later needs no remount.
-        - name: photo-library
-          mountPath: /photos
-          readOnly: true
         resources:
           requests:
             memory: 512Mi
@@ -113,11 +101,6 @@ spec:
         nfs:
           server: qnap
           path: /photos
-          readOnly: true
-      - name: photo-library
-        nfs:
-          server: qnap
-          path: /Public
           readOnly: true
 ---
 apiVersion: v1
