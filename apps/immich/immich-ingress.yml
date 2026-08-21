@@ -8,7 +8,12 @@ metadata:
     app.kubernetes.io/name: immich
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "private-ca"
+    # letsencrypt-prod, not private-ca: the Immich mobile app rejects
+    # private CAs outright (its background_downloader networking layer
+    # ignores the device trust store - upstream issues #28929/#15188),
+    # so a publicly-trusted cert is the only way the app works at all.
+    # Issued via DNS-01, so nothing here is publicly exposed.
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   # Internal-only for now, same as paperless/calibre-web's internal
   # hostname - no Cloudflare Tunnel annotation. DNS entry needed in
