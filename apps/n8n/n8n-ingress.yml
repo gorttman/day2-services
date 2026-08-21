@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: n8n
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "private-ca"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   # Internal-only: no Cloudflare Tunnel annotation; DNS for this host
   # lives in dns-conf. http->https redirect is global (see day0-bootstrap

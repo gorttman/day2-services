@@ -13,7 +13,7 @@ metadata:
     app.kubernetes.io/name: calibre-web
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "private-ca"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     # cloudflared's Public Hostname (dashboard-managed) forwards here as
     # plain HTTP, not HTTPS - without this, nginx's default ssl-redirect
     # would 308 that request to https and loop. Same as kavita's.

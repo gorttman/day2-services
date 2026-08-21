@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: vscode-server
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "private-ca"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     traefik.ingress.kubernetes.io/router.middlewares: vscode-server-vscode-gorttman-trailing-slash@kubernetescrd,vscode-server-vscode-gorttman-auth@kubernetescrd,vscode-server-vscode-gorttman-strip@kubernetescrd
 spec:
   ingressClassName: traefik

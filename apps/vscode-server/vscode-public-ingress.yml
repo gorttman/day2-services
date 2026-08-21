@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: vscode-server
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "private-ca"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     # cloudflared's Public Hostname (Terraform-managed, day1-foundation
     # apps/cloudflare-tf) forwards here as plain HTTP, not HTTPS - without
     # this, nginx's default ssl-redirect would 308 that request to https

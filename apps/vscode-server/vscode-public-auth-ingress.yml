@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: vscode-server
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "private-ca"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   # Mirrors vscode-gorttman-auth-ingress.yml (the internal Traefik one) -
