@@ -62,14 +62,18 @@ spec:
         volumeMounts:
         - name: library
           mountPath: /data
-        # Read-only, test-only mount for the new QNAP /photos share -
-        # added 2026-08-20 so a couple of sample files could actually be
-        # seen in Immich as an External Library, without touching the
-        # main /data library or copying anything into it. Deliberately
-        # readOnly: Immich only needs to read/index an external library,
-        # never write back to the source.
-        - name: photos-test
-          mountPath: /photos-test
+        # The canonical photo library: the root-level QNAP `photos` share
+        # (qnap:/photos), the single source of truth. Deduplicated backlog
+        # survivors are consolidated INTO it per-year (/photos/2012, …) and
+        # ongoing PhotoSync uploads land here too; the `Public/*` trees are
+        # old/unsorted/unreliable SOURCE only, never mounted here.
+        # readOnly for now: import + index only. The settled edit-in-place
+        # workflow will need this read-write, but only after the rescan
+        # tag/identity-preservation behaviour is verified on a throwaway
+        # file (a separate, deliberate step). Renamed from the earlier
+        # /photos-test 2026-08-21 once this became the real library.
+        - name: photo-library
+          mountPath: /photos
           readOnly: true
         resources:
           requests:
@@ -97,7 +101,7 @@ spec:
       - name: library
         persistentVolumeClaim:
           claimName: immich-library
-      - name: photos-test
+      - name: photo-library
         nfs:
           server: qnap
           path: /photos
