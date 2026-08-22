@@ -1,0 +1,69 @@
+# Plain nginx serving whatever the generator CronJob last wrote to
+# /var/lib/backup-dashboard-html - same hostPath, read-only here,
+# nodeSelector: k8smaster to match (hostPath needs the path to exist on
+# whichever node the pod actually lands on).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-dashboard
+  namespace: backup-dashboard
+  labels:
+    app: backup-dashboard
+    app.kubernetes.io/name: backup-dashboard
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: backup-dashboard
+  template:
+    metadata:
+      labels:
+        app: backup-dashboard
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+      volumes:
+        - name: html
+          hostPath:
+            path: /var/lib/backup-dashboard-html
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-dashboard
+  namespace: backup-dashboard
+  labels:
+    app: backup-dashboard
+    app.kubernetes.io/name: backup-dashboard
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  selector:
+    app: backup-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
