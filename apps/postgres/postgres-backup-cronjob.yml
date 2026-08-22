@@ -1,7 +1,18 @@
-# Writes under active_backup/ on the QNAP 'backup' export deliberately,
-# not the export root - that disk still has an old rushed backup sitting
-# at its root from before this project existed, and nothing automated is
-# allowed to touch that until it's been manually verified and cleared.
+# Writes to k8smaster's own LOCAL disk (/var/lib/postgres-backup-staging,
+# day0-infra-build's qnap_client role), not the QNAP directly - changed
+# 2026-08-22 after a QNAP reboot silently wiped /backup's entire NFS
+# export registration (external/USB storage doesn't survive a QNAP
+# reboot the way internal-pool exports do) and this Job hung for its
+# full 30-minute deadline, three nights running, before anyone noticed.
+# A separate host-level cron (same role) rsyncs this staging directory
+# out to the QNAP's active_backup/postgres afterward, guarded by its own
+# mountpoint check - so a QNAP/NFS problem now means one sync step logs
+# an error, not a failed nightly dump. Still off the live database's own
+# node-local risk in the sense that "did tonight's backup succeed" no
+# longer depends on the QNAP at all; it does mean a real k8smaster disk
+# failure in the (normally short) window before the sync runs would lose
+# that window's dump - accepted tradeoff, see day2-services
+# project_qnap_backup_design memory for the full discussion.
 #
 # hostPath, not a pod-level nfs: volume (unlike apps/inbox-router's
 # pattern for /inbox and /books) - confirmed live 2026-08-07 that
@@ -98,5 +109,5 @@ spec:
                 defaultMode: 0555
             - name: backup
               hostPath:
-                path: /mnt/backup
+                path: /var/lib/postgres-backup-staging
                 type: Directory
