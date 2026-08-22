@@ -32,14 +32,18 @@ data:
       - source: inbox/working
         dest: /mnt/vault/incoming        # TBD - path unconfirmed, deliberately not resolved yet
 
-      # Live 2026-08-22: /mnt/photos is the QNAP /photos export, the same
-      # one Immich's "QNAP Photos Test" External Library
-      # (day2-services/apps/immich) scans. /import keeps bulk drops
-      # (e.g. a Google Takeout batch) organizationally separate from
-      # anything placed directly under /photos - Immich's library scan
-      # is recursive, so subfolders here are still indexed.
+      # Live 2026-08-22, corrected same day: originally staged straight
+      # into /mnt/photos/import, but that's INSIDE the QNAP /photos
+      # export Immich's External Library recursively scans - anything
+      # sitting there unsorted risked getting indexed by Immich before
+      # scripts/photos_importer.py (day0-infra-build) had a chance to
+      # SHA-dedup and re-file it into /photos/<EXIF-year>/. Staging
+      # instead under the /inbox export (already mounted here, no new
+      # volume needed) keeps unsorted drops completely outside the
+      # tree Immich ever looks at. photos_importer.py reads FROM here
+      # and writes the real, sorted output into /photos itself.
       - source: inbox/photos
-        dest: /mnt/photos/import
+        dest: /mnt/inbox/photos-staging
     
     # Evaluated only for files sitting in the bare inbox root.
     mime_defaults:
