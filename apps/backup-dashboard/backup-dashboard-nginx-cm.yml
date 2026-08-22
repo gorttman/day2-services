@@ -1,0 +1,28 @@
+# Overrides nginx:alpine's default server block to disable caching.
+# This page is regenerated every 15 minutes specifically so it's always
+# current - the default image ships only ETag/Last-Modified with no
+# Cache-Control at all, which browsers can (and apparently did) cache
+# heuristically, silently defeating the whole point from the viewer's
+# side even though the server-side content was genuinely fresh.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-dashboard-nginx-conf
+  namespace: backup-dashboard
+  labels:
+    app: backup-dashboard
+    app.kubernetes.io/name: backup-dashboard
+    argocd.argoproj.io/managed-by: argocd
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        location / {
+            add_header Cache-Control "no-cache, must-revalidate";
+            try_files $uri $uri/ =404;
+        }
+    }

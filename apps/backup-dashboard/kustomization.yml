@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - backup-dashboard-namespace.yml
   - backup-dashboard-generator-cm.yml
+  - backup-dashboard-nginx-cm.yml
   - backup-dashboard-generator-cronjob.yml
   - backup-dashboard-server-deployment.yml
   - backup-dashboard-ingress.yml
