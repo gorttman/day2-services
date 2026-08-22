@@ -16,8 +16,14 @@ data:
     import os
     import re
     import shutil
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
     from pathlib import Path
+    
+    # Fixed +10 offset, not zoneinfo - python:3.12-alpine has no tzdata by
+    # default, and pulling that in just to get a DST-aware abbreviation is
+    # more moving parts than a homelab dashboard timestamp needs. If this
+    # ever needs to track daylight saving, this is the one line to change.
+    LOCAL_TZ = timezone(timedelta(hours=10), name="AEST")
     
     BACKUP_ROOT = Path("/mnt/backup")
     POSTGRES_ROOT = BACKUP_ROOT / "active_backup" / "postgres"
@@ -233,7 +239,11 @@ data:
     
     
     def render(postgres_rows, qnap_rows, qnap_dates, secrets, disk):
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        utc_now = datetime.now(timezone.utc)
+        now = (
+            f"{utc_now.astimezone(LOCAL_TZ).strftime('%Y-%m-%d %H:%M')} AEST"
+            f" ({utc_now.strftime('%H:%M')} UTC)"
+        )
     
         order = {"good": 0, "warn": 1, "crit": 2}
         if postgres_rows:
