@@ -10,13 +10,14 @@ metadata:
 data:
   generate_dashboard.py: |
     #!/usr/bin/env python3
-    """Generates the backup status dashboard from real current state under
-    /mnt/backup. Run periodically by a CronJob, not a live query-on-load
-    page - see day2-services apps/backup-dashboard/README.md."""
-    import os
+    """Serves the backup status dashboard, regenerated fresh from real
+    current state under /mnt/backup on every single request - genuinely
+    on-demand, not a periodic CronJob writing a static file. See
+    day2-services apps/backup-dashboard/README.md."""
     import re
     import shutil
     from datetime import datetime, timedelta, timezone
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from pathlib import Path
     
     # Fixed +10 offset, not zoneinfo - python:3.12-alpine has no tzdata by
@@ -25,11 +26,23 @@ data:
     # ever needs to track daylight saving, this is the one line to change.
     LOCAL_TZ = timezone(timedelta(hours=10), name="AEST")
     
+    # The three real daily backup schedules, all interpreted in this same
+    # local time - postgres-backup and sealed-secrets-backup are k8s
+    # CronJobs with no .spec.timeZone set, which k3s's controller-manager
+    # resolves against the HOST's own system clock (confirmed live
+    # 2026-08-22: sealed-secrets-backup's "0 4 * * *" fires at 18:00 UTC
+    # the previous day, exactly 04:00 AEST); qnap-snapshot is the QNAP's
+    # own crontab entry, same household-local convention.
+    DAILY_SCHEDULE = [
+        ("postgres-backup", 2, 0),
+        ("qnap-snapshot", 3, 0),
+        ("sealed-secrets-backup", 4, 0),
+    ]
+    
     BACKUP_ROOT = Path("/mnt/backup")
     POSTGRES_ROOT = BACKUP_ROOT / "active_backup" / "postgres"
     QNAP_DATA_ROOT = BACKUP_ROOT / "active_backup" / "qnap-data" / "daily"
     CREDENTIALS_ROOT = BACKUP_ROOT / "k8smaster-credentials"
-    OUT_PATH = Path(os.environ.get("DASHBOARD_OUT", "/var/lib/backup-dashboard-html/index.html"))
     
     NAME_DATE_RE = re.compile(r"^(?P<name>.+)-(?P<date>\d{4}-\d{2}-\d{2})\.(?P<ext>.+)$")
     
@@ -127,6 +140,21 @@ data:
             return None
     
     
+    def next_run(now_utc):
+        """Returns (name, target_datetime_utc) for the soonest of the three
+        daily schedules, computed fresh against whatever instant is passed
+        in - always the next occurrence, never today's already-passed one."""
+        now_local = now_utc.astimezone(LOCAL_TZ)
+        candidates = []
+        for name, hour, minute in DAILY_SCHEDULE:
+            target_local = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if target_local <= now_local:
+                target_local += timedelta(days=1)
+            candidates.append((target_local, name))
+        target_local, name = min(candidates)
+        return name, target_local.astimezone(timezone.utc)
+    
+    
     STALE_WARN_DAYS = 2
     STALE_CRIT_DAYS = 4
     
@@ -184,6 +212,9 @@ data:
     h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
     .subline { color: var(--ink-muted); font-size: 14px; }
     .subline .ts { font-family: var(--mono); color: var(--ink); }
+    .countdown { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 13px; color: var(--ink-muted); }
+    .countdown .val { font-family: var(--mono); font-size: 15px; font-weight: 650; color: var(--accent);
+      font-variant-numeric: tabular-nums; }
     .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border);
       border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 32px;
       box-shadow: var(--shadow); }
@@ -245,6 +276,14 @@ data:
             f" ({utc_now.strftime('%H:%M')} UTC)"
         )
     
+        next_run_name, next_run_utc = next_run(utc_now)
+        # Ticks client-side against the viewer's own clock (setInterval doing
+        # plain subtraction from a fixed ISO instant) rather than a
+        # server-rendered string, so it stays accurate between page loads
+        # instead of freezing at whatever it said when this HTML was
+        # generated - the whole point of it being a countdown.
+        next_run_iso = next_run_utc.isoformat()
+    
         order = {"good": 0, "warn": 1, "crit": 2}
         if postgres_rows:
             pg_status = max((status_for_days(r["stale_days"]) for r in postgres_rows), key=lambda s: order[s])
@@ -303,7 +342,8 @@ data:
       <header>
         <span class="eyebrow">valinor-m / k8smaster &mdash; disaster recovery</span>
         <h1>Backup Status</h1>
-        <div class="subline">Regenerated <span class="ts">{now}</span> &mdash; refreshed automatically every 15 minutes</div>
+        <div class="subline">Regenerated <span class="ts">{now}</span> &mdash; generated fresh on every request, not on a schedule</div>
+        <div class="countdown">Next backup run (<strong>{next_run_name}</strong>) in <span class="val" id="countdown-val" data-target="{next_run_iso}">&hellip;</span></div>
       </header>
     
       <div class="tiles">
@@ -356,24 +396,70 @@ data:
       </section>
     
       <footer>
-        <span>Self-hosted, regenerated every 15 min by a CronJob &mdash; not a claude.ai artifact.</span>
+        <span>Self-hosted, generated fresh on every request &mdash; not a claude.ai artifact.</span>
         {disk_html}
       </footer>
-    </div></body></html>"""
+      </div>
+      <script>
+        (function () {{
+          var el = document.getElementById("countdown-val");
+          var target = new Date(el.dataset.target).getTime();
+          function tick() {{
+            var diff = Math.max(0, target - Date.now());
+            var h = Math.floor(diff / 3600000);
+            var m = Math.floor((diff % 3600000) / 60000);
+            var s = Math.floor((diff % 60000) / 1000);
+            el.textContent = h + "h " + String(m).padStart(2, "0") + "m " + String(s).padStart(2, "0") + "s";
+            if (diff <= 0) location.reload();
+          }}
+          tick();
+          setInterval(tick, 1000);
+        }})();
+      </script>
+    </body></html>"""
     
     
-    def main():
+    def generate():
         postgres_rows = scan_postgres()
         qnap_rows, qnap_dates = scan_qnap_snapshot()
         secrets = scan_sealed_secrets()
         disk = disk_stats()
+        return render(postgres_rows, qnap_rows, qnap_dates, secrets, disk)
     
-        html = render(postgres_rows, qnap_rows, qnap_dates, secrets, disk)
-        OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = OUT_PATH.with_suffix(".tmp")
-        tmp.write_text(html)
-        tmp.replace(OUT_PATH)
-        print(f"[*] Dashboard written to {OUT_PATH} at {datetime.now(timezone.utc).isoformat()}")
+    
+    class DashboardHandler(BaseHTTPRequestHandler):
+        # No RBAC, no Kubernetes API access, no shared hostPath with a
+        # separate writer to coordinate with - every GET just re-scans
+        # /mnt/backup and renders inline. Fast enough that this genuinely
+        # doesn't need caching: a handful of directory listings, nothing
+        # that touches the network.
+        def do_GET(self):
+            if self.path not in ("/", "/index.html"):
+                self.send_response(404)
+                self.end_headers()
+                return
+            try:
+                body = generate().encode("utf-8")
+            except Exception as exc:  # noqa: BLE001 - surface it to the page, not just a bare 500
+                body = f"<h1>Dashboard generation failed</h1><pre>{exc}</pre>".encode("utf-8")
+                self.send_response(500)
+            else:
+                self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
+            self.end_headers()
+            self.wfile.write(body)
+    
+        def log_message(self, fmt, *args):
+            print(f"[*] {self.address_string()} {fmt % args}")
+    
+    
+    def main():
+        port = 8080
+        server = ThreadingHTTPServer(("0.0.0.0", port), DashboardHandler)
+        print(f"[*] Serving on :{port}, regenerating on every request")
+        server.serve_forever()
     
     
     if __name__ == "__main__":
