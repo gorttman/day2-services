@@ -1,0 +1,370 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-dashboard-generator
+  namespace: backup-dashboard
+  labels:
+    app: backup-dashboard
+    app.kubernetes.io/name: backup-dashboard
+    argocd.argoproj.io/managed-by: argocd
+data:
+  generate_dashboard.py: |
+    #!/usr/bin/env python3
+    """Generates the backup status dashboard from real current state under
+    /mnt/backup. Run periodically by a CronJob, not a live query-on-load
+    page - see day2-services apps/backup-dashboard/README.md."""
+    import os
+    import re
+    import shutil
+    from datetime import datetime, timezone
+    from pathlib import Path
+    
+    BACKUP_ROOT = Path("/mnt/backup")
+    POSTGRES_ROOT = BACKUP_ROOT / "active_backup" / "postgres"
+    QNAP_DATA_ROOT = BACKUP_ROOT / "active_backup" / "qnap-data" / "daily"
+    CREDENTIALS_ROOT = BACKUP_ROOT / "k8smaster-credentials"
+    OUT_PATH = Path(os.environ.get("DASHBOARD_OUT", "/var/lib/backup-dashboard-html/index.html"))
+    
+    NAME_DATE_RE = re.compile(r"^(?P<name>.+)-(?P<date>\d{4}-\d{2}-\d{2})\.(?P<ext>.+)$")
+    
+    
+    def human_size(num_bytes):
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if abs(num_bytes) < 1024:
+                return f"{num_bytes:.0f} {unit}" if unit == "B" else f"{num_bytes:.1f} {unit}"
+            num_bytes /= 1024
+        return f"{num_bytes:.1f} PB"
+    
+    
+    def days_since(date_str):
+        d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - d).days
+    
+    
+    def scan_postgres():
+        """Returns list of dicts: name, latest_date, size_bytes, generations."""
+        daily = POSTGRES_ROOT / "daily"
+        if not daily.is_dir():
+            return []
+        by_name = {}
+        for f in daily.iterdir():
+            m = NAME_DATE_RE.match(f.name)
+            if not m:
+                continue
+            name = m.group("name")
+            date = m.group("date")
+            entry = by_name.setdefault(name, {"dates": [], "latest_size": 0})
+            entry["dates"].append(date)
+            if date == max(entry["dates"]):
+                entry["latest_size"] = f.stat().st_size
+        rows = []
+        for name, info in sorted(by_name.items()):
+            latest = max(info["dates"])
+            rows.append({
+                "name": name,
+                "latest_date": latest,
+                "size": info["latest_size"],
+                "generations": len(info["dates"]),
+                "stale_days": days_since(latest),
+            })
+        return rows
+    
+    
+    def scan_qnap_snapshot():
+        """Returns (sources: list of dicts, available_dates: list of str)."""
+        if not QNAP_DATA_ROOT.is_dir():
+            return [], []
+        available_dates = sorted(
+            [p.name for p in QNAP_DATA_ROOT.iterdir() if p.is_dir()], reverse=True
+        )
+        sources = {}
+        for date_dir in QNAP_DATA_ROOT.iterdir():
+            if not date_dir.is_dir():
+                continue
+            for src_dir in date_dir.iterdir():
+                if not src_dir.is_dir():
+                    continue
+                existing = sources.get(src_dir.name)
+                if existing is None or date_dir.name > existing["latest_date"]:
+                    sources[src_dir.name] = {"latest_date": date_dir.name}
+        rows = []
+        for name, info in sorted(sources.items()):
+            rows.append({
+                "name": name,
+                "latest_date": info["latest_date"],
+                "stale_days": days_since(info["latest_date"]),
+            })
+        return rows, available_dates
+    
+    
+    def scan_sealed_secrets():
+        if not CREDENTIALS_ROOT.is_dir():
+            return None
+        keys = sorted(CREDENTIALS_ROOT.glob("sealed-secrets-key-*.yaml"))
+        if not keys:
+            return None
+        latest = max(keys, key=lambda p: p.stat().st_mtime)
+        m = re.search(r"(\d{4}-\d{2}-\d{2})", latest.name)
+        date_str = m.group(1) if m else None
+        return {
+            "filename": latest.name,
+            "count": len(keys),
+            "stale_days": days_since(date_str) if date_str else None,
+        }
+    
+    
+    def disk_stats():
+        try:
+            total, used, free = shutil.disk_usage(BACKUP_ROOT)
+            return {"total": total, "used": used, "free": free, "pct": used / total * 100}
+        except OSError:
+            return None
+    
+    
+    STALE_WARN_DAYS = 2
+    STALE_CRIT_DAYS = 4
+    
+    
+    def status_for_days(days):
+        if days is None:
+            return "crit"
+        if days >= STALE_CRIT_DAYS:
+            return "crit"
+        if days >= STALE_WARN_DAYS:
+            return "warn"
+        return "good"
+    
+    
+    CSS = """
+    :root {
+      --bg: #F5F7F8; --bg-raised: #FFFFFF; --bg-sunken: #EBEEF1;
+      --ink: #1B222C; --ink-muted: #5B6572; --ink-faint: #8792A0;
+      --border: #DDE2E7; --accent: #0E6E66; --accent-wash: #E3F1EF;
+      --good: #2E8B57; --good-wash: #E5F3EA;
+      --warn: #A66A17; --warn-wash: #FBF0DE;
+      --crit: #B23A2E; --crit-wash: #FBE9E7;
+      --mono: ui-monospace, "SF Mono", Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --shadow: 0 1px 2px rgba(20,30,40,0.06), 0 1px 1px rgba(20,30,40,0.04);
+      color-scheme: light dark;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #10151B; --bg-raised: #171E26; --bg-sunken: #0B0F14;
+        --ink: #E7EBEF; --ink-muted: #9AA5B1; --ink-faint: #66707D;
+        --border: #29323C; --accent: #4FC9BC; --accent-wash: #123330;
+        --good: #5CBE84; --good-wash: #123322;
+        --warn: #E0A752; --warn-wash: #362504;
+        --crit: #E2897C; --crit-wash: #3A1712;
+        --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 1px 1px rgba(0,0,0,0.3);
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #10151B; --bg-raised: #171E26; --bg-sunken: #0B0F14;
+      --ink: #E7EBEF; --ink-muted: #9AA5B1; --ink-faint: #66707D;
+      --border: #29323C; --accent: #4FC9BC; --accent-wash: #123330;
+      --good: #5CBE84; --good-wash: #123322;
+      --warn: #E0A752; --warn-wash: #362504;
+      --crit: #E2897C; --crit-wash: #3A1712;
+      --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 1px 1px rgba(0,0,0,0.3);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans);
+      font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    .page { max-width: 920px; margin: 0 auto; padding: 40px 24px 80px; }
+    header { display: flex; flex-direction: column; gap: 6px; margin-bottom: 28px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--accent); font-weight: 600; }
+    h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+    .subline { color: var(--ink-muted); font-size: 14px; }
+    .subline .ts { font-family: var(--mono); color: var(--ink); }
+    .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border);
+      border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 32px;
+      box-shadow: var(--shadow); }
+    .tile { background: var(--bg-raised); padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
+    .tile-label { font-size: 12px; color: var(--ink-muted); }
+    .tile-value { font-family: var(--mono); font-size: 22px; font-weight: 600;
+      font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+    .tile-value.accent { color: var(--accent); }
+    .panel { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 10px;
+      margin-bottom: 20px; box-shadow: var(--shadow); overflow: hidden; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 16px 20px; border-bottom: 1px solid var(--border); border-left: 3px solid transparent; }
+    .panel[data-status="good"] .panel-head { border-left-color: var(--good); }
+    .panel[data-status="warn"] .panel-head { border-left-color: var(--warn); }
+    .panel[data-status="crit"] .panel-head { border-left-color: var(--crit); }
+    .panel-title-group { display: flex; align-items: baseline; gap: 10px; }
+    .panel-title { font-size: 16px; font-weight: 650; }
+    .panel-sub { font-size: 13px; color: var(--ink-faint); }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 100px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; }
+    .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; flex: none; }
+    .chip.good { background: var(--good-wash); color: var(--good); }
+    .chip.good::before { background: var(--good); }
+    .chip.warn { background: var(--warn-wash); color: var(--warn); }
+    .chip.warn::before { background: var(--warn); }
+    .chip.crit { background: var(--crit-wash); color: var(--crit); }
+    .chip.crit::before { background: var(--crit); }
+    .panel-body { padding: 18px 20px 20px; }
+    .kv-row { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 16px; }
+    .kv { display: flex; flex-direction: column; gap: 2px; }
+    .kv-label { font-size: 11.5px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+    .kv-value { font-family: var(--mono); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 420px; }
+    th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--ink-faint); font-weight: 600; padding: 9px 14px; background: var(--bg-sunken);
+      border-bottom: 1px solid var(--border); }
+    td { padding: 9px 14px; border-bottom: 1px solid var(--border); font-family: var(--mono);
+      font-variant-numeric: tabular-nums; }
+    tr:last-child td { border-bottom: none; }
+    td.name { font-family: var(--sans); font-weight: 500; }
+    .status-dot { display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 12.5px; }
+    .status-dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .status-dot.good { color: var(--good); } .status-dot.good::before { background: var(--good); }
+    .status-dot.warn { color: var(--warn); } .status-dot.warn::before { background: var(--warn); }
+    .status-dot.crit { color: var(--crit); } .status-dot.crit::before { background: var(--crit); }
+    .note { font-size: 12.5px; color: var(--ink-faint); margin-top: 10px; line-height: 1.55; }
+    .note code { font-family: var(--mono); background: var(--bg-sunken); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+    footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12.5px;
+      color: var(--ink-faint); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    @media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, 1fr); } .page { padding: 28px 16px 60px; } }
+    """
+    
+    
+    def render(postgres_rows, qnap_rows, qnap_dates, secrets, disk):
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    
+        order = {"good": 0, "warn": 1, "crit": 2}
+        if postgres_rows:
+            pg_status = max((status_for_days(r["stale_days"]) for r in postgres_rows), key=lambda s: order[s])
+        else:
+            pg_status = "crit"
+    
+        qnap_status = "crit"
+        if qnap_rows:
+            qnap_status = max((status_for_days(r["stale_days"]) for r in qnap_rows), key=lambda s: order[s])
+    
+        secrets_status = status_for_days(secrets["stale_days"]) if secrets else "crit"
+    
+        alerts = sum(1 for s in (pg_status, qnap_status, secrets_status) if s != "good")
+    
+        def age_label(days):
+            return "today" if days == 0 else f"{days}d ago"
+    
+        pg_rows_html = "".join(
+            f'<tr><td class="name">{r["name"]}</td><td>{r["latest_date"]}</td>'
+            f'<td>{human_size(r["size"])}</td><td>{r["generations"]}</td>'
+            f'<td><span class="status-dot {status_for_days(r["stale_days"])}">'
+            f'{age_label(r["stale_days"])}</span></td></tr>'
+            for r in postgres_rows
+        )
+    
+        qnap_rows_html = "".join(
+            f'<tr><td class="name">{r["name"]}</td><td>{r["latest_date"]}</td>'
+            f'<td><span class="status-dot {status_for_days(r["stale_days"])}">'
+            f'{age_label(r["stale_days"])}</span></td></tr>'
+            for r in qnap_rows
+        )
+    
+        disk_html = ""
+        if disk:
+            disk_html = (
+                f'<span>Destination: <code>{human_size(disk["free"])} free</code> '
+                f'&middot; <code>{disk["pct"]:.0f}% used</code></span>'
+            )
+    
+        secrets_html = ""
+        if secrets:
+            secrets_html = f"""
+          <div class="kv-row" style="margin-bottom:0;">
+            <div class="kv"><span class="kv-label">Files</span><span class="kv-value">{secrets['count']}</span></div>
+            <div class="kv"><span class="kv-label">Latest</span><span class="kv-value">{secrets['filename']}</span></div>
+            <div class="kv"><span class="kv-label">Age</span><span class="kv-value">{secrets['stale_days']}d</span></div>
+          </div>"""
+        else:
+            secrets_html = '<p class="note">No sealed-secrets key backups found.</p>'
+    
+        return f"""<!doctype html>
+    <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Backup Status &mdash; valinor-m</title>
+    <style>{CSS}</style></head>
+    <body><div class="page">
+      <header>
+        <span class="eyebrow">valinor-m / k8smaster &mdash; disaster recovery</span>
+        <h1>Backup Status</h1>
+        <div class="subline">Regenerated <span class="ts">{now}</span> &mdash; refreshed automatically every 15 minutes</div>
+      </header>
+    
+      <div class="tiles">
+        <div class="tile"><div class="tile-label">Postgres databases</div>
+          <div class="tile-value accent">{len(postgres_rows)}</div></div>
+        <div class="tile"><div class="tile-label">QNAP snapshot sources</div>
+          <div class="tile-value accent">{len(qnap_rows)}</div></div>
+        <div class="tile"><div class="tile-label">QNAP generations kept</div>
+          <div class="tile-value">{len(qnap_dates)}</div></div>
+        <div class="tile"><div class="tile-label">Active alerts</div>
+          <div class="tile-value" style="color:{'var(--crit)' if alerts else 'inherit'}">{alerts}</div></div>
+      </div>
+    
+      <section class="panel" data-status="{pg_status}">
+        <div class="panel-head">
+          <div class="panel-title-group"><span class="panel-title">Database Backups</span>
+            <span class="panel-sub">postgres &middot; per-database pg_dump, staged locally then synced to QNAP</span></div>
+          <span class="chip {pg_status}">{'Healthy' if pg_status=='good' else ('Degraded' if pg_status=='warn' else 'Critical')}</span>
+        </div>
+        <div class="panel-body">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Database</th><th>Latest dump</th><th>Size</th><th>Generations</th><th>Age</th></tr></thead>
+            <tbody>{pg_rows_html or '<tr><td colspan="5">No dumps found</td></tr>'}</tbody>
+          </table></div>
+        </div>
+      </section>
+    
+      <section class="panel" data-status="good">
+        <div class="panel-head">
+          <div class="panel-title-group"><span class="panel-title">Secrets &amp; Credentials</span>
+            <span class="panel-sub">sealed-secrets key backups</span></div>
+          <span class="chip {secrets_status}">{'Healthy' if secrets_status=='good' else ('Degraded' if secrets_status=='warn' else 'Critical')}</span>
+        </div>
+        <div class="panel-body">{secrets_html}</div>
+      </section>
+    
+      <section class="panel" data-status="{qnap_status}">
+        <div class="panel-head">
+          <div class="panel-title-group"><span class="panel-title">QNAP Data Snapshot</span>
+            <span class="panel-sub">hardlink-generational, {len(qnap_dates)} daily generations kept</span></div>
+          <span class="chip {qnap_status}">{'Healthy' if qnap_status=='good' else ('Degraded' if qnap_status=='warn' else 'Critical')}</span>
+        </div>
+        <div class="panel-body">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Source</th><th>Latest generation</th><th>Age</th></tr></thead>
+            <tbody>{qnap_rows_html or '<tr><td colspan="3">No generations found</td></tr>'}</tbody>
+          </table></div>
+          <p class="note">Generations older than {STALE_WARN_DAYS} days are flagged warn, {STALE_CRIT_DAYS}+ days critical &mdash; matches each job's own roughly-daily schedule.</p>
+        </div>
+      </section>
+    
+      <footer>
+        <span>Self-hosted, regenerated every 15 min by a CronJob &mdash; not a claude.ai artifact.</span>
+        {disk_html}
+      </footer>
+    </div></body></html>"""
+    
+    
+    def main():
+        postgres_rows = scan_postgres()
+        qnap_rows, qnap_dates = scan_qnap_snapshot()
+        secrets = scan_sealed_secrets()
+        disk = disk_stats()
+    
+        html = render(postgres_rows, qnap_rows, qnap_dates, secrets, disk)
+        OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = OUT_PATH.with_suffix(".tmp")
+        tmp.write_text(html)
+        tmp.replace(OUT_PATH)
+        print(f"[*] Dashboard written to {OUT_PATH} at {datetime.now(timezone.utc).isoformat()}")
+    
+    
+    if __name__ == "__main__":
+        main()

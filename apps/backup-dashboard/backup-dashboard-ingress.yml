@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backup-dashboard
+  namespace: backup-dashboard
+  labels:
+    app: backup-dashboard
+    app.kubernetes.io/name: backup-dashboard
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - backup-status.i3sec.com.au
+    secretName: backup-dashboard-tls
+  rules:
+  - host: backup-status.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backup-dashboard
+            port:
+              number: 80
