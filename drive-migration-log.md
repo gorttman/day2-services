@@ -29,7 +29,19 @@ in Exceptions (Office formats, blocked pending Tika/Gotenberg). See
 
 ## Photos/videos (→ Immich)
 
-Not started. Domain was untouched until Immich was deployed 2026-08-04.
+**Done 2026-08-22/23**, via Google Takeout rather than the file-by-file
+Drive tool (its 10MB per-file cap would have blocked most of this
+content - real raw camera files here ran 20-110MB each). Pipeline:
+Takeout export -> `inbox-router` (new photo/video route added, staged
+outside Immich's watched `/photos` tree at `/inbox/photos-staging` to
+avoid indexing anything before it's sorted) -> `photos_importer.py`
+(day0-infra-build/scripts, new) -> SHA-dedup against the existing
+library + EXIF-year foldering into `/photos/<year>/`. First batch: 286
+files, 270 photos/videos + 15 documents, 2 exact duplicates and 3
+already-migrated documents excluded, 1 mislabeled file (HTML as .pdf)
+correctly quarantined. User confirmed all Drive content migrated
+2026-08-23. See memory `project_google_drive_offboarding` and
+`project_immich_deployment` for the full pipeline design.
 
 ## gmail.com shared content (shared to i3sec.com.au 2026-08-04)
 
