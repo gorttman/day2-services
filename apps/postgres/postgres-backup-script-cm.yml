@@ -16,25 +16,24 @@ data:
     # per-db dump, hence the separate globals-only pass below.
     set -eu
 
-    # Guard against /mnt/backup silently being an unmounted local
-    # directory rather than the real QNAP export. hostPath just
-    # bind-mounts whatever's really at this path on the node - the
-    # host's own fstab entry uses nofail/_netdev deliberately (a QNAP
-    # outage must not hang k8smaster's boot), but that also means a
-    # dead mount fails silent, not loud (confirmed live 2026-08-08: a
-    # QNAP-side NFS service restart dropped this exact mount and
-    # nothing noticed until checked by hand). A device-id comparison
-    # against the container's own root would always show "different"
-    # here regardless of host state, since hostPath is a bind mount
-    # either way - checking for real QNAP content instead.
-    # k8smaster-credentials is genuine pre-existing data at the export
-    # root that can only be there if this is really the QNAP.
-    if [ ! -d /mnt/backup/k8smaster-credentials ]; then
-      echo "[!] /mnt/backup does not look like the real QNAP export (k8smaster-credentials missing) - refusing to run, this would otherwise silently write to k8smaster's own local disk instead of the QNAP" >&2
-      exit 1
-    fi
-
-    BACKUP_ROOT=/mnt/backup/active_backup/postgres
+    # /mnt/backup is k8smaster's own local disk now (real hostPath to
+    # /var/lib/postgres-backup-staging, not the QNAP directly - see
+    # postgres-backup-cronjob.yml's header comment for why), so the
+    # QNAP-reachability guard that used to live here no longer applies:
+    # local disk doesn't have a "silently unmounted, falls through to
+    # somewhere else" failure mode the way the QNAP NFS mount did. A
+    # separate host-level cron (day0-infra-build's qnap_client role)
+    # syncs this directory out to the QNAP afterward, guarded there
+    # instead - that's the step that can actually fail on QNAP/NFS
+    # trouble now, not this one.
+    # No active_backup/postgres nesting here anymore - that existed only
+    # because /mnt/backup used to be the shared QNAP export root, with
+    # other things at its root that this couldn't touch. It's now a
+    # dedicated local staging directory (day0-infra-build's qnap_client
+    # role), so the flat root is the whole point - the equivalent
+    # active_backup/postgres nesting still exists on the QNAP side, at
+    # the sync cron's destination, not here.
+    BACKUP_ROOT=/mnt/backup
     DAILY_DIR="$BACKUP_ROOT/daily"
     WEEKLY_DIR="$BACKUP_ROOT/weekly"
     MONTHLY_DIR="$BACKUP_ROOT/monthly"
