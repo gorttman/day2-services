@@ -31,6 +31,15 @@ data:
       # the Obsidian vault mount when that gets built. Not mounted here.
       - source: inbox/working
         dest: /mnt/vault/incoming        # TBD - path unconfirmed, deliberately not resolved yet
+
+      # Live 2026-08-22: /mnt/photos is the QNAP /photos export, the same
+      # one Immich's "QNAP Photos Test" External Library
+      # (day2-services/apps/immich) scans. /import keeps bulk drops
+      # (e.g. a Google Takeout batch) organizationally separate from
+      # anything placed directly under /photos - Immich's library scan
+      # is recursive, so subfolders here are still indexed.
+      - source: inbox/photos
+        dest: /mnt/photos/import
     
     # Evaluated only for files sitting in the bare inbox root.
     mime_defaults:
@@ -78,7 +87,30 @@ data:
       - name: pdf-to-records
         mime: [application/pdf]
         dest: /mnt/paperless/consume
-    
+
+      # Live 2026-08-22, added for the Google Drive photo/video
+      # offboarding. MIME list confirmed against libmagic (the same
+      # library python-magic/this script uses) run directly against
+      # real sample files, not guessed from file extension - notably
+      # raw camera formats don't have a single consistent type: CR2
+      # gets its own distinct signature, but DNG is generically
+      # image/tiff (no separate DNG signature in this libmagic
+      # version), so image/tiff has to be routed here too even though
+      # that also catches plain TIFF photos - which belong here anyway.
+      - name: photo-video
+        mime:
+          - image/jpeg
+          - image/png
+          - image/tiff
+          - image/x-canon-cr2
+          - image/heic
+          - image/webp
+          - video/mp4
+          - video/quicktime
+          - video/x-msvideo
+          - video/x-matroska
+        dest: /mnt/photos/import
+
     # No match on any explicit_dir or mime_default rule -> quarantine.
-    # Includes photos/video/audio/archives - no subagent exists yet for
-    # those, so quarantine is correct, not a gap.
+    # Audio and archives still have no subagent - that's still correct,
+    # not a gap. Photos/video are handled above as of 2026-08-22.
