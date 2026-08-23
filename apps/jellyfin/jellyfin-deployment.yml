@@ -58,6 +58,17 @@ spec:
           mountPath: /config
         - name: cache
           mountPath: /cache
+        # Same qnap:/media NFS export arr-stack already mounts (Sonarr/
+        # Radarr land finished imports in tv/ and movies/ there).
+        # Jellyfin only reads it, never imports/renames - read-only.
+        - name: media
+          mountPath: /movies
+          subPath: movies
+          readOnly: true
+        - name: media
+          mountPath: /tv
+          subPath: tv
+          readOnly: true
         resources:
           requests:
             memory: "512Mi"
@@ -88,3 +99,10 @@ spec:
       - name: cache
         persistentVolumeClaim:
           claimName: jellyfin-cache
+      # Raw NFS volume, not a PVC - same pattern books-pipeline/arr-stack
+      # use for /books and /media. subPath above splits this one export
+      # into movies/ and tv/ per mount.
+      - name: media
+        nfs:
+          server: qnap
+          path: /media
