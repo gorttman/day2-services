@@ -77,10 +77,17 @@ spec:
           readOnly: true
         resources:
           requests:
-            memory: 512Mi
+            memory: 1Gi
             cpu: 250m
           limits:
-            memory: 2Gi
+            # Raised 2Gi -> 4Gi 2026-08-23: the 21K-photo backlog/camera-roll
+            # import OOMKilled the server at 2Gi (exit 137, crashloop) -
+            # metadata extraction + thumbnailing across thousands of files
+            # at once, compounded by an aggressive 5-min library scan
+            # re-crawling a growing tree. pinode-01 has headroom (was ~19%
+            # mem). Can be trimmed back toward 2-3Gi once the one-time bulk
+            # import is done and steady-state load is lower.
+            memory: 4Gi
             cpu: "2"
         readinessProbe:
           httpGet:
