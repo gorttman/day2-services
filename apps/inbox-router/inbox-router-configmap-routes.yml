@@ -105,6 +105,7 @@ data:
         mime:
           - image/jpeg
           - image/png
+          - image/gif
           - image/tiff
           - image/x-canon-cr2
           - image/heic
