@@ -51,6 +51,7 @@ data:
     import shutil
     import subprocess
     import sys
+    import time
     import urllib.parse
 
     import requests
@@ -124,8 +125,36 @@ data:
         raise RuntimeError(f"region {region_id!r} not found in PIA server list")
 
 
-    def is_endpoint_stale(current_ip, wg_servers):
-        return current_ip not in {s["ip"] for s in wg_servers}
+    # PIA_STALENESS_SAMPLES/DELAY: confirmed live 2026-08-24 that PIA's
+    # server-list endpoint returns a small ROTATING subset per region per
+    # call, not a stable full list - the "aus" region only ever shows 3
+    # servers out of a real pool of 4, and which 3 changes between calls
+    # seconds apart. A single snapshot is not a reliable staleness signal:
+    # this was the actual root cause of vpn-healer rotating (and
+    # git-committing, and restarting the arr-stack pod) on very close to
+    # every single 15-minute run since 2026-08-07, not just on genuine PIA
+    # retirements - the currently-valid, perfectly healthy peer simply
+    # wasn't in that one snapshot roughly 1 call in 4. Sampling 5 times ~2s
+    # apart and checking the union brings a false-"stale" read down to
+    # (1/4)^5 =~ 0.1%, empirically verified against the real endpoint
+    # (7/8 single-shot fetches contained the known-good current peer).
+    PIA_STALENESS_SAMPLES = int(os.environ.get("PIA_STALENESS_SAMPLES", "5"))
+    PIA_STALENESS_SAMPLE_DELAY = float(os.environ.get("PIA_STALENESS_SAMPLE_DELAY", "2"))
+
+
+    def collect_region_wg_ips(region_id, samples=PIA_STALENESS_SAMPLES, delay=PIA_STALENESS_SAMPLE_DELAY):
+        seen_ips = set()
+        last_list = None
+        for i in range(samples):
+            last_list = fetch_pia_server_list()
+            seen_ips |= {s["ip"] for s in find_region_wg_servers(last_list, region_id)}
+            if i < samples - 1:
+                time.sleep(delay)
+        return seen_ips, last_list
+
+
+    def is_endpoint_stale(current_ip, wg_ips_seen):
+        return current_ip not in wg_ips_seen
 
 
     def get_arr_stack_pod_name():
@@ -329,10 +358,10 @@ data:
 
     def main():
         current_ip = get_current_endpoint_ip()
-        server_list = fetch_pia_server_list()
+        wg_ips_seen, server_list = collect_region_wg_ips(PIA_REGION)
         wg_servers = find_region_wg_servers(server_list, PIA_REGION)
 
-        stale = is_endpoint_stale(current_ip, wg_servers)
+        stale = is_endpoint_stale(current_ip, wg_ips_seen)
         looping = gluetun_is_restart_looping()
 
         if not stale and not looping:
