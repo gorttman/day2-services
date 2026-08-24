@@ -491,6 +491,13 @@ data:
         else:
             log("INFO", "prowlarr api key not available yet (config.xml not written) - skipping this pass")
 
+        if apikeys.get("radarr"):
+            try:
+                cf_ids = reconcile_radarr_customformats(desired, apikeys["radarr"])
+                reconcile_radarr_qualityprofiles(desired, apikeys["radarr"], cf_ids)
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+                log("CRIT", f"radarr custom format/quality profile reconcile failed: {e}")
+
 
     if __name__ == "__main__":
         while True:
