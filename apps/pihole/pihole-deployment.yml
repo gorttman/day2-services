@@ -164,18 +164,30 @@ spec:
           limits:
             memory: 512Mi
             cpu: 2000m
+        # Was httpGet /admin/ (the PHP-rendered web UI) until 2026-08-25 -
+        # real incident: 9+ restarts inside an hour, every one a probe
+        # timeout ("context deadline exceeded") against the admin page,
+        # while actual DNS resolution tested 100% clean via direct dig
+        # queries through the exact same window. Every one of those
+        # restarts is a real (if brief) DNS outage for the whole house -
+        # a client that happens to query during the ~10s FTL restart
+        # window falls through to its secondary resolver (the UDM),
+        # which has no split-horizon knowledge and hands back the public
+        # record instead. `pihole status` is the project's own official
+        # health check - it checks FTL's actual listening sockets
+        # directly, completely decoupled from the web UI's performance.
+        # Whether the admin page itself is slow is a separate, lower-
+        # stakes question; it should never be able to take down DNS.
         livenessProbe:
-          httpGet:
-            path: /admin/
-            port: 80
+          exec:
+            command: ["pihole", "status"]
           initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
         readinessProbe:
-          httpGet:
-            path: /admin/
-            port: 80
+          exec:
+            command: ["pihole", "status"]
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
