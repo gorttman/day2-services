@@ -179,19 +179,133 @@ data:
             apikey = apikeys.get(app)
             if not apikey:
                 continue
-            path = desired.get(app, {}).get("rootFolder")
-            if not path:
-                continue
+            paths = desired.get(app, {}).get("rootFolders")
+            if paths is None:
+                single = desired.get(app, {}).get("rootFolder")
+                paths = [single] if single else []
             base = f"http://localhost:{APP_PORTS[app]}/api/v3"
             existing = http_json("GET", f"{base}/rootfolder?apikey={apikey}") or []
-            if any(rf["path"] == path for rf in existing):
+            existing_paths = {rf["path"] for rf in existing}
+            for path in paths:
+                if path in existing_paths:
+                    continue
+                # Fails until the underlying mount actually exists in this
+                # container (Sonarr/Radarr validate accessibility before
+                # accepting a root folder) - that's expected before the
+                # media-mount change lands, not a bug; next pass retries.
+                http_json("POST", f"{base}/rootfolder?apikey={apikey}", body={"path": path})
+                log("INFO", f"{app}: created root folder {path}")
+
+
+    # ---------------------------------------------------------------------
+    # Radarr custom formats (size-cap enforcement for bulk-content profiles)
+    # ---------------------------------------------------------------------
+
+    def reconcile_radarr_customformats(desired, apikey):
+        base = "http://localhost:7878/api/v3"
+        cfs = desired.get("radarr", {}).get("customFormats", [])
+        if not cfs:
+            return {}
+        existing = http_json("GET", f"{base}/customformat?apikey={apikey}") or []
+        spec_schema_list = http_json("GET", f"{base}/customformat/schema?apikey={apikey}") or []
+        ids = {}
+        for cf_cfg in cfs:
+            specs = []
+            for spec_cfg in cf_cfg.get("specifications", []):
+                spec_schema = next(
+                    (s for s in spec_schema_list if s["implementation"] == spec_cfg["implementation"]),
+                    None,
+                )
+                if spec_schema is None:
+                    log("CRIT", f"radarr: no custom format specification {spec_cfg['implementation']!r}")
+                    continue
+                spec = json.loads(json.dumps(spec_schema))
+                spec["name"] = spec_cfg.get("name", spec_cfg["implementation"])
+                spec["negate"] = spec_cfg.get("negate", False)
+                spec["required"] = spec_cfg.get("required", True)
+                for f in spec["fields"]:
+                    if f["name"] in spec_cfg:
+                        f["value"] = spec_cfg[f["name"]]
+                specs.append(spec)
+
+            body = {"name": cf_cfg["name"], "includeCustomFormatWhenRenaming": False, "specifications": specs}
+            match = next((e for e in existing if e.get("name") == cf_cfg["name"]), None)
+            if match is None:
+                created = http_json("POST", f"{base}/customformat?apikey={apikey}", body=body)
+                ids[cf_cfg["name"]] = created["id"]
+                log("INFO", f"radarr: created custom format {cf_cfg['name']!r}")
+            else:
+                body["id"] = match["id"]
+                http_json("PUT", f"{base}/customformat/{match['id']}?apikey={apikey}", body=body)
+                ids[cf_cfg["name"]] = match["id"]
+                log("INFO", f"radarr: re-applied custom format {cf_cfg['name']!r}")
+        return ids
+
+
+    # ---------------------------------------------------------------------
+    # Radarr quality profiles
+    # ---------------------------------------------------------------------
+
+    def _flatten_quality_items(items):
+        # Some items are grouped one level deep (e.g. "WEB 720p" wraps
+        # WEBDL-720p + WEBRip-720p) - flatten so name lookups don't need
+        # to know which qualities happen to be grouped.
+        flat = []
+        for item in items:
+            flat.extend(item["items"] if item.get("items") else [item])
+        return flat
+
+
+    def reconcile_radarr_qualityprofiles(desired, apikey, customformat_ids):
+        base = "http://localhost:7878/api/v3"
+        profiles_cfg = desired.get("radarr", {}).get("qualityProfiles", [])
+        if not profiles_cfg:
+            return
+        existing = http_json("GET", f"{base}/qualityprofile?apikey={apikey}") or []
+        schema = http_json("GET", f"{base}/qualityprofile/schema?apikey={apikey}")
+
+        for p_cfg in profiles_cfg:
+            body = json.loads(json.dumps(schema))
+            body["name"] = p_cfg["name"]
+            body["upgradeAllowed"] = p_cfg.get("upgradeAllowed", False)
+
+            allowed_names = set(p_cfg.get("allowedQualities", []))
+            cutoff_id = None
+            for item in _flatten_quality_items(body["items"]):
+                q = item["quality"]
+                item["allowed"] = q["name"] in allowed_names
+                if q["name"] == p_cfg.get("cutoffQuality"):
+                    cutoff_id = q["id"]
+            # Radarr does NOT derive a group's own allowed flag from its
+            # children - confirmed live 2026-08-23 (scratch test profile,
+            # created and deleted immediately: leaving a group's allowed
+            # unset left it false even with both children set true). Set
+            # it explicitly here instead.
+            for item in body["items"]:
+                if item.get("items"):
+                    item["allowed"] = any(c["allowed"] for c in item["items"])
+            if cutoff_id is None:
+                log("CRIT", f"radarr: cutoffQuality {p_cfg.get('cutoffQuality')!r} not found for profile {p_cfg['name']!r}")
                 continue
-            # Fails until the underlying mount actually exists in this
-            # container (Sonarr/Radarr validate accessibility before
-            # accepting a root folder) - that's expected before the
-            # media-mount change lands, not a bug; next pass retries.
-            http_json("POST", f"{base}/rootfolder?apikey={apikey}", body={"path": path})
-            log("INFO", f"{app}: created root folder {path}")
+            body["cutoff"] = cutoff_id
+
+            body["formatItems"] = []
+            for fs in p_cfg.get("formatScores", []):
+                cf_id = customformat_ids.get(fs["format"])
+                if cf_id is None:
+                    log("CRIT", f"radarr: custom format {fs['format']!r} not found - skipping formatScore in {p_cfg['name']!r}")
+                    continue
+                body["formatItems"].append({"format": cf_id, "name": fs["format"], "score": fs["score"]})
+            body["minFormatScore"] = p_cfg.get("minFormatScore", 0)
+
+            match = next((e for e in existing if e.get("name") == p_cfg["name"]), None)
+            if match is None:
+                http_json("POST", f"{base}/qualityprofile?apikey={apikey}", body=body)
+                log("INFO", f"radarr: created quality profile {p_cfg['name']!r}")
+            else:
+                body["id"] = match["id"]
+                http_json("PUT", f"{base}/qualityprofile/{match['id']}?apikey={apikey}", body=body)
+                log("INFO", f"radarr: re-applied quality profile {p_cfg['name']!r}")
 
 
     # ---------------------------------------------------------------------

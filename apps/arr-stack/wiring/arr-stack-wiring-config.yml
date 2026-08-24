@@ -65,7 +65,45 @@ data:
       rootFolder: /tv
 
     radarr:
-      rootFolder: /movies
+      rootFolders:
+        - /movies
+        - /movies-bulk
+
+      # Size-cap enforcement lives in a Custom Format, not the global
+      # Quality Definitions page - editing that page's per-quality max
+      # sizes would also cap SD/720p for the stock HD-1080p/Ultra-HD
+      # profiles, which still allow those as fallback tiers. A Custom
+      # Format's score only applies within the profile that references
+      # it, so this stays scoped to Bulk SD-720p alone. Confirmed live
+      # 2026-08-23 against this exact install (Radarr 6.2.1) that
+      # SizeSpecification exists as a real custom-format condition -
+      # see /api/v3/customformat/schema.
+      customFormats:
+        - name: Bulk oversized reject
+          specifications:
+            - implementation: SizeSpecification
+              min: 4      # GB - at or above this, hard-rejected
+              max: 999
+
+      qualityProfiles:
+        - name: Bulk SD-720p
+          upgradeAllowed: true
+          cutoffQuality: Bluray-720p
+          allowedQualities:
+            - SDTV
+            - DVD
+            - WEBDL-480p
+            - WEBRip-480p
+            - Bluray-480p
+            - Bluray-576p
+            - HDTV-720p
+            - WEBDL-720p
+            - WEBRip-720p
+            - Bluray-720p
+          formatScores:
+            - format: Bulk oversized reject
+              score: -1000
+          minFormatScore: 0
 
     prowlarr:
       # Empty on purpose - which indexer(s) to use is a real choice

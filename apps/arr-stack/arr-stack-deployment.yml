@@ -167,6 +167,12 @@ spec:
         - name: media
           mountPath: /movies
           subPath: movies
+        # Low-priority bulk catalog content - separate root folder so it
+        # never mixes with the main /movies library. Quality-capped via
+        # the Bulk SD-720p profile (wiring/arr-stack-wiring-config.yml).
+        - name: media
+          mountPath: /movies-bulk
+          subPath: movies-bulk
         # See the same mount on the sonarr container above for why -
         # identical reasoning, Radarr needs it for the same reason.
         - name: media
