@@ -406,16 +406,22 @@ data:
                 log("CRIT", f"prowlarr: no indexer definition named {idx_cfg['name']!r} - check spelling against /api/v1/indexer/schema")
                 continue
 
-            indexer_apikey = load_secret(idx_cfg["secretKey"])
-            if not indexer_apikey or indexer_apikey.startswith("placeholder-"):
-                log("CRIT", f"prowlarr: {idx_cfg['name']!r} has no real key sealed under {idx_cfg['secretKey']!r} yet - skipping")
+            # secretKey is optional - genuinely public/keyless indexers
+            # (1337x etc.) declare no secretKey at all in wiring.yml, not
+            # a placeholder one, since there's no credential to sit
+            # behind one. Only private/Newznab-style indexers need this.
+            secret_key = idx_cfg.get("secretKey")
+            indexer_apikey = load_secret(secret_key) if secret_key else None
+            if secret_key and (not indexer_apikey or indexer_apikey.startswith("placeholder-")):
+                log("CRIT", f"prowlarr: {idx_cfg['name']!r} has no real key sealed under {secret_key!r} yet - skipping")
                 continue
 
             schema["enable"] = True
             schema["appProfileId"] = app_profile_id
-            for f in schema["fields"]:
-                if f["name"] == "apiKey":
-                    f["value"] = indexer_apikey
+            if indexer_apikey:
+                for f in schema["fields"]:
+                    if f["name"] == "apiKey":
+                        f["value"] = indexer_apikey
 
             match = next((e for e in existing if e.get("name") == idx_cfg["name"]), None)
             if match is None:
