@@ -64,15 +64,46 @@ spec:
       # on its own. Restarts the WHOLE shared pod, not just one app - see
       # that file's own comment for why that's an accepted, one-time cost.
       serviceAccountName: arr-stack-seed
-      # qbittorrent-config-seed needs to see (and SIGKILL) qBittorrent's
-      # own process directly, in its own container - Qt/QSettings apps
-      # flush their whole in-memory config back to disk on graceful
-      # shutdown, which silently reverts an external file edit if the
-      # restart goes through the normal whole-pod SIGTERM path instead
-      # (confirmed live 2026-08-25, see qbittorrent-config-seed-script.yml
-      # for the full story). Containers keep their own network/mount
-      # namespaces regardless - this only shares PIDs.
-      shareProcessNamespace: true
+      # NOT shareProcessNamespace: true - tried it 2026-08-25 to let
+      # qbittorrent-config-seed signal qBittorrent's own process
+      # directly, but every container here is a linuxserver.io image
+      # built on s6-overlay, and s6-overlay-suexec refuses to run
+      # unless it's genuinely PID 1 of its own namespace ("fatal: can
+      # only run as pid 1") - sharing the PID namespace broke every
+      # single app in this pod simultaneously, not just qBittorrent.
+      # See qbittorrent-config-init's own comment for the actual fix
+      # (an initContainer, not a sidecar sharing PIDs).
+      initContainers:
+      # Seeds/patches qBittorrent.conf BEFORE qBittorrent's own container
+      # ever starts, not as a sidecar racing against an already-running
+      # process. qBittorrent (Qt/QSettings) holds its whole config in
+      # memory for its process lifetime and flushes it back to disk
+      # wholesale on graceful shutdown - a sidecar editing the file while
+      # qBittorrent is already running gets silently reverted the moment
+      # anything restarts it (confirmed live 2026-08-25: this caused an
+      # infinite ~30s whole-pod restart loop, since qBittorrent's own
+      # shutdown handler kept overwriting the sidecar's edit before the
+      # freshly-recreated pod even finished coming up). An initContainer
+      # sidesteps this entirely: it runs to completion and exits before
+      # qBittorrent's container starts, so there's no in-memory state to
+      # race against, and it re-runs (idempotently) on every pod restart
+      # for any reason, not just the first one - no signaling, no shared
+      # PID namespace, no extra RBAC needed.
+      - name: qbittorrent-config-init
+        image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+        imagePullPolicy: IfNotPresent
+        command: ["python3", "/app/seed_config.py"]
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+        volumeMounts:
+        - name: qbittorrent-config
+          mountPath: /config
+        - name: qbittorrent-config-seed-script
+          mountPath: /app
+        resources:
+          requests: {memory: "32Mi", cpu: "10m"}
+          limits: {memory: "128Mi", cpu: "200m"}
       containers:
       - name: gluetun
         image: qmcgaw/gluetun:v3.41.1
@@ -273,29 +304,6 @@ spec:
         resources:
           requests: {memory: "128Mi", cpu: "50m"}
           limits: {memory: "1Gi", cpu: "1000m"}
-      # Patches qBittorrent.conf (LocalHostAuth off for in-pod automation,
-      # HostHeaderValidation off so the Ingress hostname isn't rejected,
-      # SavePath onto the shared /downloads mount) once qBittorrent
-      # creates it on first boot, then SIGKILLs qBittorrent's own
-      # process directly (not a whole-pod restart - see
-      # qbittorrent-config-seed-script.yml for why that infinite-looped
-      # live 2026-08-25). No MY_POD_NAME needed here, unlike
-      # lazylibrarian-config-seed - this never touches the k8s API.
-      - name: qbittorrent-config-seed
-        image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
-        imagePullPolicy: IfNotPresent
-        command: ["python3", "/app/seed_config.py"]
-        securityContext:
-          runAsUser: 1000
-          runAsGroup: 1000
-        volumeMounts:
-        - name: qbittorrent-config
-          mountPath: /config
-        - name: qbittorrent-config-seed-script
-          mountPath: /app
-        resources:
-          requests: {memory: "32Mi", cpu: "10m"}
-          limits: {memory: "128Mi", cpu: "200m"}
       # bazarr and jdownloader2 REMOVED 2026-08-08 - deliberate, not a
       # gap. See README's "Removed: bazarr and jdownloader2" section for
       # the full reasoning. Left commented rather than deleted: both
