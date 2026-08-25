@@ -1,23 +1,25 @@
-# Despite the name, this isn't just a "backup" volume - it's pihole's
-# actual persistent config (setupVars.conf, custom lists, dhcp.leases,
-# dnsmasq confs) plus the gravity-backup.db safety copy the
-# gravity-backup sidecar maintains for the RAM-tmpfs gravity.db.
+# PLACEHOLDER STORAGE: local-path (k3s default) is node-local and
+# non-durable - data lives on whichever node the pod first schedules
+# to, hence the hard nodeSelector to k8smaster in pihole-deployment.yml
+# (the only node with real, non-tmpfs local disk - pinode-01's
+# local-path is a 4G RAM tmpfs, wiped on reboot).
 #
-# Migrated to the QNAP 2026-08-10 - nfs-client is k8smaster's own local
-# disk, same "wrong home" pattern already fixed for several other apps.
-#
-# Repointed again 2026-08-13, off the backup disk's active_backup/pihole
-# and onto the QNAP main pool's /pihole export - the backup disk is the
-# one directory tree the QNAP snapshot job can't back up (it excludes
-# itself), so this had zero generational history and zero protection if
-# the backup disk itself failed. Existing content (22 files, 7.9M)
-# copied and verified before this PVC was repointed - see
-# day1-foundation/apps/qnap-storage/README.md's pihole/calibre-web
-# migration section.
+# History: started on local-path, migrated to QNAP NFS 2026-08-10 as
+# part of a broader storage-hygiene sweep, repointed within QNAP
+# 2026-08-13. Moved back to local-path 2026-08-25 after that NFS
+# migration actually corrupted gravity.db (found zeroed out, restored
+# from the gravity-backup.db sidecar copy) and repeated QNAP
+# stalls/overloads were taking down cluster-wide DNS whenever the hard
+# NFS mount blocked. This app was never supposed to carry real
+# persistent state on shared storage in the first place - the intent
+# was config-in-git (pihole-config/pihole-custom-dns ConfigMaps) with
+# only Pi-hole's own generated runtime state (gravity.db, setupVars,
+# dhcp.leases) on a volume, and that volume needs to be resilient, not
+# shared/durable.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: pihole-data
+  name: pihole-data-local
   namespace: pihole
   labels:
     app: pihole
@@ -26,10 +28,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: qnap-static
-  volumeName: qnap-pihole-live
-  volumeMode: Filesystem
+  storageClassName: local-path
   resources:
     requests:
       storage: 2Gi
-

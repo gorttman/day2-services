@@ -38,15 +38,20 @@ spec:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
-      # Hard nodeSelector removed 2026-08-17: the DiskPressure condition
-      # this was redirecting around (2026-07-11) is resolved - pinode-01
-      # has real persistent storage now. Workload-affinity
-      # (kustomization.yml's patch) restores pinode-01 as the preferred
-      # home instead, without losing failover if it's ever down. The
-      # WLAN-reachability question this comment used to flag as
-      # unconfirmed has now been verified live: kube-proxy correctly
-      # forwards the DNS VIP (192.168.2.245) to wherever the pod
-      # actually runs.
+      # Hard nodeSelector reinstated 2026-08-25: the 2026-08-17 move to
+      # QNAP-NFS-backed storage + soft workload-affinity was wrong for
+      # this app. Pi-hole's PVC holds live SQLite (gravity.db,
+      # pihole-FTL.db) - the same "SQLite on NFS corrupts" failure mode
+      # already documented on jellyfin's PVCs hit pihole for real this
+      # time (gravity.db found zeroed out, restored from the
+      # gravity-backup.db sidecar copy). QNAP also stalls/overloads
+      # periodically, and Pi-hole's hard NFS mount blocks indefinitely
+      # when that happens instead of failing fast, taking down all DNS
+      # for the network. Back to local-path + hard pin to k8smaster
+      # (the only node with real, non-tmpfs local disk - see jellyfin/
+      # arr-stack's identical reasoning), same as before 2026-08-17.
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
       dnsPolicy: None
       dnsConfig:
         nameservers:
@@ -225,7 +230,7 @@ spec:
       volumes:
       - name: pihole-data
         persistentVolumeClaim:
-          claimName: pihole-data
+          claimName: pihole-data-local
       - name: pihole-custom-dns
         configMap:
           name: pihole-custom-dns
