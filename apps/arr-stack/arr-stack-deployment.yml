@@ -104,7 +104,7 @@ spec:
         # needed instead.
         # Admit the arr UIs through gluetun's firewall (inbound)
         - name: FIREWALL_INPUT_PORTS
-          value: "8989,7878,9696,8080,6767,5800,5299"
+          value: "8989,7878,9696,8080,8090,6767,5800,5299"
         # Keep cluster traffic (DNS, kubelet probes, pod/svc CIDRs) off the VPN
         - name: FIREWALL_OUTBOUND_SUBNETS
           value: "10.42.0.0/16,10.43.0.0/16"
@@ -238,6 +238,58 @@ spec:
         resources:
           requests: {memory: "128Mi", cpu: "50m"}
           limits: {memory: "1Gi", cpu: "1500m"}
+      - name: qbittorrent
+        image: lscr.io/linuxserver/qbittorrent:5.2.3
+        imagePullPolicy: IfNotPresent
+        env:
+        - {name: PUID, value: "1000"}
+        - {name: PGID, value: "1000"}
+        - {name: TZ, value: Australia/Sydney}
+        - {name: WEBUI_PORT, value: "8090"}
+        ports:
+        - {name: qbittorrent, containerPort: 8090, protocol: TCP}
+        volumeMounts:
+        - name: qbittorrent-config
+          mountPath: /config
+        # Same shared /downloads mount every other download client here
+        # uses - a finished torrent import is a plain rename for
+        # Sonarr/Radarr, not a cross-filesystem copy.
+        - name: media
+          mountPath: /downloads
+          subPath: downloads
+        readinessProbe:
+          tcpSocket: {port: 8090}
+          initialDelaySeconds: 20
+          periodSeconds: 15
+        resources:
+          requests: {memory: "128Mi", cpu: "50m"}
+          limits: {memory: "1Gi", cpu: "1000m"}
+      # Patches qBittorrent.conf (LocalHostAuth off for in-pod automation,
+      # HostHeaderValidation off so the Ingress hostname isn't rejected,
+      # SavePath onto the shared /downloads mount) once qBittorrent
+      # creates it on first boot, then self-restarts the pod - same
+      # shape as lazylibrarian-config-seed. See
+      # qbittorrent-config-seed-script.yml for the full reasoning.
+      - name: qbittorrent-config-seed
+        image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+        imagePullPolicy: IfNotPresent
+        command: ["python3", "/app/seed_config.py"]
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+        env:
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: qbittorrent-config
+          mountPath: /config
+        - name: qbittorrent-config-seed-script
+          mountPath: /app
+        resources:
+          requests: {memory: "32Mi", cpu: "10m"}
+          limits: {memory: "128Mi", cpu: "200m"}
       # bazarr and jdownloader2 REMOVED 2026-08-08 - deliberate, not a
       # gap. See README's "Removed: bazarr and jdownloader2" section for
       # the full reasoning. Left commented rather than deleted: both
@@ -406,6 +458,11 @@ spec:
         persistentVolumeClaim: {claimName: prowlarr-config}
       - name: sabnzbd-config
         persistentVolumeClaim: {claimName: sabnzbd-config}
+      - name: qbittorrent-config
+        persistentVolumeClaim: {claimName: qbittorrent-config}
+      - name: qbittorrent-config-seed-script
+        configMap:
+          name: qbittorrent-config-seed-script
       # bazarr-config/jdownloader2-config volumes removed with their
       # PVCs (see the container blocks above) - a Pod spec referencing
       # a PVC that no longer exists blocks scheduling entirely, not
