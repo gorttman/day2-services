@@ -46,6 +46,7 @@ data:
 
     downloadClients:
       - name: SABnzbd
+        implementation: Sabnzbd
         host: localhost
         port: 8080
         apps:
@@ -55,6 +56,21 @@ data:
             category: movies
           - app: lazylibrarian
             category: books
+
+      # 2026-08-25: torrent protocol coverage - qBittorrent joins the
+      # shared pod, same as SABnzbd. No credentials here: WebUI\
+      # LocalHostAuth=false (set by qbittorrent-config-seed) bypasses
+      # auth entirely for same-pod (genuine 127.0.0.1) calls, which is
+      # what every app-to-app call in this stack already is.
+      - name: qBittorrent
+        implementation: QBittorrent
+        host: localhost
+        port: 8090
+        apps:
+          - app: sonarr
+            category: tv
+          - app: radarr
+            category: movies
 
     # 2026-08-05: matches the tv/movies subPath split on the shared
     # /media NFS export (see arr-stack-deployment.yml) - created once
@@ -123,6 +139,23 @@ data:
       indexers:
         - name: NZBgeek
           secretKey: nzbgeek_api_key
+        # 2026-08-25: 1337x - genuinely public torrent tracker, no
+        # credentials required (confirmed live against this exact
+        # Prowlarr install's own /api/v1/indexer/schema). Occasionally
+        # needs FlareSolverr to stay reachable through Cloudflare
+        # challenges - not wired up, just a known characteristic of
+        # this tracker, not a hidden requirement for it to work at all.
+        - name: 1337x
+
+    # Categories for the torrent download client (qBittorrent) - same
+    # naming as SABnzbd's for consistency. Created via qBittorrent's own
+    # POST /api/v2/torrents/createCategory API, not a config-file edit.
+    qbittorrent:
+      categories:
+        - name: tv
+          savePath: /downloads
+        - name: movies
+          savePath: /downloads
 
     lazylibrarian:
       # Format preference for what LazyLibrarian will search for/keep -

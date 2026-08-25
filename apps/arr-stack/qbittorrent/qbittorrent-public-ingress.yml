@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: qbittorrent-public
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: qbittorrent
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - qbittorrent.i3sec.com.au
+    secretName: qbittorrent-public-tls
+  rules:
+  - host: qbittorrent.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: qbittorrent
+            port:
+              number: 8090

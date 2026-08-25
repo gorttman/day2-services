@@ -312,39 +312,68 @@ data:
     # Sonarr/Radarr download clients (schema-driven - see module docstring)
     # ---------------------------------------------------------------------
 
-    def reconcile_downloadclient(app, apikey, dc_cfg, category, sab_apikey):
+    def reconcile_downloadclient(app, apikey, dc_cfg, category, auth_apikey):
         port = APP_PORTS[app]
         base = f"http://localhost:{port}/api/v3"
         category_field = CATEGORY_FIELD[app]
+        implementation = dc_cfg.get("implementation", "Sabnzbd")
 
         existing = http_json("GET", f"{base}/downloadclient?apikey={apikey}") or []
         match = next(
-            (e for e in existing if e.get("implementation") == "Sabnzbd" and e.get("name") == dc_cfg["name"]),
+            (e for e in existing if e.get("implementation") == implementation and e.get("name") == dc_cfg["name"]),
             None,
         )
 
         schema_list = http_json("GET", f"{base}/downloadclient/schema?apikey={apikey}")
-        schema = next(e for e in schema_list if e["implementation"] == "Sabnzbd")
+        schema = next(e for e in schema_list if e["implementation"] == implementation)
         schema["enable"] = True
         schema["name"] = dc_cfg["name"]
 
         field_values = {
             "host": dc_cfg["host"],
             "port": dc_cfg["port"],
-            "apiKey": sab_apikey,
             category_field: category,
         }
+        # qBittorrent needs no apiKey - WebUI\LocalHostAuth=false bypasses
+        # auth entirely for same-pod (127.0.0.1) calls, see
+        # qbittorrent-config-seed-script.yml.
+        if auth_apikey:
+            field_values["apiKey"] = auth_apikey
         for f in schema["fields"]:
             if f["name"] in field_values:
                 f["value"] = field_values[f["name"]]
 
         if match is None:
             http_json("POST", f"{base}/downloadclient?apikey={apikey}", body=schema)
-            log("INFO", f"{app}: created download client {dc_cfg['name']!r} (category={category})")
+            log("INFO", f"{app}: created download client {dc_cfg['name']!r} ({implementation}, category={category})")
         else:
             schema["id"] = match["id"]
             http_json("PUT", f"{base}/downloadclient/{match['id']}?apikey={apikey}", body=schema)
-            log("INFO", f"{app}: re-applied download client {dc_cfg['name']!r} (category={category})")
+            log("INFO", f"{app}: re-applied download client {dc_cfg['name']!r} ({implementation}, category={category})")
+
+
+    # ---------------------------------------------------------------------
+    # qBittorrent categories (its own API, form-encoded not JSON)
+    # ---------------------------------------------------------------------
+
+    def reconcile_qbittorrent_categories(desired):
+        categories = desired.get("qbittorrent", {}).get("categories", [])
+        if not categories:
+            return
+        base = "http://localhost:8090/api/v2"
+        try:
+            existing = http_json("GET", f"{base}/torrents/categories") or {}
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            log("INFO", f"qbittorrent: not reachable yet ({e}) - skipping this pass")
+            return
+        for cat in categories:
+            if cat["name"] in existing:
+                continue
+            data = urllib.parse.urlencode({"category": cat["name"], "savePath": cat["savePath"]}).encode()
+            req = urllib.request.Request(f"{base}/torrents/createCategory", data=data, method="POST")
+            req.add_header("Content-Type", "application/x-www-form-urlencoded")
+            urllib.request.urlopen(req, timeout=15)
+            log("INFO", f"qbittorrent: category ensured: {cat['name']} -> {cat['savePath']}")
 
 
     # ---------------------------------------------------------------------
@@ -464,9 +493,22 @@ data:
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             log("CRIT", f"root folder reconcile failed: {e}")
 
+        try:
+            reconcile_qbittorrent_categories(desired)
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            log("CRIT", f"qbittorrent category reconcile failed: {e}")
+
         for dc_cfg in desired.get("downloadClients", []):
-            if not sab_apikey:
-                break
+            implementation = dc_cfg.get("implementation", "Sabnzbd")
+            if implementation == "Sabnzbd":
+                if not sab_apikey:
+                    continue
+                auth_key = sab_apikey
+            elif implementation == "QBittorrent":
+                auth_key = None  # LocalHostAuth bypass - no credential needed for same-pod calls
+            else:
+                log("CRIT", f"downloadclient: unknown implementation {implementation!r} for {dc_cfg['name']!r}")
+                continue
             for entry in dc_cfg.get("apps", []):
                 app = entry["app"]
                 if app not in APP_PORTS:
@@ -475,7 +517,7 @@ data:
                     log("INFO", f"{app} api key not available yet (config.xml not written) - skipping this pass")
                     continue
                 try:
-                    reconcile_downloadclient(app, apikeys[app], dc_cfg, entry["category"], sab_apikey)
+                    reconcile_downloadclient(app, apikeys[app], dc_cfg, entry["category"], auth_key)
                 except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
                     log("CRIT", f"{app} download client reconcile failed: {e}")
 

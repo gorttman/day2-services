@@ -1,0 +1,152 @@
+# seed_config.py, mounted read-only into the qbittorrent-config-seed
+# sidecar - see arr-stack-deployment.yml's comment for why this exists.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qbittorrent-config-seed-script
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: qbittorrent
+    argocd.argoproj.io/managed-by: argocd
+data:
+  seed_config.py: |
+    #!/usr/bin/env python3
+    # Patches qBittorrent.conf (plain INI, [Preferences] section) once
+    # qBittorrent creates it on first boot, then self-restarts the pod -
+    # same shape as lazylibrarian-config-seed.py.
+    #
+    # WebUI\LocalHostAuth=false - every other container in this pod calls
+    # qBittorrent over localhost (shared network namespace), same as every
+    # other app-to-app call in this stack. Bypassing auth for genuine
+    # 127.0.0.1 traffic only is qBittorrent's own documented mechanism for
+    # this, not a workaround - it does not open the WebUI to anything
+    # outside the pod, since Ingress-routed traffic arrives from the
+    # ingress controller's pod IP, not from 127.0.0.1.
+    #
+    # WebUI\HostHeaderValidation=false - qBittorrent rejects any request
+    # whose Host header it doesn't recognise (its own anti-DNS-rebinding
+    # protection) - without this, the Ingress path (Host: qbittorrent.
+    # i3sec.com.au) gets rejected outright regardless of credentials.
+    # Well-documented behaviour for any qBittorrent instance behind a
+    # reverse proxy, not specific to this cluster.
+    #
+    # Downloads\SavePath - same shared /downloads mount Sonarr/Radarr/
+    # SABnzbd already use, so a finished torrent import is a plain rename
+    # like every other download client here, not a cross-filesystem copy.
+    #
+    # Human WebUI login is deliberately NOT set here: qBittorrent's own
+    # PBKDF2 password-hash format isn't something this script can
+    # construct without a live instance to verify against, and guessing
+    # wrong would silently produce a broken login with no error anywhere.
+    # qBittorrent auto-generates a temporary password on first boot and
+    # logs it to its own container log - that's the one-time bootstrap
+    # step for human access; automation never depends on it.
+    import configparser
+    import http.client
+    import os
+    import ssl
+    import time
+
+    CONFIG_PATH = "/config/qBittorrent/qBittorrent.conf"
+    RECHECK_INTERVAL_SECONDS = 300
+
+    BASE_DESIRED = {
+        "Preferences": {
+            "WebUI\\LocalHostAuth": "false",
+            "WebUI\\HostHeaderValidation": "false",
+            "Downloads\\SavePath": "/downloads/",
+        },
+    }
+
+
+    def wait_for_config():
+        while not os.path.exists(CONFIG_PATH):
+            print("waiting for qBittorrent to create qBittorrent.conf...", flush=True)
+            time.sleep(5)
+        # Give the app a moment past file-creation to finish its own
+        # first-run writes before this reads/rewrites it.
+        time.sleep(5)
+
+
+    def patch_config():
+        cp = configparser.ConfigParser()
+        cp.optionxform = str  # preserve case - qBittorrent's own keys are mixed-case
+        cp.read(CONFIG_PATH)
+        changed = False
+        for section, keys in BASE_DESIRED.items():
+            if not cp.has_section(section):
+                cp.add_section(section)
+            for key, value in keys.items():
+                current = cp.get(section, key, fallback=None)
+                if current != value:
+                    cp.set(section, key, value)
+                    changed = True
+                    print(f"{section}.{key}: {current!r} -> {value!r}", flush=True)
+        if changed:
+            with open(CONFIG_PATH, "w") as f:
+                cp.write(f)
+        return changed
+
+
+    RESTART_PENDING_MARKER = "/tmp/restart-pending"
+
+
+    def restart_pod():
+        # Same retry-on-transient-DNS-race reasoning as
+        # lazylibrarian-config-seed.py's restart_pod() - see that
+        # function's docstring for the full story.
+        pod_name = os.environ.get("MY_POD_NAME")
+        if not pod_name:
+            print("MY_POD_NAME not set - cannot self-restart, restart the pod manually", flush=True)
+            return False
+        secrets_dir = "/var/run/secrets/kubernetes.io/serviceaccount"
+        with open(f"{secrets_dir}/token") as f:
+            token = f.read().strip()
+        with open(f"{secrets_dir}/namespace") as f:
+            namespace = f.read().strip()
+        context = ssl.create_default_context(cafile=f"{secrets_dir}/ca.crt")
+
+        for attempt in range(1, 6):
+            try:
+                conn = http.client.HTTPSConnection("kubernetes.default.svc", 443, context=context, timeout=10)
+                try:
+                    conn.request(
+                        "DELETE",
+                        f"/api/v1/namespaces/{namespace}/pods/{pod_name}",
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+                    resp = conn.getresponse()
+                    print(f"self-restart requested for {pod_name}: HTTP {resp.status}", flush=True)
+                    resp.read()
+                    return True
+                finally:
+                    conn.close()
+            except OSError as e:
+                print(f"self-restart attempt {attempt}/5 failed: {e}", flush=True)
+                if attempt < 5:
+                    time.sleep(5)
+        return False
+
+
+    wait_for_config()
+    while True:
+        try:
+            changed = patch_config()
+            restart_owed = changed or os.path.exists(RESTART_PENDING_MARKER)
+            if restart_owed:
+                if changed:
+                    print("qBittorrent.conf patched - self-restarting the whole arr-stack pod", flush=True)
+                else:
+                    print("retrying a previously-failed self-restart", flush=True)
+                if restart_pod():
+                    if os.path.exists(RESTART_PENDING_MARKER):
+                        os.remove(RESTART_PENDING_MARKER)
+                    time.sleep(30)
+                else:
+                    open(RESTART_PENDING_MARKER, "w").close()
+            else:
+                print("qbittorrent-config-seed: no change this pass, idling", flush=True)
+        except Exception as e:
+            print(f"CRIT unhandled error during patch pass: {e}", flush=True)
+        time.sleep(RECHECK_INTERVAL_SECONDS)

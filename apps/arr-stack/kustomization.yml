@@ -10,6 +10,7 @@ resources:
   - radarr
   - prowlarr
   - sabnzbd
+  - qbittorrent
   # bazarr, jdownloader2 REMOVED 2026-08-08 - deliberate, see README's
   # "Removed: bazarr and jdownloader2" section. The .yml files
   # themselves are untouched (still in bazarr/, jdownloader2/), but
