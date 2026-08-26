@@ -309,6 +309,75 @@ data:
 
 
     # ---------------------------------------------------------------------
+    # Radarr import lists (Trakt / TMDb -> bulk root folder + capped profile)
+    # ---------------------------------------------------------------------
+
+    def reconcile_radarr_importlists(desired, apikey):
+        base = "http://localhost:7878/api/v3"
+        lists_cfg = desired.get("radarr", {}).get("importLists", [])
+        if not lists_cfg:
+            return
+        existing = http_json("GET", f"{base}/importlist?apikey={apikey}") or []
+        schema_list = http_json("GET", f"{base}/importlist/schema?apikey={apikey}") or []
+        profiles = http_json("GET", f"{base}/qualityprofile?apikey={apikey}") or []
+        profile_ids = {p["name"]: p["id"] for p in profiles}
+
+        for cfg in lists_cfg:
+            schema = next((s for s in schema_list if s["implementation"] == cfg["implementation"]), None)
+            if schema is None:
+                log("CRIT", f"radarr: no import list implementation {cfg['implementation']!r}")
+                continue
+            match = next((e for e in existing if e.get("name") == cfg["name"]), None)
+
+            # An implementation carrying an oAuth-typed field can't be
+            # created headlessly: its token only exists after a human
+            # completes Radarr's own browser consent flow, and it's tied
+            # to Radarr's own registered app, so there's nothing a sealed
+            # secret could hold. Adopt-only for those - never invent a
+            # half-authenticated entry that looks configured but can't
+            # actually fetch anything.
+            needs_oauth = any(f.get("type") == "oAuth" for f in schema.get("fields", []))
+            if match is None and needs_oauth:
+                log("CRIT", f"radarr: import list {cfg['name']!r} ({cfg['implementation']}) needs a one-time "
+                            "'Authenticate' click in Radarr's UI before this can manage it - skipping")
+                continue
+
+            # Start from what Radarr already has when it exists, so every
+            # field NOT declared below carries through untouched - the
+            # OAuth accessToken/refreshToken/expires/authUser especially.
+            # Those are readable on GET here (privacy: normal, unlike the
+            # apiKey-style fields the module docstring warns are masked),
+            # so a straight round-trip preserves them correctly.
+            body = json.loads(json.dumps(match if match is not None else schema))
+            body["name"] = cfg["name"]
+            body["enabled"] = cfg.get("enabled", True)
+            body["enableAuto"] = cfg.get("enableAuto", True)
+            body["searchOnAdd"] = cfg.get("searchOnAdd", False)
+            body["monitor"] = cfg.get("monitor", "movieOnly")
+            body["minimumAvailability"] = cfg.get("minimumAvailability", "released")
+            body["rootFolderPath"] = cfg["rootFolder"]
+
+            qp_name = cfg["qualityProfile"]
+            if qp_name not in profile_ids:
+                log("CRIT", f"radarr: quality profile {qp_name!r} not found yet for import list "
+                            f"{cfg['name']!r} - skipping this pass")
+                continue
+            body["qualityProfileId"] = profile_ids[qp_name]
+
+            for f in body.get("fields", []):
+                if f["name"] in cfg.get("settings", {}):
+                    f["value"] = cfg["settings"][f["name"]]
+
+            if match is None:
+                http_json("POST", f"{base}/importlist?apikey={apikey}", body=body)
+                log("INFO", f"radarr: created import list {cfg['name']!r} -> {cfg['rootFolder']} ({qp_name})")
+            else:
+                body["id"] = match["id"]
+                http_json("PUT", f"{base}/importlist/{match['id']}?apikey={apikey}", body=body)
+                log("INFO", f"radarr: re-applied import list {cfg['name']!r} -> {cfg['rootFolder']} ({qp_name})")
+
+
+    # ---------------------------------------------------------------------
     # Sonarr/Radarr download clients (schema-driven - see module docstring)
     # ---------------------------------------------------------------------
 
@@ -545,6 +614,13 @@ data:
                 reconcile_radarr_qualityprofiles(desired, apikeys["radarr"], cf_ids)
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
                 log("CRIT", f"radarr custom format/quality profile reconcile failed: {e}")
+            # KeyError included deliberately: a malformed/incomplete entry
+            # in wiring.yml must not abort the rest of this pass, which is
+            # exactly what bit the prowlarr reconcile on 2026-08-25.
+            try:
+                reconcile_radarr_importlists(desired, apikeys["radarr"])
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
+                log("CRIT", f"radarr import list reconcile failed: {e}")
 
 
     if __name__ == "__main__":

@@ -85,6 +85,60 @@ data:
         - /movies
         - /movies-bulk
 
+      # Import lists, all targeted at the bulk root folder + capped
+      # profile from Phase 2a - never the main /movies library.
+      #
+      # qualityProfile is by NAME, not id: the profile is itself
+      # reconciler-created, so its id isn't stable across a rebuild.
+      #
+      # Sync interval is NOT set here - Radarr treats minRefreshInterval
+      # as a read-only property of each list implementation (confirmed
+      # live 2026-08-26: requesting 24:00:00 came back as 12:00:00).
+      # Both list types below floor at 12h, i.e. twice daily.
+      importLists:
+        # Created by hand once (Trakt needs a browser OAuth consent
+        # flow - there's no key to paste, so this one entry can't be
+        # created headlessly). The reconciler ADOPTS it by name and
+        # only manages the fields below; the OAuth tokens Radarr
+        # stores are never touched. See the reconciler's own comment.
+        - name: Bulk Trakt List
+          implementation: TraktListImport
+          enabled: true
+          rootFolder: /movies-bulk
+          qualityProfile: Bulk SD-720p
+          settings:
+            username: dcswitzer
+            listname: hallmark-all
+            limit: 100
+
+        # TMDb company lists need only a companyId - no OAuth, no API
+        # key - so these are created from nothing by the reconciler.
+        # IDs confirmed against themoviedb.org 2026-08-26 along with
+        # their real catalog sizes; several same-named companies exist
+        # and most are empty stubs (304438 "Hallmark Media" and 215057
+        # "Lifetime Movie Network" both return 0 movies, for instance).
+        - name: Bulk TMDb - Hallmark Media
+          implementation: TMDbCompanyImport
+          enabled: true
+          rootFolder: /movies-bulk
+          qualityProfile: Bulk SD-720p
+          settings:
+            companyId: "53015"      # 466 movies
+
+        # ~1,485 movies, roughly 2-4TB at this profile's ceiling, on
+        # top of everything else here - enabled deliberately 2026-08-26
+        # after the capacity numbers were reviewed (14.3TB free at the
+        # time), not by default. searchOnAdd stays false so this adds
+        # to the library steadily rather than firing thousands of
+        # indexer searches at once.
+        - name: Bulk TMDb - Lifetime
+          implementation: TMDbCompanyImport
+          enabled: true
+          rootFolder: /movies-bulk
+          qualityProfile: Bulk SD-720p
+          settings:
+            companyId: "3431"       # 1,485 movies
+
       # Size-cap enforcement lives in a Custom Format, not the global
       # Quality Definitions page - editing that page's per-quality max
       # sizes would also cap SD/720p for the stock HD-1080p/Ultra-HD
