@@ -69,6 +69,16 @@ spec:
           mountPath: /tv
           subPath: tv
           readOnly: true
+        # Bulk catalog content (Radarr's second root folder, added
+        # 2026-08-23) - a separate mount so it can be a separate
+        # Jellyfin library rather than being mixed into the main movie
+        # library. Without this Jellyfin simply cannot see anything
+        # Radarr files into /movies-bulk: found live 2026-08-26 with
+        # Radarr reporting 4 downloaded movies and Jellyfin showing 2.
+        - name: media
+          mountPath: /movies-bulk
+          subPath: movies-bulk
+          readOnly: true
         resources:
           requests:
             memory: "512Mi"
