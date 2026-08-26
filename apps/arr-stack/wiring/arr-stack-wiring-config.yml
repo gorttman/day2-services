@@ -190,22 +190,25 @@ data:
       # --namespace arr-stack --name arr-stack-wiring-secret, then add
       # the encryptedData line + reference it here - same pattern as
       # every other multi-field sealed secret in this repo.
-      # Cloudflare-challenge solver. Any indexer tagged 'flaresolverr'
-      # has its requests routed through this instead of being fetched
-      # directly. Confirmed necessary live 2026-08-26: 1337x.to returns
-      # HTTP 403 + `cf-mitigated: challenge` through the VPN exit IP -
-      # a solvable interstitial, not an IP ban, which is why this works
-      # rather than being a dead end. host is localhost because
-      # FlareSolverr runs as a container in this same shared pod (see
-      # arr-stack-deployment.yml).
-      indexerProxies:
-        - name: FlareSolverr
-          implementation: FlareSolverr
-          tag: flaresolverr
-          settings:
-            host: http://localhost:8191/
-            requestTimeout: 60
-
+      # NO FlareSolverr / 1337x here - tried and abandoned 2026-08-26,
+      # recorded so it isn't re-attempted. 1337x.to returns a Cloudflare
+      # JS challenge from this stack's VPN exit IP, which looked
+      # solvable (`cf-mitigated: challenge`, not an IP ban), so
+      # FlareSolverr was deployed in-pod. It launched fine and DETECTED
+      # the challenge every time, but never solved one: "Error solving
+      # the challenge. Timeout after 60.0 seconds", repeatedly. Raising
+      # the budget to 180s just got the container OOMKilled (headless
+      # Chromium peaked past its 1Gi limit at ~711m CPU) on a node
+      # already sitting at ~78% CPU / 67% memory.
+      #
+      # The fix was not more resources - it was that three other public
+      # movie trackers work with no challenge and no extra
+      # infrastructure at all. Measured live on the same searches:
+      # "Love Comes Softly" went 8 results (usenet only) -> 34, and
+      # "The Beach House 2018" 3 -> 27, once these were added. If
+      # torrent coverage ever needs widening again, start by testing
+      # candidate trackers for a challenge (curl -D- and look for
+      # `cf-mitigated`) rather than reaching for FlareSolverr.
       indexers:
         - name: NZBgeek
           secretKey: nzbgeek_api_key
@@ -215,11 +218,12 @@ data:
         # needs FlareSolverr to stay reachable through Cloudflare
         # challenges - not wired up, just a known characteristic of
         # this tracker, not a hidden requirement for it to work at all.
-        - name: 1337x
-          # Routed through FlareSolverr (below) - 1337x sits behind a
-          # Cloudflare JS challenge from this stack's VPN exit IP.
-          tags:
-            - flaresolverr
+        # Public torrent trackers - no credentials, no proxy, all
+        # confirmed live 2026-08-26 to both validate in Prowlarr and
+        # return real movie results through this stack's VPN exit IP.
+        - name: The Pirate Bay
+        - name: LimeTorrents
+        - name: YTS
 
     # Categories for the torrent download client (qBittorrent) - same
     # naming as SABnzbd's for consistency. Created via qBittorrent's own

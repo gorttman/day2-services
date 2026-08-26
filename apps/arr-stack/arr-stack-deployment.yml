@@ -278,40 +278,6 @@ spec:
         resources:
           requests: {memory: "128Mi", cpu: "50m"}
           limits: {memory: "1Gi", cpu: "1500m"}
-      # Solves Cloudflare "Just a moment" JS challenges on behalf of
-      # Prowlarr indexers tagged for it. Confirmed necessary live
-      # 2026-08-26: 1337x.to returned HTTP 403 with `cf-mitigated:
-      # challenge` and a challenge-platform body through this stack's
-      # PIA exit IP - a solvable interstitial, NOT an IP ban ("Sorry,
-      # you have been blocked"), which is the distinction that makes
-      # FlareSolverr the right tool rather than a dead end.
-      #
-      # In-pod deliberately, not its own Deployment: it shares gluetun's
-      # network namespace like everything else here, so tracker traffic
-      # leaves via the VPN. Running it outside the pod would send
-      # torrent-tracker requests out the bare WAN IP, which defeats the
-      # reason this whole stack sits behind a VPN.
-      #
-      # Real memory limit, not BestEffort: this runs a headless Chromium
-      # and k8smaster has OOM history (see apps/traefik and the argocd
-      # controller). 1Gi ceiling with a modest request so it can't
-      # balloon during a solve and evict its podmates.
-      - name: flaresolverr
-        image: flaresolverr/flaresolverr:v3.5.0
-        imagePullPolicy: IfNotPresent
-        env:
-        - {name: LOG_LEVEL, value: info}
-        - {name: TZ, value: Australia/Sydney}
-        - {name: PORT, value: "8191"}
-        ports:
-        - {name: flaresolverr, containerPort: 8191, protocol: TCP}
-        readinessProbe:
-          tcpSocket: {port: 8191}
-          initialDelaySeconds: 25
-          periodSeconds: 15
-        resources:
-          requests: {memory: "256Mi", cpu: "50m"}
-          limits: {memory: "1Gi", cpu: "1000m"}
       - name: qbittorrent
         image: lscr.io/linuxserver/qbittorrent:5.2.3
         imagePullPolicy: IfNotPresent
