@@ -349,13 +349,23 @@ def main():
 
     stale = is_endpoint_stale(current_ip, wg_ips_seen)
     looping = gluetun_is_restart_looping()
+    # Diagnostic escape hatch only - never set on the CronJob itself, so
+    # every normal scheduled run stays exactly as staleness-gated as
+    # before. Exists for the one legitimate case that gate can't cover:
+    # confirming whether P2P (BitTorrent) connectivity is bad on this
+    # specific PIA exit node specifically, not whether the peer itself
+    # is stale - those are different questions, and only a real rotation
+    # to a different server answers the second one.
+    forced = os.environ.get("FORCE_ROTATE") == "1"
 
-    if not stale and not looping:
+    if not stale and not looping and not forced:
         print(f"OK: peer {current_ip} still listed in PIA's {PIA_REGION!r} region, "
               "no restart loop detected.")
         return 0
 
-    reason = "server no longer in PIA's live list" if stale else "gluetun stuck in a restart loop"
+    reason = ("server no longer in PIA's live list" if stale
+              else "gluetun stuck in a restart loop" if looping
+              else "forced (FORCE_ROTATE=1)")
     print(f"Rotating PIA WireGuard peer - {reason} (current: {current_ip}).")
 
     username, password = read_pia_credentials()
