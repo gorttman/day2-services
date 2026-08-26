@@ -190,6 +190,22 @@ data:
       # --namespace arr-stack --name arr-stack-wiring-secret, then add
       # the encryptedData line + reference it here - same pattern as
       # every other multi-field sealed secret in this repo.
+      # Cloudflare-challenge solver. Any indexer tagged 'flaresolverr'
+      # has its requests routed through this instead of being fetched
+      # directly. Confirmed necessary live 2026-08-26: 1337x.to returns
+      # HTTP 403 + `cf-mitigated: challenge` through the VPN exit IP -
+      # a solvable interstitial, not an IP ban, which is why this works
+      # rather than being a dead end. host is localhost because
+      # FlareSolverr runs as a container in this same shared pod (see
+      # arr-stack-deployment.yml).
+      indexerProxies:
+        - name: FlareSolverr
+          implementation: FlareSolverr
+          tag: flaresolverr
+          settings:
+            host: http://localhost:8191/
+            requestTimeout: 60
+
       indexers:
         - name: NZBgeek
           secretKey: nzbgeek_api_key
@@ -200,6 +216,10 @@ data:
         # challenges - not wired up, just a known characteristic of
         # this tracker, not a hidden requirement for it to work at all.
         - name: 1337x
+          # Routed through FlareSolverr (below) - 1337x sits behind a
+          # Cloudflare JS challenge from this stack's VPN exit IP.
+          tags:
+            - flaresolverr
 
     # Categories for the torrent download client (qBittorrent) - same
     # naming as SABnzbd's for consistency. Created via qBittorrent's own

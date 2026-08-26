@@ -449,6 +449,53 @@ data:
     # Prowlarr indexers
     # ---------------------------------------------------------------------
 
+    def ensure_prowlarr_tag(apikey, label):
+        """Prowlarr tags are how an indexer gets associated with an
+        indexer proxy - there's no direct proxy-to-indexer field. Tag
+        labels are lowercased by Prowlarr itself, so match on that."""
+        base = "http://localhost:9696/api/v1"
+        wanted = label.lower()
+        existing = http_json("GET", f"{base}/tag?apikey={apikey}") or []
+        match = next((t for t in existing if t.get("label") == wanted), None)
+        if match:
+            return match["id"]
+        created = http_json("POST", f"{base}/tag?apikey={apikey}", body={"label": wanted})
+        log("INFO", f"prowlarr: created tag {wanted!r}")
+        return created["id"]
+
+
+    def reconcile_prowlarr_indexerproxies(desired, apikey):
+        """Must run BEFORE reconcile_prowlarr_indexers: Prowlarr validates
+        an indexer by actually fetching it at create/update time, so a
+        Cloudflare-gated indexer only passes once its proxy already
+        exists and is tagged."""
+        base = "http://localhost:9696/api/v1"
+        proxies = desired.get("prowlarr", {}).get("indexerProxies", [])
+        if not proxies:
+            return
+        existing = http_json("GET", f"{base}/indexerproxy?apikey={apikey}") or []
+        schema_list = http_json("GET", f"{base}/indexerproxy/schema?apikey={apikey}") or []
+        for p_cfg in proxies:
+            schema = next((s for s in schema_list if s["implementation"] == p_cfg["implementation"]), None)
+            if schema is None:
+                log("CRIT", f"prowlarr: no indexer proxy implementation {p_cfg['implementation']!r}")
+                continue
+            body = json.loads(json.dumps(schema))
+            body["name"] = p_cfg["name"]
+            body["tags"] = [ensure_prowlarr_tag(apikey, p_cfg["tag"])]
+            for f in body.get("fields", []):
+                if f["name"] in p_cfg.get("settings", {}):
+                    f["value"] = p_cfg["settings"][f["name"]]
+            match = next((e for e in existing if e.get("name") == p_cfg["name"]), None)
+            if match is None:
+                http_json("POST", f"{base}/indexerproxy?apikey={apikey}", body=body)
+                log("INFO", f"prowlarr: created indexer proxy {p_cfg['name']!r} (tag={p_cfg['tag']})")
+            else:
+                body["id"] = match["id"]
+                http_json("PUT", f"{base}/indexerproxy/{match['id']}?apikey={apikey}", body=body)
+                log("INFO", f"prowlarr: re-applied indexer proxy {p_cfg['name']!r} (tag={p_cfg['tag']})")
+
+
     def reconcile_prowlarr_indexers(desired, apikey):
         indexers = desired.get("prowlarr", {}).get("indexers", [])
         if not indexers:
@@ -487,6 +534,10 @@ data:
 
             schema["enable"] = True
             schema["appProfileId"] = app_profile_id
+            # Tags are what bind this indexer to an indexer proxy
+            # (FlareSolverr) - see reconcile_prowlarr_indexerproxies.
+            if idx_cfg.get("tags"):
+                schema["tags"] = [ensure_prowlarr_tag(apikey, t) for t in idx_cfg["tags"]]
             if indexer_apikey:
                 for f in schema["fields"]:
                     if f["name"] == "apiKey":
@@ -597,6 +648,10 @@ data:
                     log("CRIT", f"{app} download client reconcile failed: {e}")
 
         if apikeys.get("prowlarr"):
+            try:
+                reconcile_prowlarr_indexerproxies(desired, apikeys["prowlarr"])
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
+                log("CRIT", f"prowlarr indexer proxy reconcile failed: {e}")
             try:
                 reconcile_prowlarr_indexers(desired, apikeys["prowlarr"])
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
