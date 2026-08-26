@@ -511,6 +511,26 @@ data:
             log("INFO", f"qbittorrent: category ensured: {cat['name']} -> {cat['savePath']}")
 
 
+    def reconcile_qbittorrent_preferences(desired):
+        prefs = desired.get("qbittorrent", {}).get("preferences", {})
+        if not prefs:
+            return
+        base = "http://localhost:8090/api/v2"
+        try:
+            current = http_json("GET", f"{base}/app/preferences") or {}
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            log("INFO", f"qbittorrent: not reachable yet ({e}) - skipping this pass")
+            return
+        changed = {k: v for k, v in prefs.items() if current.get(k) != v}
+        if not changed:
+            return
+        data = urllib.parse.urlencode({"json": json.dumps(changed)}).encode()
+        req = urllib.request.Request(f"{base}/app/setPreferences", data=data, method="POST")
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        urllib.request.urlopen(req, timeout=15)
+        log("INFO", f"qbittorrent: preferences applied: {changed}")
+
+
     # ---------------------------------------------------------------------
     # Prowlarr indexers
     # ---------------------------------------------------------------------
@@ -692,6 +712,10 @@ data:
             reconcile_qbittorrent_categories(desired)
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             log("CRIT", f"qbittorrent category reconcile failed: {e}")
+        try:
+            reconcile_qbittorrent_preferences(desired)
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            log("CRIT", f"qbittorrent preferences reconcile failed: {e}")
 
         for dc_cfg in desired.get("downloadClients", []):
             implementation = dc_cfg.get("implementation", "Sabnzbd")

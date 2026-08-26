@@ -261,6 +261,20 @@ data:
         - name: movies
           savePath: /downloads
 
+      # qBittorrent's own defaults (max_active_downloads: 3,
+      # max_active_torrents: 5) silently cap how much of the bulk
+      # backlog ever runs at once - everything past the cap sits in
+      # queuedDL state and never even attempts a tracker announce, no
+      # error anywhere. Found live 2026-08-27: 24 of 27 queued torrents
+      # had NEVER contacted a single tracker, hours after being added -
+      # this is what "downloads have stalled" actually was. Not
+      # unlimited: with ~2,000 titles still to come, letting every one
+      # try to run simultaneously would be its own problem.
+      preferences:
+        max_active_downloads: 10
+        max_active_torrents: 15
+        max_active_uploads: 5
+
     lazylibrarian:
       # Format preference for what LazyLibrarian will search for/keep -
       # comma-separated, most preferred first (LazyLibrarian's own
