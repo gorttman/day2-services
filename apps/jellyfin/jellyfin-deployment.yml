@@ -79,6 +79,19 @@ spec:
           mountPath: /movies-bulk
           subPath: movies-bulk
           readOnly: true
+        # Restricted-access library (2026-08-27). A folder inside the
+        # existing /media export rather than a separate share - the
+        # restriction is enforced by Jellyfin per-user library access,
+        # not by storage permissions. The LG account was switched to
+        # EnableAllFolders=false with an explicit three-library
+        # allow-list BEFORE this mount existed, so this library is
+        # invisible to it from creation rather than briefly exposed.
+        # Note the corollary: any future library is also invisible to
+        # LG until explicitly added to that allow-list.
+        - name: media
+          mountPath: /movies-private
+          subPath: movies-private
+          readOnly: true
         resources:
           requests:
             memory: "512Mi"
