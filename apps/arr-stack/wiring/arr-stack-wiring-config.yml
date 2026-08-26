@@ -85,6 +85,32 @@ data:
         - /movies
         - /movies-bulk
 
+      # Tells Jellyfin to scan the moment Radarr imports something,
+      # instead of Jellyfin only noticing on its own periodic scan.
+      # Implementation is "MediaBrowser" (Emby's old name - Jellyfin
+      # forked from Emby and speaks the same protocol); Radarr labels
+      # it "Emby / Jellyfin" in the UI.
+      #
+      # No mapFrom/mapTo path mapping: Radarr writes /movies-bulk and
+      # Jellyfin reads /movies-bulk - the same path on the same NFS
+      # export. Mismatched paths are the usual reason this notification
+      # silently does nothing, so it's worth keeping them identical.
+      notifications:
+        - name: Jellyfin
+          implementation: MediaBrowser
+          onDownload: true       # fires on import
+          onUpgrade: true
+          onRename: true
+          onMovieDelete: true
+          onMovieFileDelete: true
+          settings:
+            host: jellyfin.jellyfin.svc.cluster.local
+            port: 8096
+            useSsl: false
+            updateLibrary: true
+            notify: false        # library refresh only, no user-facing popups
+          apiKeySecretKey: jellyfin_api_key
+
       # Import lists, all targeted at the bulk root folder + capped
       # profile from Phase 2a - never the main /movies library.
       #

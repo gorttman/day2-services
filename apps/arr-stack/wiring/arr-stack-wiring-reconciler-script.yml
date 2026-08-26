@@ -322,6 +322,59 @@ data:
 
 
     # ---------------------------------------------------------------------
+    # Radarr notifications (Connect) - e.g. tell Jellyfin to rescan on import
+    # ---------------------------------------------------------------------
+
+    def reconcile_radarr_notifications(desired, apikey):
+        base = "http://localhost:7878/api/v3"
+        notifs = desired.get("radarr", {}).get("notifications", [])
+        if not notifs:
+            return
+        existing = http_json("GET", f"{base}/notification?apikey={apikey}") or []
+        schema_list = http_json("GET", f"{base}/notification/schema?apikey={apikey}") or []
+
+        for n_cfg in notifs:
+            schema = next((x for x in schema_list if x["implementation"] == n_cfg["implementation"]), None)
+            if schema is None:
+                log("CRIT", f"radarr: no notification implementation {n_cfg['implementation']!r}")
+                continue
+
+            # The API key belongs to the OTHER app (Jellyfin), so it comes
+            # from the sealed secret by name - same pattern as the indexer
+            # keys, never in the plaintext wiring config.
+            secret_key = n_cfg.get("apiKeySecretKey")
+            target_apikey = load_secret(secret_key) if secret_key else None
+            if secret_key and not target_apikey:
+                log("CRIT", f"radarr: notification {n_cfg['name']!r} has no key sealed under "
+                            f"{secret_key!r} yet - skipping")
+                continue
+
+            body = json.loads(json.dumps(schema))
+            body["name"] = n_cfg["name"]
+            for trigger in ("onDownload", "onUpgrade", "onRename", "onGrab",
+                            "onMovieAdded", "onMovieDelete", "onMovieFileDelete",
+                            "onHealthIssue", "onApplicationUpdate"):
+                if trigger in n_cfg:
+                    body[trigger] = n_cfg[trigger]
+
+            field_values = dict(n_cfg.get("settings", {}))
+            if target_apikey:
+                field_values["apiKey"] = target_apikey
+            for f in body.get("fields", []):
+                if f["name"] in field_values:
+                    f["value"] = field_values[f["name"]]
+
+            match = next((e for e in existing if e.get("name") == n_cfg["name"]), None)
+            if match is None:
+                http_json("POST", f"{base}/notification?apikey={apikey}", body=body)
+                log("INFO", f"radarr: created notification {n_cfg['name']!r} ({n_cfg['implementation']})")
+            else:
+                body["id"] = match["id"]
+                http_json("PUT", f"{base}/notification/{match['id']}?apikey={apikey}", body=body)
+                log("INFO", f"radarr: re-applied notification {n_cfg['name']!r} ({n_cfg['implementation']})")
+
+
+    # ---------------------------------------------------------------------
     # Radarr import lists (Trakt / TMDb -> bulk root folder + capped profile)
     # ---------------------------------------------------------------------
 
@@ -692,6 +745,10 @@ data:
                 reconcile_radarr_importlists(desired, apikeys["radarr"])
             except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
                 log("CRIT", f"radarr import list reconcile failed: {e}")
+            try:
+                reconcile_radarr_notifications(desired, apikeys["radarr"])
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
+                log("CRIT", f"radarr notification reconcile failed: {e}")
 
 
     if __name__ == "__main__":
