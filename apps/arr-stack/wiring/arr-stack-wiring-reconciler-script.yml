@@ -56,6 +56,10 @@ data:
     WIRING_CONFIG_PATH = "/wiring-config/wiring.yml"
     WIRING_SECRET_DIR = "/wiring-secret"
     RECONCILE_INTERVAL_SECONDS = 300
+    # Writing a Cloudflare-gated indexer triggers a live validation fetch
+    # through FlareSolverr - see http_json's comment for why 15s isn't
+    # enough. Comfortably above FlareSolverr's own 60s solve budget.
+    INDEXER_WRITE_TIMEOUT = 120
 
     APP_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696}
     # Sonarr/Radarr name their SABnzbd category field differently -
@@ -76,11 +80,20 @@ data:
         print(f"[{ts}] {level:5} {msg}", flush=True)
 
 
-    def http_json(method, url, body=None):
+    # Default 15s is fine for ordinary API calls, but NOT for creating or
+    # updating an indexer that sits behind a Cloudflare challenge:
+    # Prowlarr validates an indexer by actually fetching it at write
+    # time, and when that fetch is routed through FlareSolverr the whole
+    # round trip includes a headless-browser challenge solve. Measured
+    # live 2026-08-26 at 8-25s per solve on this hardware, against
+    # FlareSolverr's own 60s budget - so those specific calls pass a
+    # longer timeout. Getting this wrong fails as a bare "timed out"
+    # with nothing indicating Cloudflare was involved at all.
+    def http_json(method, url, body=None, timeout=15):
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(url, data=data, method=method)
         req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
             return json.loads(raw) if raw else None
 
@@ -544,12 +557,15 @@ data:
                         f["value"] = indexer_apikey
 
             match = next((e for e in existing if e.get("name") == idx_cfg["name"]), None)
+            # INDEXER_WRITE_TIMEOUT, not the default: see http_json above.
             if match is None:
-                http_json("POST", f"{base}/indexer?apikey={apikey}", body=schema)
+                http_json("POST", f"{base}/indexer?apikey={apikey}", body=schema,
+                          timeout=INDEXER_WRITE_TIMEOUT)
                 log("INFO", f"prowlarr: created indexer {idx_cfg['name']!r}")
             else:
                 schema["id"] = match["id"]
-                http_json("PUT", f"{base}/indexer/{match['id']}?apikey={apikey}", body=schema)
+                http_json("PUT", f"{base}/indexer/{match['id']}?apikey={apikey}", body=schema,
+                          timeout=INDEXER_WRITE_TIMEOUT)
                 log("INFO", f"prowlarr: re-applied indexer {idx_cfg['name']!r}")
 
 
