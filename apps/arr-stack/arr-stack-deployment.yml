@@ -391,13 +391,23 @@ spec:
       # (checked against the registry manifest before adding, since an
       # amd64-only image would never schedule on these Pis).
       #
+      # Tag is v3, NOT latest. hotio publishes two distinct Whisparr
+      # generations under this one repo: `latest` is V2 (Sonarr-based,
+      # Series/Episode data model - tracking a studio as a "Site" with
+      # individual "Scenes", the way Sonarr tracks a show's episodes).
+      # `v3` is the Radarr-based Movie data model - search and add by
+      # title directly, same workflow as Radarr. Found live 2026-08-27:
+      # `latest` only offered "Add Site", no title search at all, which
+      # is unusable without already knowing specific studio names.
+      # Confirmed `v3` also publishes linux/arm64 before switching.
+      #
       # Deliberately mounts ONLY /movies-private, never /movies or
       # /movies-bulk. That containment is the point: anything this
       # container imports lands exclusively in the restricted Jellyfin
       # library, so it cannot leak into a library the LG/TV account can
       # see. Do not add the other media subPaths here.
       - name: whisparr
-        image: ghcr.io/hotio/whisparr:latest
+        image: ghcr.io/hotio/whisparr:v3
         imagePullPolicy: IfNotPresent
         env:
         - {name: PUID, value: "1000"}
