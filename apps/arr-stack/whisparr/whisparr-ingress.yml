@@ -1,0 +1,35 @@
+# LAN-only, deliberately. Every other arr app here has a matching
+# *-public-ingress.yml (nginx class) that puts it behind the Cloudflare
+# tunnel for off-LAN access. Whisparr has no public counterpart on
+# purpose: it is reachable on the home network only. Add one later if
+# remote access is actually wanted - it would need a tunneled hostname
+# in day1-foundation apps/cloudflare-tf, which is a deliberate act
+# rather than something that happens by omission.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: whisparr
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: whisparr
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - whisparr.i3sec.com.au
+    secretName: whisparr-tls
+  rules:
+  - host: whisparr.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: whisparr
+            port:
+              number: 6969

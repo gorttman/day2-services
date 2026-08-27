@@ -1,0 +1,22 @@
+# Whisparr config volume. Same local-path pattern as every other arr
+# config PVC here: it holds a live SQLite database, which corrupts on
+# NFS (proven on this cluster - see day2-services apps/pihole, where
+# gravity.db came back zeroed after being moved to a QNAP export).
+# Node-local storage is deliberate, and is why the arr-stack deployment
+# is pinned to k8smaster.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: whisparr-config
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: whisparr
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: whisparr
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: whisparr
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  # publishNotReadyAddresses: matches every other service in this stack -
+  # the containers share gluetun's network namespace, so an endpoint can
+  # be usable before the pod as a whole reports Ready.
+  publishNotReadyAddresses: true
+  selector:
+    app: arr-stack
+  ports:
+  - name: http
+    port: 6969
+    targetPort: 6969
+    protocol: TCP

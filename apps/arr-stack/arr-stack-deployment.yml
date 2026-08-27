@@ -143,8 +143,9 @@ spec:
         # rundown and what to do if a manual re-registration is ever
         # needed instead.
         # Admit the arr UIs through gluetun's firewall (inbound)
+        # 6969 added 2026-08-27 for whisparr.
         - name: FIREWALL_INPUT_PORTS
-          value: "8989,7878,9696,8080,8090,6767,5800,5299"
+          value: "8989,7878,9696,8080,8090,6767,5800,5299,6969"
         # Keep cluster traffic (DNS, kubelet probes, pod/svc CIDRs) off the VPN
         - name: FIREWALL_OUTBOUND_SUBNETS
           value: "10.42.0.0/16,10.43.0.0/16"
@@ -379,6 +380,49 @@ spec:
         resources:
           requests: {memory: "128Mi", cpu: "50m"}
           limits: {memory: "512Mi", cpu: "1000m"}
+      # Whisparr (added 2026-08-27). A Radarr fork for adult content:
+      # Radarr itself cannot do this job at all, because TMDB flags adult
+      # titles out of the API responses Radarr consumes - it is an
+      # upstream data limitation, not a setting.
+      #
+      # Image is ghcr.io/hotio/whisparr, not lscr.io/linuxserver like the
+      # rest of this stack - LinuxServer publishes no whisparr image.
+      # hotio's is multi-arch and confirmed to include linux/arm64
+      # (checked against the registry manifest before adding, since an
+      # amd64-only image would never schedule on these Pis).
+      #
+      # Deliberately mounts ONLY /movies-private, never /movies or
+      # /movies-bulk. That containment is the point: anything this
+      # container imports lands exclusively in the restricted Jellyfin
+      # library, so it cannot leak into a library the LG/TV account can
+      # see. Do not add the other media subPaths here.
+      - name: whisparr
+        image: ghcr.io/hotio/whisparr:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - {name: PUID, value: "1000"}
+        - {name: PGID, value: "1000"}
+        - {name: TZ, value: Australia/Sydney}
+        ports:
+        - {name: whisparr, containerPort: 6969, protocol: TCP}
+        volumeMounts:
+        - name: whisparr-config
+          mountPath: /config
+        - name: media
+          mountPath: /movies-private
+          subPath: movies-private
+        # Same shared download area every other arr uses, so imports are
+        # a server-side rename rather than a cross-filesystem copy.
+        - name: media
+          mountPath: /downloads
+          subPath: downloads
+        readinessProbe:
+          tcpSocket: {port: 6969}
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+          requests: {memory: "128Mi", cpu: "50m"}
+          limits: {memory: "768Mi", cpu: "1000m"}
       # Patches lazylibrarian's config.ini (DESTINATION_DIR, per-book
       # foldering off, and - 2026-07-23 - the SABnzbd download-client
       # section, reading arr-stack-wiring-config.yml the same way the
@@ -485,6 +529,8 @@ spec:
       # arr-stack pod at 0/8 Pending.
       - name: lazylibrarian-config
         persistentVolumeClaim: {claimName: lazylibrarian-config}
+      - name: whisparr-config
+        persistentVolumeClaim: {claimName: whisparr-config}
       - name: lazylibrarian-config-seed-script
         configMap:
           name: lazylibrarian-config-seed-script
