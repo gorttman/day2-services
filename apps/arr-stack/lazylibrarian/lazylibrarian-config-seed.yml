@@ -100,10 +100,22 @@ data:
     # USENET happened to already be correct. Ground truth is always
     # the specific pinned image, not whatever's on GitHub's default
     # branch right now.
+    # Every boolean-natured value below is "True"/"False", not "1"/"0" -
+    # found live 2026-08-27 (same day/incident as the Newznab_0.ENABLED
+    # fix documented on newznab_desired() below): LazyLibrarian's own
+    # save path always re-serializes a boolean as Python's str(bool),
+    # never as "1"/"0", regardless of what was originally written. A
+    # "1"/"0" comparison here can never reach a stable match once
+    # LazyLibrarian itself has saved the file even once - it looked
+    # fine only because this was checked right after a fresh write,
+    # before the app's own next save flipped it back and re-triggered
+    # patch_config() -> self-restart, repeatedly, across GENERAL,
+    # USENET and both API keys below, not just the one Newznab field
+    # that surfaced this first.
     BASE_DESIRED = {
         "GENERAL": {
             "EBOOK_DIR": IMPORT_DEST,
-            "DESTINATION_COPY": "0",  # move, not copy - books-pipeline removes the source itself after a verified import
+            "DESTINATION_COPY": "False",  # move, not copy - books-pipeline removes the source itself after a verified import
         },
         "POSTPROCESS": {
             "EBOOK_DEST_FOLDER": "",   # no per-book folder - flat into EBOOK_DIR
@@ -128,7 +140,7 @@ data:
         # until you actually trace the code path.
         "API": {
             "BOOK_API": "OpenLibrary",
-            "OL_API": "1",
+            "OL_API": "True",
         },
     }
 
@@ -153,7 +165,7 @@ data:
 
 
     def api_access_desired():
-        """Returns {"API": {"API_ENABLED": "1", "API_KEY": ...}} once
+        """Returns {"API": {"API_ENABLED": "True", "API_KEY": ...}} once
         the self-generated lazylibrarian_api_key secret exists, or {}
         before then. Turns on LazyLibrarian's own REST API (off by
         default) with a key that's ours to set - unlike GR_API_KEY
@@ -161,13 +173,14 @@ data:
         real config2.py keys (section [API]), and having the API on
         lets this whole stack be driven the same consistent way
         everywhere else - real HTTP calls (addAuthorID etc.), not
-        reaching into its sqlite database by hand."""
+        reaching into its sqlite database by hand. "True" not "1" -
+        see BASE_DESIRED's comment above."""
         api_key = load_secret("lazylibrarian_api_key")
         if not api_key:
             return {}
         return {
             "API": {
-                "API_ENABLED": "1",
+                "API_ENABLED": "True",
                 "API_KEY": api_key,
             },
         }
@@ -215,7 +228,7 @@ data:
                             "SAB_CAT": entry["category"],
                         },
                         "USENET": {
-                            "NZB_DOWNLOADER_SABNZBD": "1",
+                            "NZB_DOWNLOADER_SABNZBD": "True",  # "True" not "1" - see BASE_DESIRED's comment
                         },
                     }
         return {}
