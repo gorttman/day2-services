@@ -43,8 +43,11 @@ metadata:
 data:
   reconcile.py: |
     #!/usr/bin/env python3
+    import fcntl
     import json
     import os
+    import socket
+    import struct
     import time
     import urllib.error
     import urllib.parse
@@ -515,10 +518,53 @@ data:
             log("INFO", f"qbittorrent: category ensured: {cat['name']} -> {cat['savePath']}")
 
 
+    def get_interface_ipv4(ifname):
+        """Reads an interface's own IPv4 address via SIOCGIFADDR - no
+        `ip`/`ifconfig` binary needed (this image doesn't ship
+        iproute2), and no elevated capability either, since this is a
+        read-only ioctl on the calling process's own netns. Returns
+        None if the interface has no IPv4 address right now (e.g. the
+        VPN tunnel is mid-reconnect)."""
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            return socket.inet_ntoa(fcntl.ioctl(
+                s.fileno(),
+                0x8915,  # SIOCGIFADDR
+                struct.pack("256s", ifname[:15].encode()),
+            )[20:24])
+        except OSError:
+            return None
+        finally:
+            s.close()
+
+
     def reconcile_qbittorrent_preferences(desired):
-        prefs = desired.get("qbittorrent", {}).get("preferences", {})
-        if not prefs:
-            return
+        prefs = dict(desired.get("qbittorrent", {}).get("preferences", {}))
+        # qBittorrent auto-detects its outbound interface from the main
+        # routing table's default route, which is eth0 in this pod -
+        # gluetun's actual default-via-tun0 behaviour is policy routing
+        # (ip rule, fwmark-based), invisible to that naive detection.
+        # Found live 2026-08-27 via strace on qbittorrent-nox itself:
+        # it was calling setsockopt(SO_BINDTODEVICE, "eth0"), and every
+        # outbound UDP send to a real external IP then failed
+        # synchronously with EPERM - gluetun's own firewall never
+        # admits arbitrary eth0->internet traffic (only the specific
+        # VPN endpoint IP:port and cluster-internal subnets), so any
+        # socket pinned to eth0 can never reach a real tracker or DHT
+        # peer. Confirmed live: zero bytes had ever been
+        # up/downloaded by qBittorrent in this deployment's entire
+        # history, on every provider/server/port tried, until this fix
+        # landed. Explicitly pointing qBittorrent at tun0 - both the
+        # interface name AND its current address, since setting the
+        # name alone left qBittorrent unable to bind at all
+        # (connection_status: disconnected, no listen socket even
+        # attempted) - makes it bind correctly instead. The address is
+        # read fresh every pass, not hardcoded, because it changes
+        # whenever vpn-healer rotates the PIA peer to a new server.
+        tun0_ip = get_interface_ipv4("tun0")
+        if tun0_ip:
+            prefs["current_network_interface"] = "tun0"
+            prefs["current_interface_address"] = tun0_ip
         base = "http://localhost:8090/api/v2"
         try:
             current = http_json("GET", f"{base}/app/preferences") or {}
