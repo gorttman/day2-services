@@ -24,4 +24,18 @@ resources:
   - lazylibrarian
   - whisparr
   - wiring
-  - vpn-healer
+  # vpn-healer REMOVED 2026-08-27 - deliberate, not a mistake. Switched
+  # from PIA (custom-provider WireGuard, needed vpn-healer's automated
+  # /addKey peer re-registration because PIA doesn't publish static
+  # WireGuard configs) to AirVPN (natively-supported by gluetun, static
+  # device credentials from AirVPN's own Config Generator - see
+  # gluetun/gluetun-config.yml). vpn-healer's staleness check reads
+  # gluetun-config's WIREGUARD_ENDPOINT_IP, which no longer exists on
+  # this provider - left running, it would read that as "stale" and
+  # re-register a fresh PIA peer, silently reverting VPN_SERVICE_PROVIDER
+  # back to "custom" and undoing this switch every ~15 minutes. The
+  # .yml files themselves are untouched (still in vpn-healer/), same
+  # as the bazarr/jdownloader2 precedent above - re-enabling means
+  # resuming PIA peer rotation, not something that should happen by
+  # omission.
+  # - vpn-healer

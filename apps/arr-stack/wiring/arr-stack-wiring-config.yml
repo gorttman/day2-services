@@ -291,7 +291,18 @@ data:
       # this is what "downloads have stalled" actually was. Not
       # unlimited: with ~2,000 titles still to come, letting every one
       # try to run simultaneously would be its own problem.
+      # Pinned to AirVPN's forwarded port (see gluetun-config.yml's
+      # FIREWALL_VPN_INPUT_PORTS, reserved in AirVPN's Client Area Ports
+      # section, 2026-08-27) so qBittorrent is actually reachable for
+      # inbound peer/DHT connections through the tunnel - random_port
+      # must be off or qBittorrent picks its own port every restart,
+      # which the VPN-side firewall isn't admitting. upnp off too:
+      # UPnP can't reach past the VPN tunnel to the router anyway, and
+      # leaving it on just means qBittorrent wastes time trying.
       preferences:
+        listen_port: 30449
+        random_port: false
+        upnp: false
         max_active_downloads: 10
         max_active_torrents: 15
         max_active_uploads: 5
