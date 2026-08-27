@@ -1,44 +1,36 @@
-# AirVPN via native WireGuard support - switched from PIA 2026-08-27.
-# PIA's custom-provider WireGuard peer gave basic connectivity but
-# rejected outbound UDP for BitTorrent/DHT signalling specifically
-# (UDP-transport tracker announces got status=4 "Operation not
-# permitted" while HTTP-transport trackers on the same torrents failed
-# with ordinary DNS/timeout errors - the Linux errno signature of an
-# upstream ICMP "administratively prohibited" REJECT, not reproducible
-# as a fault in our own infrastructure). AirVPN is one of gluetun's
-# natively-supported WireGuard providers (no custom-provider workaround
-# needed, unlike PIA) and has a strong community reputation for
-# P2P/BitTorrent use specifically. Full investigation history preserved
-# in git log on this file from before the switch.
+# Non-secret half of the PIA WireGuard peer registration - split out of
+# gluetun-vpn (see gluetun-sealed-secret.yml) 2026-08-07 so the
+# vpn-healer CronJob's automated peer rotations show up as plain,
+# readable git diffs instead of an opaque re-encrypted blob every time.
 #
-# WIREGUARD_PRIVATE_KEY/WIREGUARD_PRESHARED_KEY live in the Sealed
-# Secret (gluetun-sealed-secret.yml) - both are genuine secrets.
-# WIREGUARD_ADDRESSES is the tunnel IP AirVPN assigned this device;
-# meaningless without the private key, so it's fine here in plain text
-# (same non-secret/secret split the old PIA config used).
+# None of these fields are actually secret:
+#   WIREGUARD_ENDPOINT_IP/_PORT - come straight out of PIA's own public
+#     server list (serverlist.piaservers.net/vpninfo/servers/v6);
+#     anyone can fetch the same list.
+#   WIREGUARD_PUBLIC_KEY - this is the PIA SERVER's public key, not
+#     ours; public keys are meant to be shared by definition.
+#   WIREGUARD_ADDRESSES - the tunnel IP PIA assigned us; meaningless
+#     without the private key, which stays in gluetun-vpn (Sealed
+#     Secret).
 #
-# Generated via AirVPN's Client Area Config Generator: Advanced mode
-# OFF, single generic WireGuard entry - the key pair is region/
-# server-agnostic (works against any AirVPN relay); gluetun's own
-# server list plus SERVER_COUNTRIES picks the actual endpoint at
-# connect time, not anything baked into the generated file. To rotate/
-# regenerate: download a fresh config from the Config Generator, then
-# run seal-airvpn-credentials.sh with its path.
+# Kept in a plain directory-mount ConfigMap (not subPath - subPath
+# ConfigMaps don't hot-reload on this cluster, same gotcha as the
+# Pi-hole DNS ConfigMap), consumed via gluetun's `envFrom` alongside
+# the trimmed gluetun-vpn Secret.
 #
-# SERVER_COUNTRIES intentionally left unset for now - AirVPN has no
-# Australia presence (confirmed against gluetun's own docs, 2026-08-27),
-# so this needs live testing to find the fastest/most reliable region
-# before pinning one down.
-#
-# FIREWALL_VPN_INPUT_PORTS: the forwarded port reserved in AirVPN's
-# Client Area Ports section (30449, 2026-08-27) - this is the
-# tunnel-side admit list (distinct from FIREWALL_INPUT_PORTS on the
-# gluetun container itself, which is the LAN-side list admitting the
-# arr UIs). qBittorrent's own listen_port is pinned to match via
-# wiring.yml's qbittorrent.preferences - see reconcile_qbittorrent_preferences.
-# One port is enough: qBittorrent is the only app in this pod doing
-# inbound P2P: SABnzbd/Usenet is client-initiated only, and the arr web
-# UIs go through FIREWALL_INPUT_PORTS, not this.
+# WIREGUARD_PERSISTENT_KEEPALIVE_INTERVAL: found set to 0 (disabled)
+# 2026-08-09, very likely the REAL root cause of the "peer keeps going
+# stale every ~15min" pattern vpn-healer had been papering over since
+# it was built - without a keepalive, the tunnel sends nothing during
+# idle moments, and this network's router (or any NAT in the path)
+# silently drops the UDP connection-tracking entry after some timeout,
+# breaking the tunnel regardless of which PIA server it points at -
+# indistinguishable from "server went bad" to gluetun's own
+# healthcheck, and indistinguishable to vpn-healer's own detection,
+# which is exactly why rotating to a "fresh" server never durably
+# fixed anything: the problem was never the server. 25s is WireGuard's
+# own standard recommendation for exactly this NAT-traversal case -
+# comfortably shorter than virtually any router's UDP timeout.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -48,9 +40,10 @@ metadata:
     app: arr-stack
     argocd.argoproj.io/managed-by: argocd
 data:
-  VPN_SERVICE_PROVIDER: "airvpn"
+  VPN_SERVICE_PROVIDER: "custom"
   VPN_TYPE: "wireguard"
-  WIREGUARD_ADDRESSES: "10.184.42.16/32,fd7d:76ee:e68f:a993:e332:411e:62d6:74c9/128"
-  WIREGUARD_MTU: "1320"
+  WIREGUARD_ENDPOINT_IP: "220.158.199.175"
+  WIREGUARD_ENDPOINT_PORT: "1337"
+  WIREGUARD_PUBLIC_KEY: "5i4THqQ0a0n9F7zTdO1AXllr8nd428m+vZnpUC2RujY="
+  WIREGUARD_ADDRESSES: "10.149.4.92/32"
   WIREGUARD_PERSISTENT_KEEPALIVE_INTERVAL: "25s"
-  FIREWALL_VPN_INPUT_PORTS: "30449"
