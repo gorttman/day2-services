@@ -26,6 +26,14 @@ data:
       categories:
         - name: books
           dir: /books-import
+        # Whisparr's category - empty dir matches the tv/movies
+        # convention (confirmed live 2026-08-27: SABnzbd's own
+        # get_config shows tv/movies both have an empty dir, meaning
+        # "use the default per-category subfolder"; only books
+        # overrides it, for the books-pipeline staging step Whisparr
+        # has no equivalent of).
+        - name: adult
+          dir: ""
 
       # Frugal Usenet account (2026-07-23) - username/password sealed
       # and ready (frugal_username/frugal_password in
@@ -56,6 +64,8 @@ data:
             category: movies
           - app: lazylibrarian
             category: books
+          - app: whisparr
+            category: adult
 
       # 2026-08-25: torrent protocol coverage - qBittorrent joins the
       # shared pod, same as SABnzbd. No credentials here: WebUI\
@@ -71,6 +81,8 @@ data:
             category: tv
           - app: radarr
             category: movies
+          - app: whisparr
+            category: adult
 
     # 2026-08-05: matches the tv/movies subPath split on the shared
     # /media NFS export (see arr-stack-deployment.yml) - created once
@@ -201,6 +213,13 @@ data:
               score: -1000
           minFormatScore: 0
 
+    # /movies-private is Whisparr's own isolated library mount (see
+    # arr-stack-deployment.yml's whisparr container comment) - deliberately
+    # separate from the /movies and /movies-bulk paths above.
+    whisparr:
+      rootFolders:
+        - /movies-private
+
     prowlarr:
       # Empty on purpose - which indexer(s) to use is a real choice
       # (cost, retention, reliability), not something to pick a default
@@ -259,6 +278,8 @@ data:
         - name: tv
           savePath: /downloads
         - name: movies
+          savePath: /downloads
+        - name: adult
           savePath: /downloads
 
       # qBittorrent's own defaults (max_active_downloads: 3,

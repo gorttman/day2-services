@@ -61,16 +61,20 @@ data:
     # enough. Comfortably above FlareSolverr's own 60s solve budget.
     INDEXER_WRITE_TIMEOUT = 120
 
-    APP_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696}
+    APP_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696, "whisparr": 6969}
     # Sonarr/Radarr name their SABnzbd category field differently -
     # confirmed live via each app's own /downloadclient/schema, not
-    # guessed (Sonarr: tvCategory, Radarr: movieCategory).
-    CATEGORY_FIELD = {"sonarr": "tvCategory", "radarr": "movieCategory"}
+    # guessed (Sonarr: tvCategory, Radarr: movieCategory). Whisparr
+    # (v2) uses tvCategory too - confirmed live 2026-08-27 - because
+    # Whisparr v2 is built on Sonarr's codebase, not Radarr's, despite
+    # being a movie/scene app.
+    CATEGORY_FIELD = {"sonarr": "tvCategory", "radarr": "movieCategory", "whisparr": "tvCategory"}
 
     CONFIG_XML_PATHS = {
         "sonarr": "/app-config/sonarr/config.xml",
         "radarr": "/app-config/radarr/config.xml",
         "prowlarr": "/app-config/prowlarr/config.xml",
+        "whisparr": "/app-config/whisparr/config.xml",
     }
     SABNZBD_INI_PATH = "/app-config/sabnzbd/sabnzbd.ini"
 
@@ -188,7 +192,7 @@ data:
     # ---------------------------------------------------------------------
 
     def reconcile_rootfolders(desired, apikeys):
-        for app in ("sonarr", "radarr"):
+        for app in ("sonarr", "radarr", "whisparr"):
             apikey = apikeys.get(app)
             if not apikey:
                 continue
@@ -651,8 +655,8 @@ data:
     # one configured and working - Prowlarr never pushes anything out
     # on its own without an Application link. implementationName here
     # is confirmed against /api/v1/applications/schema (also lists
-    # LazyLibrarian, Lidarr, Readarr, etc., not just Sonarr/Radarr, in
-    # case more get wired the same way later).
+    # LazyLibrarian, Lidarr, Readarr, Whisparr, etc., not just
+    # Sonarr/Radarr, in case more get wired the same way later).
     # ---------------------------------------------------------------------
 
     def reconcile_prowlarr_apps(prowlarr_apikey, apikeys):
@@ -660,7 +664,7 @@ data:
         existing = http_json("GET", f"{base}/applications?apikey={prowlarr_apikey}") or []
         schema_list = http_json("GET", f"{base}/applications/schema?apikey={prowlarr_apikey}")
 
-        for app in ("sonarr", "radarr"):
+        for app in ("sonarr", "radarr", "whisparr"):
             if not apikeys.get(app):
                 continue
             schema = next((e for e in schema_list if e["implementation"].lower() == app), None)
