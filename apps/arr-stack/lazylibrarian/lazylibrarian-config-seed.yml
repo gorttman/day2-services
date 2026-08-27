@@ -255,7 +255,28 @@ data:
         config2.py's _load_array_section() uppercases the array-name
         prefix before matching, so case doesn't matter for this one
         specifically, matching what BASE_DESIRED's comment above found
-        the hard way for the non-array sections."""
+        the hard way for the non-array sections.
+
+        ENABLED compares against "True", not "1" - found live
+        2026-08-27: LazyLibrarian's own save path re-serializes this
+        field as a Python bool string, not the "1"/"0" every other
+        section here uses, so comparing against "1" saw a permanent
+        mismatch on every single check. NAME and BOOKCAT were dropped
+        entirely for the same reason discovered the same day: this
+        pinned image's own NEWZNAB array schema doesn't persist those
+        two keys at all - they'd get written once, then silently
+        vanish the next time LazyLibrarian saved its own config,
+        making "no change" unreachable. Both mismatches together meant
+        every pod restart (for ANY reason, not just LazyLibrarian's
+        own change) re-triggered a "config needs patching" ->
+        self-restart the whole pod -> LazyLibrarian re-saves and
+        re-drifts -> detected again next check cycle, a real
+        production loop that took the whole shared pod down
+        repeatedly until traced here. If BOOKCAT-equivalent category
+        filtering is ever wanted, it needs verifying against this
+        image's own configdefs.py first, same as every other setting
+        in this file - not re-added on the strength of the field
+        existing in DESIRED once before."""
         if not os.path.exists(WIRING_CONFIG_PATH):
             return {}
         with open(WIRING_CONFIG_PATH) as f:
@@ -287,14 +308,12 @@ data:
 
         return {
             "Newznab_0": {
-                "NAME": "Newznab",
                 "DISPNAME": idx_cfg["name"],
-                "ENABLED": "1",
+                "ENABLED": "True",
                 "HOST": base_url,
                 "API": indexer_apikey,
                 "GENERALSEARCH": "search",
                 "BOOKSEARCH": "book",
-                "BOOKCAT": "7000,7020",
             },
         }
 
