@@ -336,11 +336,11 @@ data:
     
         return f"""<!doctype html>
     <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Backup Status &mdash; valinor-m</title>
+    <title>Backup Status &mdash; qnap</title>
     <style>{CSS}</style></head>
     <body><div class="page">
       <header>
-        <span class="eyebrow">valinor-m / k8smaster &mdash; disaster recovery</span>
+        <span class="eyebrow">qnap / k8smaster &mdash; disaster recovery</span>
         <h1>Backup Status</h1>
         <div class="subline">Regenerated <span class="ts">{now}</span> &mdash; generated fresh on every request, not on a schedule</div>
         <div class="countdown">Next backup run (<strong>{next_run_name}</strong>) in <span class="val" id="countdown-val" data-target="{next_run_iso}">&hellip;</span></div>
