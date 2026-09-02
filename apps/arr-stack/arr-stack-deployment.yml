@@ -244,7 +244,11 @@ spec:
           periodSeconds: 15
         resources:
           requests: {memory: "128Mi", cpu: "50m"}
-          limits: {memory: "512Mi", cpu: "1000m"}
+          # 512Mi wasn't enough headroom for a burst of concurrent
+          # indexer queries (found live 2026-08-27: OOMKilled,
+          # exitCode 137, repeatedly, while Radarr's MissingMoviesSearch
+          # fired a large batch of requests at once against NZBgeek).
+          limits: {memory: "1024Mi", cpu: "1000m"}
       - name: sabnzbd
         image: lscr.io/linuxserver/sabnzbd:5.0.4
         imagePullPolicy: IfNotPresent

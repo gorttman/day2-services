@@ -100,7 +100,11 @@ spec:
       name: postgres-data
     spec:
       accessModes: ["ReadWriteOnce"]
-      storageClassName: nfs-client
+      # Longhorn since 2026-09-02. volumeClaimTemplates are IMMUTABLE, so
+      # changing this needs the StatefulSet deleted with --cascade=orphan
+      # and re-applied; it then adopts the existing postgres-data-postgres-0
+      # claim rather than creating a new one.
+      storageClassName: longhorn
       resources:
         requests:
           storage: 5Gi
