@@ -25,10 +25,19 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: local-path
+  # Longhorn since 2026-09-03. local-path is node-local, which is what hard-pinned
+  # this workload to k8smaster; Longhorn replicates the volume across both
+  # nodes so the pod can float. Not NFS - a Longhorn volume is attached as a
+  # local block device, so neither the SQLite-on-NFS corruption nor the hard
+  # -mount hang that drove the earlier retreat to local-path applies.
+  storageClassName: longhorn
   resources:
     requests:
-      storage: 2Gi
+      # 8Gi, not 2Gi, since 2026-09-03: the real config directory is 3.0G
+      # (37,031 files - metadata, images and the transcode DB). local-path
+      # never enforced the 2Gi request, Longhorn does, and the first restore
+      # silently truncated because busybox cp discarded its own ENOSPC.
+      storage: 8Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -42,7 +51,12 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: local-path
+  # Longhorn since 2026-09-03. local-path is node-local, which is what hard-pinned
+  # this workload to k8smaster; Longhorn replicates the volume across both
+  # nodes so the pod can float. Not NFS - a Longhorn volume is attached as a
+  # local block device, so neither the SQLite-on-NFS corruption nor the hard
+  # -mount hang that drove the earlier retreat to local-path applies.
+  storageClassName: longhorn
   resources:
     requests:
       storage: 5Gi

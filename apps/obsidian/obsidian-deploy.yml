@@ -27,8 +27,9 @@ spec:
       # local-path, which is node-local. pinode-01's k3s data dir is RAM
       # tmpfs (loses local-path PVCs on reboot) - k8smaster has real disk.
       # Deliberate deviation from lane: applications for that reason.
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Unpinned 2026-09-03: obsidian-headless-state is on Longhorn and
+      # obsidian-vault is the qnap-static NFS PV, so nothing is node-local
+      # any more. Soft workload-affinity comes from affinity-patch.yml.
       containers:
       - name: obsidian
         image: ghcr.io/gorttman/obsidian:latest

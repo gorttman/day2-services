@@ -42,8 +42,9 @@ spec:
       # move to NFS-backed storage (qnap-static/nfs-client, matching
       # immich/paperless) - that's the actual "storage swap" needed,
       # still open (same as arr-stack's identical situation).
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Unpinned 2026-09-03: jellyfin-config and jellyfin-cache moved to Longhorn,
+      # so the volumes follow the pod instead of living on one node. Soft
+      # workload-affinity now comes from affinity-patch.yml.
       enableServiceLinks: false  # avoid injected <SVC>_PORT env vars (bit paperless)
       containers:
       - name: jellyfin

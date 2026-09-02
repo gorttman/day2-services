@@ -50,8 +50,12 @@ spec:
       # for the network. Back to local-path + hard pin to k8smaster
       # (the only node with real, non-tmpfs local disk - see jellyfin/
       # arr-stack's identical reasoning), same as before 2026-08-17.
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # Unpinned 2026-09-03: pihole-data-local moved to Longhorn. The 2026-08-25
+      # retreat to local-path was specifically about QNAP NFS - a zeroed
+      # gravity.db and a hard mount that hung all DNS when the QNAP stalled.
+      # Longhorn is replicated block storage attached locally, not a network
+      # filesystem, so SQLite behaves and there is no hard-mount to hang on.
+      # Soft workload-affinity now comes from affinity-patch.yml.
       dnsPolicy: None
       dnsConfig:
         nameservers:

@@ -7,3 +7,9 @@ resources:
   - jellyfin-deployment.yml
   - jellyfin-service.yml
   - jellyfin-ingress.yml
+
+patches:
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: jellyfin

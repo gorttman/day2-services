@@ -7,3 +7,9 @@ resources:
   - obsidian-state-pvc.yml
   - obsidian-sealed-secret.yaml
   - obsidian-deploy.yml
+
+patches:
+  - path: affinity-patch.yml
+    target:
+      kind: Deployment
+      name: obsidian

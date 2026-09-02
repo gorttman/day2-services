@@ -1,0 +1,27 @@
+# Workload-affinity soft node placement for obsidian, added 2026-09-03 when its
+# last node-local volume moved to Longhorn.
+# Deliberately preferredDuringScheduling (soft), never
+# requiredDuringScheduling: if the preferred node is down the pod must
+# still schedule on whatever node is available.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unused-set-by-kustomize-target
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/obsidian
+                    operator: In
+                    values: ["primary"]
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/obsidian
+                    operator: In
+                    values: ["secondary"]
