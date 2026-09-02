@@ -1,0 +1,47 @@
+# Off-LAN access for paperless, added 2026-09-03.
+#
+# Two things are needed to expose a hostname, and having only one of them is
+# why paperless "didn't work either way": adding it to cloudflare-tf's
+# tunneled_hostnames is not enough on its own. The tunnel's default origin is
+# the shared ingress-nginx controller, and paperless only had a `traefik`
+# Ingress, so a request arriving over the tunnel would reach nginx and find no
+# rule for this host. Every app that works off-LAN - argocd, vscode,
+# homeassistant, novnc, the arr apps - carries this second nginx Ingress
+# alongside its traefik one for exactly that reason. (immich is the exception:
+# it skips ingress entirely with a direct Service origin.)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: paperless-public
+  namespace: paperless
+  labels:
+    app: paperless
+    app.kubernetes.io/name: paperless
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # cloudflared forwards to this origin as plain HTTP, not HTTPS - without
+    # this, nginx's default ssl-redirect would 308 that request to https and
+    # loop.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Paperless accepts scanned-document uploads; nginx's 1m default body
+    # limit would reject anything larger with a 413 that looks like the app
+    # failing rather than the proxy refusing.
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - paperless.i3sec.com.au
+    secretName: paperless-public-tls
+  rules:
+  - host: paperless.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: paperless
+            port:
+              number: 8000

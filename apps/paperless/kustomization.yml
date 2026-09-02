@@ -12,6 +12,7 @@ resources:
   - paperless-deployment.yml
   - paperless-service.yml
   - paperless-ingress.yml
+  - paperless-public-ingress.yml
   - paperless-config-seed-cm.yml
   - paperless-config-seed-job.yml
 
