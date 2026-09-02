@@ -1,0 +1,270 @@
+# Second Pi-hole, added 2026-09-03. Pi-hole was the last true single point of
+# failure that could be removed without a second control plane: one pod, one
+# VIP, and every client in the house pointed at it with no fallback, so any
+# restart - a rollout, a probe flap, a node drain - was a DNS outage for
+# everyone. Two instances, two VIPs, and clients that list both means one can
+# go away without anyone noticing.
+#
+# This is a deliberate copy of pihole-deployment.yml rather than a kustomize
+# replica: the two differ only in name, PVC and FTLCONF_LOCAL_IPV4, but they
+# must be able to drift apart (different node, different rollout) without one
+# edit silently changing both. Everything that MUST stay identical - the
+# split-horizon records, upstream resolvers, DNSSEC, timezone - comes from the
+# shared pihole-config and pihole-custom-dns ConfigMaps, so there is exactly
+# one place to change a record and both instances pick it up via Reloader.
+#
+# Required (not preferred) pod anti-affinity: two resolvers on one node is
+# not redundancy, it is two copies of the same outage.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pihole-b
+  namespace: pihole
+  labels:
+    app: pihole-b
+    app.kubernetes.io/name: pihole
+    app.kubernetes.io/component: dns
+    app.kubernetes.io/part-of: day2-services
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    # Reloader (day0-bootstrap/apps/reloader) watches every ConfigMap/
+    # Secret this Deployment references - including pihole-custom-dns,
+    # which lives in the completely separate dns-conf repo/Application -
+    # and rolls this pod automatically on any content change. Fixes the
+    # 2026-08-04 incident where a DNS entry was added and pushed but
+    # FTL never noticed until a manual pod restart, because it loads its
+    # custom list into memory once at startup and never re-reads the
+    # file on its own (unlike CoreDNS's `hosts` plugin, which re-reads
+    # live and needed no such fix).
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pihole-b
+  template:
+    metadata:
+      labels:
+        app: pihole-b
+        app.kubernetes.io/name: pihole
+        app.kubernetes.io/component: dns
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      # Unpinned 2026-09-03: pihole-data-local moved to Longhorn. The 2026-08-25
+      # retreat to local-path was specifically about QNAP NFS - a zeroed
+      # gravity.db and a hard mount that hung all DNS when the QNAP stalled.
+      # Longhorn is replicated block storage attached locally, not a network
+      # filesystem, so SQLite behaves and there is no hard-mount to hang on.
+      # Soft workload-affinity now comes from affinity-patch.yml.
+      affinity:
+        # pihole-a follows workload-affinity/pihole to pinode-01; this one is
+        # anchored to the infrastructure lane, which is k8smaster. Anchoring
+        # both explicitly matters more than it looks: with only the
+        # anti-affinity below, pihole-b's node would be decided by wherever
+        # pihole-a happened to land, and the VIP-to-node pairing described in
+        # pihole-b-service.yml would silently invert - each resolver's pod on
+        # one node and its /32 on the other, so losing either node would take
+        # out both. Soft, so a single-node cluster still schedules.
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: lane
+                    operator: In
+                    values: ["infrastructure"]
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: pihole
+              topologyKey: kubernetes.io/hostname
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+        - 1.1.1.1
+        - 1.0.0.1
+      initContainers:
+      - name: fix-ftl-conf
+        image: busybox:1.36
+        command:
+        - /bin/sh
+        - -c
+        - |
+          grep -v '^GRAVITYDB=' /etc/pihole/pihole-FTL.conf > /tmp/ftl.conf || true
+          cat /tmp/ftl.conf > /etc/pihole/pihole-FTL.conf
+          # /db is a fresh 1777 tmpfs on every pod start; fs.protected_regular
+          # then blocks root from writing pihole-owned files there, which
+          # breaks `pihole -g`. Normalize ownership/mode before FTL starts.
+          chown 999:1000 /db
+          chmod 0775 /db
+          # gravity.db lives on tmpfs (SQLite unsafe on NFS) and is lost on
+          # restart; restore the last backup or blocking silently becomes a no-op
+          if [ -s /etc/pihole/gravity-backup.db ]; then
+            cp /etc/pihole/gravity-backup.db /db/gravity.db
+            chown 999:1000 /db/gravity.db
+          fi
+        volumeMounts:
+        - name: pihole-data
+          mountPath: /etc/pihole
+          subPath: pihole
+        - name: pihole-db
+          mountPath: /db
+      containers:
+      - name: pihole
+        image: pihole/pihole:2024.07.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+        ports:
+        - name: dns-tcp
+          containerPort: 53
+          protocol: TCP
+        - name: dns-udp
+          containerPort: 53
+          protocol: UDP
+        - name: dhcp
+          containerPort: 67
+          protocol: UDP
+        env:
+        - name: TZ
+          valueFrom:
+            configMapKeyRef:
+              name: pihole-config
+              key: TZ
+        - name: WEBPASSWORD
+          valueFrom:
+            configMapKeyRef:
+              name: pihole-config
+              key: WEBPASSWORD
+        - name: PIHOLE_DNS_
+          valueFrom:
+            configMapKeyRef:
+              name: pihole-config
+              key: PIHOLE_DNS_
+        - name: DNSSEC
+          valueFrom:
+            configMapKeyRef:
+              name: pihole-config
+              key: DNSSEC
+        - name: DNSMASQ_LISTENING
+          valueFrom:
+            configMapKeyRef:
+              name: pihole-config
+              key: DNSMASQ_LISTENING
+        # The one value that cannot come from the shared ConfigMap: FTL needs
+        # to know its own VIP, and this instance answers on .246.
+        - name: FTLCONF_LOCAL_IPV4
+          value: "192.168.2.246"
+        - name: VIRTUAL_HOST
+          value: pihole.i3sec.com.au
+        - name: SKIPGRAVITYONBOOT
+          value: "true"
+        - name: FTLCONF_REPLY_WHEN_BUSY
+          value: REFUSE
+        - name: FTLCONF_GRAVITYDB
+          value: /db/gravity.db
+        - name: FTLCONF_DBFILE
+          value: /db/pihole-FTL.db
+        volumeMounts:
+        - name: pihole-data
+          mountPath: /etc/pihole
+          subPath: pihole
+        - name: pihole-data
+          mountPath: /etc/dnsmasq.d
+          subPath: dnsmasq.d
+        - mountPath: /etc/dnsmasq.d/02-i3sec-custom-dns.conf
+          name: pihole-custom-dns
+          subPath: 02-i3sec-custom-dns.conf
+        - name: pihole-db
+          mountPath: /db
+        # Previous 100m/500m limit was measurably throttling FTL even
+        # under light load (17 throttled periods / 1.56s throttled_usec
+        # in the first ~16 minutes after a restart, per
+        # /sys/fs/cgroup/cpu.stat) - every throttle event is DNS latency
+        # a client feels. pinode-01 has 4 full cores and nothing else
+        # competes for them at this pod's priority, so give FTL real
+        # headroom instead of rationing a resolver that's on the
+        # critical path for every request on the network.
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 250m
+          limits:
+            memory: 512Mi
+            cpu: 2000m
+        # Was httpGet /admin/ (the PHP-rendered web UI) until 2026-08-25 -
+        # real incident: 9+ restarts inside an hour, every one a probe
+        # timeout ("context deadline exceeded") against the admin page,
+        # while actual DNS resolution tested 100% clean via direct dig
+        # queries through the exact same window. Every one of those
+        # restarts is a real (if brief) DNS outage for the whole house -
+        # a client that happens to query during the ~10s FTL restart
+        # window falls through to its secondary resolver (the UDM),
+        # which has no split-horizon knowledge and hands back the public
+        # record instead. `pihole status` is the project's own official
+        # health check - it checks FTL's actual listening sockets
+        # directly, completely decoupled from the web UI's performance.
+        # Whether the admin page itself is slow is a separate, lower-
+        # stakes question; it should never be able to take down DNS.
+        livenessProbe:
+          exec:
+            command: ["pihole", "status"]
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command: ["pihole", "status"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      - name: gravity-backup
+        image: busybox:1.36
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Daily copy of the tmpfs gravity.db to NFS so the init container can
+          # restore it after a restart. Plain file copy is NFS-safe (it is live
+          # SQLite writes that are not). Size guard avoids clobbering a good
+          # backup with a fresh empty db.
+          while true; do
+            sleep 86400
+            if [ "$(stat -c %s /db/gravity.db 2>/dev/null || echo 0)" -gt 1000000 ]; then
+              cp /db/gravity.db /etc/pihole/gravity-backup.db.tmp &&
+              mv /etc/pihole/gravity-backup.db.tmp /etc/pihole/gravity-backup.db
+            fi
+          done
+        volumeMounts:
+        - name: pihole-data
+          mountPath: /etc/pihole
+          subPath: pihole
+        - name: pihole-db
+          mountPath: /db
+        resources:
+          requests:
+            memory: 8Mi
+            cpu: 5m
+          limits:
+            memory: 32Mi
+            cpu: 50m
+      volumes:
+      - name: pihole-data
+        persistentVolumeClaim:
+          claimName: pihole-b-data
+      - name: pihole-custom-dns
+        configMap:
+          name: pihole-custom-dns
+      - name: pihole-db
+        emptyDir:
+          medium: Memory

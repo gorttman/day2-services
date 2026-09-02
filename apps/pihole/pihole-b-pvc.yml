@@ -1,0 +1,43 @@
+# Own claim, seeded from pihole-a's /etc/pihole on 2026-09-03 so both instances
+# start from the same adlists, whitelists and gravity backup. RWO and
+# per-instance on purpose: /db is a tmpfs and the live SQLite never lands
+# here, so there is nothing to share and nothing to contend over.
+# PLACEHOLDER STORAGE: local-path (k3s default) is node-local and
+# non-durable - data lives on whichever node the pod first schedules
+# to, hence the hard nodeSelector to k8smaster in pihole-deployment.yml
+# (the only node with real, non-tmpfs local disk - pinode-01's
+# local-path is a 4G RAM tmpfs, wiped on reboot).
+#
+# History: started on local-path, migrated to QNAP NFS 2026-08-10 as
+# part of a broader storage-hygiene sweep, repointed within QNAP
+# 2026-08-13. Moved back to local-path 2026-08-25 after that NFS
+# migration actually corrupted gravity.db (found zeroed out, restored
+# from the gravity-backup.db sidecar copy) and repeated QNAP
+# stalls/overloads were taking down cluster-wide DNS whenever the hard
+# NFS mount blocked. This app was never supposed to carry real
+# persistent state on shared storage in the first place - the intent
+# was config-in-git (pihole-config/pihole-custom-dns ConfigMaps) with
+# only Pi-hole's own generated runtime state (gravity.db, setupVars,
+# dhcp.leases) on a volume, and that volume needs to be resilient, not
+# shared/durable.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pihole-b-data
+  namespace: pihole
+  labels:
+    app: pihole-b
+    app.kubernetes.io/name: pihole
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # Longhorn since 2026-09-03. local-path is node-local, which is what hard-pinned
+  # this workload to k8smaster; Longhorn replicates the volume across both
+  # nodes so the pod can float. Not NFS - a Longhorn volume is attached as a
+  # local block device, so neither the SQLite-on-NFS corruption nor the hard
+  # -mount hang that drove the earlier retreat to local-path applies.
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi

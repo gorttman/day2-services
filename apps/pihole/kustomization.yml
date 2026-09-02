@@ -5,8 +5,11 @@ resources:
   - pihole-namespace.yml
   - pihole-configmap.yml
   - pihole-pvc.yml
+  - pihole-b-pvc.yml
   - pihole-deployment.yml
+  - pihole-b-deployment.yml
   - pihole-service.yml
+  - pihole-b-service.yml
   - pihole-ingress.yml
 
 patches:
