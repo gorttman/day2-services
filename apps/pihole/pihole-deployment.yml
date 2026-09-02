@@ -56,6 +56,28 @@ spec:
       # Longhorn is replicated block storage attached locally, not a network
       # filesystem, so SQLite behaves and there is no hard-mount to hang on.
       # Soft workload-affinity now comes from affinity-patch.yml.
+      affinity:
+        # Anchored to the infrastructure lane (k8smaster) so that this pod and
+        # the /32 for its own VIP, 192.168.2.245, live on the same node.
+        # Replaced the workload-affinity/pihole preference on 2026-09-03: with
+        # two Pi-holes the placement rule is no longer "prefer the applications
+        # node", it is "one resolver per lane, each with its own VIP", and the
+        # workload-affinity convention has no way to express the second half.
+        # Soft, so a single-node cluster still schedules.
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: lane
+                    operator: In
+                    values: ["infrastructure"]
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: pihole-b
+              topologyKey: kubernetes.io/hostname
       dnsPolicy: None
       dnsConfig:
         nameservers:

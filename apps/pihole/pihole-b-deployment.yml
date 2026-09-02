@@ -62,8 +62,9 @@ spec:
       # filesystem, so SQLite behaves and there is no hard-mount to hang on.
       # Soft workload-affinity now comes from affinity-patch.yml.
       affinity:
-        # pihole-a follows workload-affinity/pihole to pinode-01; this one is
-        # anchored to the infrastructure lane, which is k8smaster. Anchoring
+        # One resolver per lane: pihole-a sits in the infrastructure lane
+        # (k8smaster), this one in the applications lane (pinode-01), and each
+        # one's VIP is bound as a /32 on that same node. Anchoring
         # both explicitly matters more than it looks: with only the
         # anti-affinity below, pihole-b's node would be decided by wherever
         # pihole-a happened to land, and the VIP-to-node pairing described in
@@ -77,7 +78,7 @@ spec:
                 matchExpressions:
                   - key: lane
                     operator: In
-                    values: ["infrastructure"]
+                    values: ["applications"]
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
