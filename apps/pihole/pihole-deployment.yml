@@ -80,9 +80,11 @@ spec:
               topologyKey: kubernetes.io/hostname
       dnsPolicy: None
       dnsConfig:
+        # Matches PIHOLE_DNS_ (2026-09-03): the pod resolves through the same
+        # malware-blocking pair it forwards client queries to.
         nameservers:
-        - 1.1.1.1
-        - 1.0.0.1
+        - 1.1.1.2
+        - 1.0.0.2
       initContainers:
       - name: fix-ftl-conf
         image: busybox:1.36

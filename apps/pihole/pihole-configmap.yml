@@ -12,7 +12,24 @@ metadata:
 data:
   TZ: "America/New_York"
   WEBPASSWORD: "changeme123"
-  PIHOLE_DNS_: "1.1.1.1;1.0.0.1"
+  # 1.1.1.2/1.0.0.2 since 2026-09-03: Cloudflare's malware-blocking pair, not the
+  # plain 1.1.1.1/1.0.0.1. Replaced rather than appended on purpose - FTL
+  # spreads queries across every upstream it is given, so keeping the
+  # unfiltered pair alongside would have meant roughly half of all lookups
+  # skipping the filtering entirely, which is worse than not having it: it
+  # would look like it worked and fail intermittently.
+  PIHOLE_DNS_: "1.1.1.2;1.0.0.2"
+  #
+  # Changing this value does NOT change a running install, and that is easy
+  # to miss because the rollout succeeds and Pi-hole keeps working. FTL only
+  # consumes PIHOLE_DNS_ during first-time setup; after that the upstreams
+  # live in setupVars.conf and dnsmasq.d/01-pihole.conf on the PVC, which
+  # survive the pod. Both files had to be rewritten in place and
+  # `pihole restartdns` run on each instance on 2026-09-03. This key is
+  # therefore only authoritative for a Pi-hole starting on an empty claim -
+  # keep it correct so a rebuild is right, but do not trust it as a
+  # description of what is live. Check `grep ^server= dnsmasq.d/01-pihole.conf`
+  # inside the pod for that.
   # DNSSEC off: upstream 1.1.1.1/1.0.0.1 already validate, and dnsmasq's own
   # validation breaks on truncated UDP DNSKEY replies (returns empty NOERROR)
   DNSSEC: "false"
