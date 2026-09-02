@@ -21,4 +21,10 @@ spec:
   storageClassName: longhorn
   resources:
     requests:
-      storage: 2Gi
+      # 8Gi, not 2Gi. On local-path the size was never enforced - it was
+      # just a directory on the node - so this claim had grown to 2.3G
+      # against a 2Gi request. Longhorn is a real block device, so the
+      # migration copy hit ENOSPC and silently dropped 1912 files until
+      # the claim was recreated with headroom. Radarr's MediaCover art
+      # keeps growing, hence the margin.
+      storage: 8Gi
