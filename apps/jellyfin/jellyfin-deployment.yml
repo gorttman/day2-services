@@ -127,12 +127,23 @@ spec:
       # Watched status, resume positions, users, playlists and collections all
       # live in jellyfin.db under /config, which stays on Longhorn.
       #
-      # Why not Longhorn for this one: measured on this cluster, 500 x 4k
-      # synchronous writes took 2350ms on Longhorn versus 29ms on local NVMe -
-      # about 80x. Longhorn acknowledges a write only after both replicas
-      # confirm over the network, which is correct for real data and pure cost
-      # for a transcode scratchpad that ffmpeg writes to continuously during
-      # playback.
+      # Why not Longhorn for this one: Longhorn acknowledges a write only once
+      # both replicas confirm over the network. That is correct for real data
+      # and pure cost for a transcode scratchpad ffmpeg writes to continuously
+      # during playback.
+      #
+      # Measured, 500 x 4k synchronous writes, corrected figures:
+      #   host NVMe          ~654 ms
+      #   emptyDir in-pod    ~1040-1325 ms
+      #   Longhorn in-pod    ~2364-3871 ms
+      # So Longhorn is roughly 2-3x slower than local disk here.
+      #
+      # CORRECTION, same day: an earlier version of this comment claimed ~80x,
+      # from a baseline of 29ms. That baseline was written to /tmp, which is
+      # tmpfs on BOTH nodes (8G on k8smaster, 4G on pinode-01) - it measured
+      # RAM, not storage. Recorded because the mistake is easy to repeat: on
+      # these nodes /tmp is never a disk benchmark. The decision stands on the
+      # 2-3x figure and on not replicating disposable data at all.
       #
       # Why not local-path either: that binds the volume to one node and would
       # re-pin this workload, which is exactly what the Longhorn migration was
