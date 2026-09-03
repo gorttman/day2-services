@@ -291,10 +291,29 @@ data:
       # this is what "downloads have stalled" actually was. Not
       # unlimited: with ~2,000 titles still to come, letting every one
       # try to run simultaneously would be its own problem.
+      #
+      # Raising the caps in 2026-08-27 was necessary but not sufficient.
+      # Found live 2026-09-03: 4 stalledDL + 6 metaDL torrents were holding
+      # exactly all 10 active-download slots, with 25 more sitting in
+      # queuedDL behind them - permanently, because a torrent with no
+      # seeders never finishes and never yields its slot. Whisparr could
+      # search, grab and hand off correctly and the download would still
+      # never start, which is what "it never downloads anything" actually
+      # was for torrents.
+      #
+      # dont_count_slow_torrents is the fix: with it, qBittorrent stops
+      # counting torrents that are doing nothing towards the active limit
+      # and rotates them out, so a dead torrent can no longer block a
+      # healthy one. The two thresholds below were already at these values
+      # live but were inert while this stayed false - declared explicitly
+      # so the behaviour is legible rather than inherited.
       preferences:
         max_active_downloads: 10
         max_active_torrents: 15
         max_active_uploads: 5
+        dont_count_slow_torrents: true
+        slow_torrent_dl_rate_threshold: 2   # KiB/s
+        slow_torrent_inactive_timer: 60     # seconds
 
     lazylibrarian:
       # Format preference for what LazyLibrarian will search for/keep -
