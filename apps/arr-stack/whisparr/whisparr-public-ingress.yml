@@ -1,0 +1,48 @@
+# Public (Cloudflare-tunnel) ingress for Whisparr, added 2026-09-03.
+#
+# Every other arr-stack app got one of these on 2026-07-21 ("all seven
+# public by explicit choice" - see day1-foundation apps/cloudflare-tf
+# terraform/variables.tf). Whisparr was added on 2026-08-27, after that
+# pass, and was never given either half of the treatment: no nginx
+# ingress here, and no entry in the cloudflare-tf hostname map.
+#
+# The effect was that whisparr.i3sec.com.au resolved ONLY via Pi-hole,
+# to the LAN Traefik VIP. Public DNS returned no A record at all, so any
+# device not actually using Pi-hole for DNS - an iPad on iCloud Private
+# Relay, anything on cellular, anything on a VPN - simply could not
+# reach it, while every sibling app worked fine. That is the symptom
+# this fixes.
+#
+# Same shape as sonarr-public-ingress.yml deliberately: ssl-redirect off
+# because cloudflared forwards plain HTTP and nginx would otherwise 308
+# into a loop, and no auth-url - this cluster's norm is the Cloudflare
+# mTLS gate alone, and Whisparr has its own user accounts on top.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: whisparr-public
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: whisparr
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - whisparr.i3sec.com.au
+    secretName: whisparr-public-tls
+  rules:
+  - host: whisparr.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: whisparr
+            port:
+              number: 6969

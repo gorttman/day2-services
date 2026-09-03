@@ -5,3 +5,4 @@ resources:
   - whisparr-pvc.yml
   - whisparr-service.yml
   - whisparr-ingress.yml
+  - whisparr-public-ingress.yml
