@@ -120,9 +120,32 @@ spec:
       - name: config
         persistentVolumeClaim:
           claimName: jellyfin-config
+      # emptyDir, not a PVC, since 2026-09-03. /cache holds only re-derivable
+      # data - verified by inspection, not assumed: transcodes (HLS segments,
+      # deleted when playback ends), images + imagesbyname (artwork, re-fetched),
+      # omdb (cached OMDb API JSON), concat (ffmpeg lists). No database files.
+      # Watched status, resume positions, users, playlists and collections all
+      # live in jellyfin.db under /config, which stays on Longhorn.
+      #
+      # Why not Longhorn for this one: measured on this cluster, 500 x 4k
+      # synchronous writes took 2350ms on Longhorn versus 29ms on local NVMe -
+      # about 80x. Longhorn acknowledges a write only after both replicas
+      # confirm over the network, which is correct for real data and pure cost
+      # for a transcode scratchpad that ffmpeg writes to continuously during
+      # playback.
+      #
+      # Why not local-path either: that binds the volume to one node and would
+      # re-pin this workload, which is exactly what the Longhorn migration was
+      # meant to end. emptyDir is node-local AND follows the pod - it is simply
+      # recreated empty wherever it lands. Confirmed backed by /dev/nvme0n1p2
+      # (ext4) on pinode-01, not NFS; the older "emptyDir is NFS-backed" note
+      # predates these nodes having NVMe.
+      #
+      # Cost of a reschedule: artwork and OMDb lookups re-fetch on demand. No
+      # user-visible state is lost.
       - name: cache
-        persistentVolumeClaim:
-          claimName: jellyfin-cache
+        emptyDir:
+          sizeLimit: 10Gi
       # Raw NFS volume, not a PVC - same pattern books-pipeline/arr-stack
       # use for /books and /media. subPath above splits this one export
       # into movies/ and tv/ per mount.
