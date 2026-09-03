@@ -18,15 +18,14 @@ resources:
   # day1-foundation parent - permanently Progressing. Re-enable together
   # with those two PVs in day1-foundation/apps/qnap-storage.
   # - calibre-web/calibre-web-app.yml   # replaces kavita 2026-07-17 - see homelab-book chapter 002
-  # arr-stack re-enabled 2026-07-22: real PIA (OpenVPN) creds sealed
-  # over gluetun-vpn, replicas back to 1 in arr-stack-deployment.yml.
-  # Disabled 2026-07-17-2026-07-22 on a placeholder VPN secret
-  # (gluetun CrashLoopBackOff).
-  # arr-stack disabled 2026-09-03: sabnzbd was OOMKilled in a loop against its
-  # 1Gi limit (par2/python3 rss ~1010Mi, cgroup OOM in dmesg), leaving the
-  # pod permanently 9/10. Parked while the cluster is rebalanced; raise
-  # the sabnzbd limit before re-enabling.
-  # - arr-stack/arr-stack-app.yml
+  # arr-stack re-enabled 2026-09-03: sabnzbd's limit is now 2Gi, which was
+  # the stated precondition when it was parked earlier the same day (it
+  # OOMKilled in a loop against 1Gi, par2/python3 rss ~1010Mi, cgroup OOM
+  # in dmesg, leaving the shared pod permanently 9/10).
+  # Also disabled 2026-07-17-2026-07-22 on a placeholder VPN secret
+  # (gluetun CrashLoopBackOff); real PIA creds sealed over gluetun-vpn
+  # 2026-07-22.
+  - arr-stack/arr-stack-app.yml
   - homeassistant/homeassistant-app.yml
   - backup-dashboard/backup-dashboard-app.yml
   - n8n/n8n-app.yml
