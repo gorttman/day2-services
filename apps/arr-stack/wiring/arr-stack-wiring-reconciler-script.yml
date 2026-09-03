@@ -67,11 +67,26 @@ data:
     APP_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696, "whisparr": 6969}
     # Sonarr/Radarr name their SABnzbd category field differently -
     # confirmed live via each app's own /downloadclient/schema, not
-    # guessed (Sonarr: tvCategory, Radarr: movieCategory). Whisparr
-    # (v2) uses tvCategory too - confirmed live 2026-08-27 - because
-    # Whisparr v2 is built on Sonarr's codebase, not Radarr's, despite
-    # being a movie/scene app.
-    CATEGORY_FIELD = {"sonarr": "tvCategory", "radarr": "movieCategory", "whisparr": "tvCategory"}
+    # guessed (Sonarr: tvCategory, Radarr: movieCategory).
+    #
+    # Whisparr is movieCategory, NOT tvCategory. This said tvCategory
+    # until 2026-09-03, on the reasoning that Whisparr v2 is a Sonarr
+    # fork - true of v2, but the image running here is v3.3.8 branch
+    # "eros", and Whisparr V3 is a *Radarr* fork. Its
+    # /downloadclient/schema carries movieCategory and has no
+    # tvCategory field at all, so the category was silently never set
+    # and each client kept the schema default, "whisparr":
+    #   - SABnzbd rejected the whole payload with HTTP 400 "Category
+    #     does not exist" (Whisparr validates the category against
+    #     SABnzbd's live list, and SABnzbd has adult/books/tv/movies,
+    #     no "whisparr"), so Whisparr had NO usenet client at all and
+    #     could not download anything found on NZBgeek.
+    #   - qBittorrent accepted it and silently filed everything under a
+    #     "whisparr" category instead of "adult", because it creates
+    #     categories on demand rather than validating them.
+    # Pin this to the app's own schema, not to which codebase it forked
+    # from - re-check /downloadclient/schema on any major-version bump.
+    CATEGORY_FIELD = {"sonarr": "tvCategory", "radarr": "movieCategory", "whisparr": "movieCategory"}
 
     CONFIG_XML_PATHS = {
         "sonarr": "/app-config/sonarr/config.xml",
