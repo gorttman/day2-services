@@ -11,13 +11,22 @@ resources:
   - postgres/postgres-app.yml
   - paperless/paperless-app.yml
   - jellyfin/jellyfin-app.yml
-  # calibre-web disabled 2026-09-03: its two qnap PVs (qnap-books,
-  # qnap-calibre-web-live) were left with a deletionTimestamp by the
-  # 2026-08-30 VLAN20 PV churn and could not finish deleting while the
-  # PVCs stayed bound, which held qnap-storage - and so the whole
-  # day1-foundation parent - permanently Progressing. Re-enable together
-  # with those two PVs in day1-foundation/apps/qnap-storage.
-  # - calibre-web/calibre-web-app.yml   # replaces kavita 2026-07-17 - see homelab-book chapter 002
+  # calibre-web was disabled earlier on 2026-09-03: its two qnap PVs
+  # (qnap-books, qnap-calibre-web-live) carried a stuck deletionTimestamp from
+  # the 2026-08-30 VLAN20 PV churn and could not finish deleting while their
+  # PVCs stayed bound, holding qnap-storage - and so the whole day1-foundation
+  # parent - permanently Progressing.
+  #
+  # RE-ENABLED later the same day. The stated precondition is met: both PVs
+  # have finished deleting and no longer exist in the cluster, and they are
+  # re-enabled in day1-foundation/apps/qnap-storage with the explicit
+  # claimRefs that were added while they were disabled. reclaimPolicy stayed
+  # Retain throughout, so the QNAP data was never at risk.
+  #
+  # Found because books.i3sec.com.au returned 404, not a DNS failure: Pi-hole
+  # still resolves the name to ingress-nginx, but with the app gone there was
+  # no ingress to serve it.
+  - calibre-web/calibre-web-app.yml   # replaces kavita 2026-07-17 - see homelab-book chapter 002
   # arr-stack re-enabled 2026-09-03: sabnzbd's limit is now 2Gi, which was
   # the stated precondition when it was parked earlier the same day (it
   # OOMKilled in a loop against 1Gi, par2/python3 rss ~1010Mi, cgroup OOM
