@@ -16,7 +16,11 @@ spec:
   # to pinode-01 only - see apps/metallb/metallb-config.yml), that value
   # fails allocation outright and blocked this Service entirely. Pinned to
   # 192.168.2.245, confirmed working end-to-end via real DNS queries.
-  loadBalancerIP: 192.168.2.245
+  # Moved off the WLAN onto Trusted (VLAN20) 2026-09-03. The wlan VIPs never
+  # worked via MetalLB at all - the AP drops its gratuitous ARP - so they only
+  # existed as a hand-bound /32 + proxy_arp on a node's wlan0, which did not
+  # survive a reboot and died with its node. Last octet deliberately unchanged.
+  loadBalancerIP: 192.168.20.245
   ports:
   - name: dns-tcp
     port: 53
@@ -41,6 +45,10 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
 spec:
   type: LoadBalancer
+  # Pinned 2026-09-03. This was previously unpinned and just happened to get
+  # .240 auto-assigned from wlan-pool; with that pool going away it would have
+  # silently landed on an arbitrary vlan20-pool address. Same last octet.
+  loadBalancerIP: 192.168.20.240
   ports:
   - name: http
     port: 8080

@@ -165,7 +165,7 @@ spec:
         # The one value that cannot come from the shared ConfigMap: FTL needs
         # to know its own VIP, and this instance answers on .246.
         - name: FTLCONF_LOCAL_IPV4
-          value: "192.168.2.246"
+          value: "192.168.20.246"
         - name: VIRTUAL_HOST
           value: pihole.i3sec.com.au
         - name: SKIPGRAVITYONBOOT

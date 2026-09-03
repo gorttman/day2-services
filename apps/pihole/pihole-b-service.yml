@@ -22,7 +22,7 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
 spec:
   type: LoadBalancer
-  loadBalancerIP: 192.168.2.246
+  loadBalancerIP: 192.168.20.246
   ports:
   - name: dns-tcp
     port: 53
