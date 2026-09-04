@@ -20,6 +20,12 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
 spec:
   schedule: "*/15 * * * *"
+  # Declared explicitly on purpose. This was suspended live while Git
+  # said nothing about suspend, and ArgoCD cannot diff a field the
+  # desired state omits - so the job sat dead and the app stayed
+  # Synced. With the field present, selfHeal reverts any future
+  # suspension.
+  suspend: false
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
