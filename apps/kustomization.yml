@@ -37,6 +37,10 @@ resources:
   - arr-stack/arr-stack-app.yml
   - homeassistant/homeassistant-app.yml
   - backup-dashboard/backup-dashboard-app.yml
-  - n8n/n8n-app.yml
+  # Commented out 2026-09-04: n8n has zero workflows and is not in
+  # use. Manifests are kept in apps/n8n/ - uncomment this line to
+  # bring it back. The postgres n8n database is deliberately left
+  # in place and still backed up nightly.
+  # - n8n/n8n-app.yml
   - inbox-router/inbox-router-app.yml
   - books-pipeline/books-pipeline-app.yml
