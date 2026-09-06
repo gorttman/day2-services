@@ -92,6 +92,47 @@ data:
     sonarr:
       rootFolder: /tv
 
+      # Added 2026-09-06. Radarr has had this since 2026-08-26; Sonarr
+      # never did, so nothing ever TOLD Jellyfin about a new episode.
+      #
+      # It looked like it worked, which is why it went unnoticed: every
+      # Sonarr import did show up in Jellyfin about 60 seconds later,
+      # from Jellyfin's own real-time file watcher rather than from any
+      # notification. That watcher only sees these writes by accident.
+      # Both pods mount qnap:/media with identical options, Linux shares
+      # one NFS superblock between identical mounts, and inotify events
+      # therefore cross between the two pods - but ONLY while both pods
+      # are on the same node. NFS does not deliver change notifications
+      # to a client on another host.
+      #
+      # That accident is now one reschedule from ending: arr-stack is
+      # hard-pinned to k8smaster by nodeSelector (local-path PVCs), while
+      # jellyfin went soft-affinity on 2026-09-03 and prefers pinode-01,
+      # which carries workload-affinity/jellyfin=primary. The next
+      # jellyfin restart moves it off k8smaster and the watcher goes
+      # deaf for TV. This notification is an HTTP call, so it does not
+      # care which node either pod is on.
+      #
+      # Triggers are the Sonarr-fork names (episode/series, not movie).
+      # onImportComplete is deliberately NOT set: it fires once per
+      # import batch alongside onDownload's per-file events, so it only
+      # adds duplicate refreshes.
+      notifications:
+        - name: Jellyfin
+          implementation: MediaBrowser
+          onDownload: true       # fires on import
+          onUpgrade: true
+          onRename: true
+          onEpisodeFileDelete: true
+          onSeriesDelete: true
+          settings:
+            host: jellyfin.jellyfin.svc.cluster.local
+            port: 8096
+            useSsl: false
+            updateLibrary: true
+            notify: false        # library refresh only, no user-facing popups
+          apiKeySecretKey: jellyfin_api_key
+
     radarr:
       rootFolders:
         - /movies
@@ -219,6 +260,32 @@ data:
     whisparr:
       rootFolders:
         - /movies-private
+
+      # Added 2026-09-06, and this one fixes a gap the shared-node
+      # inotify accident never covered: Jellyfin's "Private" library has
+      # EnableRealtimeMonitor=false in its options.xml, so there is no
+      # file watcher on /movies-private at all. Until now the only thing
+      # that ever surfaced a Whisparr import was the scheduled library
+      # scan, which runs about every 12 hours.
+      #
+      # Whisparr v2 is a Radarr fork, so the triggers are the movie
+      # names, not Sonarr's episode ones - same MediaBrowser schema
+      # otherwise. Confirmed against the live schema endpoint 2026-09-06.
+      notifications:
+        - name: Jellyfin
+          implementation: MediaBrowser
+          onDownload: true       # fires on import
+          onUpgrade: true
+          onRename: true
+          onMovieDelete: true
+          onMovieFileDelete: true
+          settings:
+            host: jellyfin.jellyfin.svc.cluster.local
+            port: 8096
+            useSsl: false
+            updateLibrary: true
+            notify: false        # library refresh only, no user-facing popups
+          apiKeySecretKey: jellyfin_api_key
 
     prowlarr:
       # Empty on purpose - which indexer(s) to use is a real choice

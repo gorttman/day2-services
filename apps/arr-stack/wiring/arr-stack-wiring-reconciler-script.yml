@@ -344,12 +344,27 @@ data:
 
 
     # ---------------------------------------------------------------------
-    # Radarr notifications (Connect) - e.g. tell Jellyfin to rescan on import
+    # Notifications (Connect) - e.g. tell Jellyfin to rescan on import
+    #
+    # One function for sonarr/radarr/whisparr: all three are *arr forks
+    # sharing the same /api/v3/notification schema endpoint and the same
+    # MediaBrowser (Emby/Jellyfin) implementation. Was radarr-only until
+    # 2026-09-06; see this file's git history and the wiring config's
+    # comment for why TV was the gap.
+    #
+    # Trigger names are NOT hard-coded here, because they differ per fork:
+    # Sonarr has onEpisodeFileDelete/onSeriesAdd/onImportComplete, Radarr
+    # and Whisparr have onMovieDelete/onMovieFileDelete. Instead any "on*"
+    # key in wiring.yml is applied if the live schema both knows the key
+    # and reports supportsOn<Trigger> true. Confirmed live 2026-09-06 that
+    # a key can exist while unsupported - Radarr's MediaBrowser schema
+    # carries onMovieAdded with supportsOnMovieAdded false - so checking
+    # the key alone is not enough.
     # ---------------------------------------------------------------------
 
-    def reconcile_radarr_notifications(desired, apikey):
-        base = "http://localhost:7878/api/v3"
-        notifs = desired.get("radarr", {}).get("notifications", [])
+    def reconcile_notifications(app, desired, apikey):
+        base = f"http://localhost:{APP_PORTS[app]}/api/v3"
+        notifs = desired.get(app, {}).get("notifications", [])
         if not notifs:
             return
         existing = http_json("GET", f"{base}/notification?apikey={apikey}") or []
@@ -358,7 +373,7 @@ data:
         for n_cfg in notifs:
             schema = next((x for x in schema_list if x["implementation"] == n_cfg["implementation"]), None)
             if schema is None:
-                log("CRIT", f"radarr: no notification implementation {n_cfg['implementation']!r}")
+                log("CRIT", f"{app}: no notification implementation {n_cfg['implementation']!r}")
                 continue
 
             # The API key belongs to the OTHER app (Jellyfin), so it comes
@@ -367,17 +382,23 @@ data:
             secret_key = n_cfg.get("apiKeySecretKey")
             target_apikey = load_secret(secret_key) if secret_key else None
             if secret_key and not target_apikey:
-                log("CRIT", f"radarr: notification {n_cfg['name']!r} has no key sealed under "
+                log("CRIT", f"{app}: notification {n_cfg['name']!r} has no key sealed under "
                             f"{secret_key!r} yet - skipping")
                 continue
 
             body = json.loads(json.dumps(schema))
             body["name"] = n_cfg["name"]
-            for trigger in ("onDownload", "onUpgrade", "onRename", "onGrab",
-                            "onMovieAdded", "onMovieDelete", "onMovieFileDelete",
-                            "onHealthIssue", "onApplicationUpdate"):
-                if trigger in n_cfg:
-                    body[trigger] = n_cfg[trigger]
+            for trigger in (k for k in n_cfg if k.startswith("on")):
+                supports = "supports" + trigger[0].upper() + trigger[1:]
+                if trigger not in body:
+                    log("CRIT", f"{app}: notification {n_cfg['name']!r} sets unknown trigger "
+                                f"{trigger!r} - ignoring it")
+                    continue
+                if not body.get(supports, False):
+                    log("CRIT", f"{app}: notification {n_cfg['name']!r} sets {trigger!r}, which "
+                                f"{n_cfg['implementation']} does not support here - ignoring it")
+                    continue
+                body[trigger] = n_cfg[trigger]
 
             field_values = dict(n_cfg.get("settings", {}))
             if target_apikey:
@@ -389,11 +410,11 @@ data:
             match = next((e for e in existing if e.get("name") == n_cfg["name"]), None)
             if match is None:
                 http_json("POST", f"{base}/notification?apikey={apikey}", body=body)
-                log("INFO", f"radarr: created notification {n_cfg['name']!r} ({n_cfg['implementation']})")
+                log("INFO", f"{app}: created notification {n_cfg['name']!r} ({n_cfg['implementation']})")
             else:
                 body["id"] = match["id"]
                 http_json("PUT", f"{base}/notification/{match['id']}?apikey={apikey}", body=body)
-                log("INFO", f"radarr: re-applied notification {n_cfg['name']!r} ({n_cfg['implementation']})")
+                log("INFO", f"{app}: re-applied notification {n_cfg['name']!r} ({n_cfg['implementation']})")
 
 
     # ---------------------------------------------------------------------
@@ -834,10 +855,17 @@ data:
                 reconcile_radarr_importlists(desired, apikeys["radarr"])
             except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
                 log("CRIT", f"radarr import list reconcile failed: {e}")
+
+        # Notifications are reconciled for every *arr, not just radarr, and
+        # outside the radarr api-key block above - one app's key not being
+        # written yet must not stop the others being wired to Jellyfin.
+        for app in ("sonarr", "radarr", "whisparr"):
+            if not apikeys.get(app):
+                continue
             try:
-                reconcile_radarr_notifications(desired, apikeys["radarr"])
+                reconcile_notifications(app, desired, apikeys[app])
             except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
-                log("CRIT", f"radarr notification reconcile failed: {e}")
+                log("CRIT", f"{app} notification reconcile failed: {e}")
 
 
     if __name__ == "__main__":
