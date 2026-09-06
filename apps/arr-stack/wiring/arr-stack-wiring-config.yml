@@ -227,17 +227,36 @@ data:
       # 2026-08-23 against this exact install (Radarr 6.2.1) that
       # SizeSpecification exists as a real custom-format condition -
       # see /api/v3/customformat/schema.
+      # 2026-09-07: raised 4 -> 8 GB. Measured on this library's own
+      # 41 landed files: 13 of them are 4 GB or larger, i.e. the old
+      # cap was rejecting a third of what actually exists for this
+      # genre. Hallmark/Lifetime titles ship as 1080p WEB-DLs from
+      # Hallmark+/Peacock/Amazon at roughly 2-4 GB, with some 720p
+      # remuxes above that; 8 GB still blocks a full Blu-ray rip.
       customFormats:
         - name: Bulk oversized reject
           specifications:
             - implementation: SizeSpecification
-              min: 4      # GB - at or above this, hard-rejected
+              min: 8      # GB - at or above this, hard-rejected
               max: 999
 
+      # Name kept as-is deliberately: the reconciler matches profiles by
+      # name, and every movie already added carries this profile's id.
+      # Renaming it would orphan 1,731 movies onto a profile that no
+      # longer exists. The 1080p tiers were added 2026-09-07 - the
+      # SD-720p ceiling was the single biggest cause of this library's
+      # 2.2% grab rate. Like-for-like on 2025+ titles, same indexers and
+      # same week, the 101 movies left on stock "Any" landed 25.8% while
+      # the 1,731 on this profile landed 2.5%; 17 of the 41 files that
+      # did land are at qualities or sizes this profile refused. TV
+      # movies are effectively never released above 1080p, so no
+      # 2160p/Remux tier is added here and the Blu-ray tiers stay only
+      # as fallback - WEBDL-1080p is the realistic ceiling and is the
+      # cutoff.
       qualityProfiles:
         - name: Bulk SD-720p
           upgradeAllowed: true
-          cutoffQuality: Bluray-720p
+          cutoffQuality: WEBDL-1080p
           allowedQualities:
             - SDTV
             - DVD
@@ -249,6 +268,10 @@ data:
             - WEBDL-720p
             - WEBRip-720p
             - Bluray-720p
+            - HDTV-1080p
+            - WEBRip-1080p
+            - WEBDL-1080p
+            - Bluray-1080p
           formatScores:
             - format: Bulk oversized reject
               score: -1000
