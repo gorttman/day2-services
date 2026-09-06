@@ -305,22 +305,36 @@ data:
             body["upgradeAllowed"] = p_cfg.get("upgradeAllowed", False)
 
             allowed_names = set(p_cfg.get("allowedQualities", []))
+            cutoff_name = p_cfg.get("cutoffQuality")
             cutoff_id = None
             for item in _flatten_quality_items(body["items"]):
-                q = item["quality"]
-                item["allowed"] = q["name"] in allowed_names
-                if q["name"] == p_cfg.get("cutoffQuality"):
-                    cutoff_id = q["id"]
+                item["allowed"] = item["quality"]["name"] in allowed_names
             # Radarr does NOT derive a group's own allowed flag from its
             # children - confirmed live 2026-08-23 (scratch test profile,
             # created and deleted immediately: leaving a group's allowed
             # unset left it false even with both children set true). Set
             # it explicitly here instead.
+            #
+            # The cutoff is resolved in this same pass because it must name
+            # a TOP-LEVEL row of the profile, not any quality: for a quality
+            # that sits inside one of Radarr's built-in groups the cutoff is
+            # the GROUP's id, and sending the child quality's own id is
+            # rejected with a bare HTTP 400. Found live 2026-09-07 raising
+            # this profile's cutoff to WEBDL-1080p, which lives in group
+            # 1002 "WEB 1080p" - the previous cutoff, Bluray-720p, is
+            # ungrouped and so had never exercised this path. A group's own
+            # name works as a cutoffQuality too.
             for item in body["items"]:
                 if item.get("items"):
                     item["allowed"] = any(c["allowed"] for c in item["items"])
+                    if item.get("name") == cutoff_name or any(
+                        c["quality"]["name"] == cutoff_name for c in item["items"]
+                    ):
+                        cutoff_id = item["id"]
+                elif item["quality"]["name"] == cutoff_name:
+                    cutoff_id = item["quality"]["id"]
             if cutoff_id is None:
-                log("CRIT", f"radarr: cutoffQuality {p_cfg.get('cutoffQuality')!r} not found for profile {p_cfg['name']!r}")
+                log("CRIT", f"radarr: cutoffQuality {cutoff_name!r} not found for profile {p_cfg['name']!r}")
                 continue
             body["cutoff"] = cutoff_id
 
