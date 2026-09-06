@@ -210,7 +210,16 @@ spec:
               rm -f /backup/.tmp.tar
             fi
           }
-          while true; do sleep 3600; backup; done
+          # Off-peak only: one backup per day, during 15:00-19:00 UTC
+          # (~01:00-05:00 Australia/Sydney, DST-safe). Graceful restarts
+          # are still captured immediately by the preStop hook below.
+          while true; do
+            h=$(date -u +%H); today=$(date -u +%Y%j)
+            if [ "$h" -ge 15 ] && [ "$h" -lt 19 ] && [ "$(cat /backup/.last_backup_day 2>/dev/null)" != "$today" ]; then
+              backup && echo "$today" > /backup/.last_backup_day
+            fi
+            sleep 1800
+          done
         lifecycle:
           preStop:
             exec:
