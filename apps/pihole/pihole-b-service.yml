@@ -1,15 +1,13 @@
-# Second DNS VIP. Still on wlan-pool, not vlan20-pool: every client in the
-# house is on 192.168.2.0/24, and until a real LAN client has confirmed it can
-# reach a VLAN20 VIP, moving the resolver there would be betting the whole
-# network's DNS on an untested path. traefik and ingress-nginx moved on 2026-09-03;
-# Pi-hole follows once that is proven.
+# Second DNS VIP, on vlan20-pool (moved off wlan-pool 2026-09-03, same time as
+# .245). Announced via MetalLB L2 on the Trusted VLAN, where the AP does forward
+# the ARP reply (unlike the WLAN - see day1-foundation/apps/metallb/README.md).
 #
-# Reachability on the WLAN does not come from MetalLB's ARP announcement - the
-# AP drops it (see day1-foundation/apps/metallb/README.md). It comes from the
-# VIP being bound as a /32 on a node's wlan0 with proxy_arp enabled, which is
-# a normal ARP reply the AP does forward. .245 is bound on k8smaster and .246
-# on pinode-01, deliberately: one resolver per node, so losing either node
-# costs exactly one of the two.
+# externalTrafficPolicy: Local (set 2026-09-06, see pihole-service.yml's comment
+# for the full reasoning): forces MetalLB to announce this VIP only from the node
+# running the app=pihole-b pod (pinode-01), so .245 (k8smaster) and .246
+# (pinode-01) can never be announced from the same node. One resolver per node,
+# losing either node costs exactly one of the two - the same intent the old
+# hand-bound /32-on-wlan0 setup had, now done properly through MetalLB.
 apiVersion: v1
 kind: Service
 metadata:
@@ -23,6 +21,7 @@ metadata:
 spec:
   type: LoadBalancer
   loadBalancerIP: 192.168.20.246
+  externalTrafficPolicy: Local
   ports:
   - name: dns-tcp
     port: 53

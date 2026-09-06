@@ -21,6 +21,17 @@ spec:
   # existed as a hand-bound /32 + proxy_arp on a node's wlan0, which did not
   # survive a reboot and died with its node. Last octet deliberately unchanged.
   loadBalancerIP: 192.168.20.245
+  # Local (not Cluster) 2026-09-06: with Cluster, MetalLB L2 picks any node to
+  # announce the VIP from - it had put BOTH pihole-dns and pihole-dns-b on
+  # pinode-01, so losing that one node took out both resolvers at once despite
+  # the pods being anti-affinity'd onto separate nodes. Local makes MetalLB
+  # announce this VIP only from the node actually running the app=pihole pod
+  # (k8smaster), so .245 and .246 can never share an announcing node. Also
+  # preserves the real client source IP in Pi-hole's query log. Trade-off: if
+  # the local pod dies the VIP goes dark until it reschedules rather than
+  # kube-proxy routing cross-node - which is the intended HA model here, the
+  # client's second resolver (.246, other node) covers that gap.
+  externalTrafficPolicy: Local
   ports:
   - name: dns-tcp
     port: 53
