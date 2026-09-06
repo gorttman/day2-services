@@ -340,6 +340,27 @@ data:
         time.sleep(5)
 
 
+    # LazyLibrarian omits any key whose value equals its own built-in
+    # default when it rewrites config.ini (defaults live in
+    # /app/lazylibrarian/lazylibrarian/configdefs.py inside the image).
+    # That made three settings here permanently unsatisfiable: the seed
+    # wrote them, LazyLibrarian saved config.ini and dropped them again
+    # because they matched the default, the next pass read None, patched,
+    # and self-restarted the whole pod - a hard ~50s restart loop, found
+    # live 2026-09-07. An absent key whose desired value IS the app's
+    # default is already in effect, so treat it as satisfied and never
+    # write it. Values confirmed against this pinned image's own
+    # configdefs.py: General/DESTINATION_COPY=0, PostProcess/
+    # EBOOK_DEST_FILE='$Title - $Author', API/BOOK_API='OpenLibrary'.
+    # Same class of bug as the boolean mismatches fixed in 4a2465b -
+    # if a future image bump changes a default, re-check this map.
+    APP_DEFAULTS = {
+        ("GENERAL", "DESTINATION_COPY"): "False",
+        ("POSTPROCESS", "EBOOK_DEST_FILE"): "$Title - $Author",
+        ("API", "BOOK_API"): "OpenLibrary",
+    }
+
+
     def patch_config():
         desired = {**BASE_DESIRED}
         for source in (sabnzbd_desired(), newznab_desired(), api_access_desired(), format_prefs_desired()):
@@ -354,6 +375,8 @@ data:
                 cp.add_section(section)
             for key, value in keys.items():
                 current = cp.get(section, key, fallback=None)
+                if current is None and APP_DEFAULTS.get((section, key)) == value:
+                    continue
                 if current != value:
                     cp.set(section, key, value)
                     changed = True
