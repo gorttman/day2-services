@@ -57,6 +57,30 @@ data:
             "WebUI\\HostHeaderValidation": "false",
             "Downloads\\SavePath": "/downloads/",
         },
+        # Queue limits. Seeded here, not set through the WebUI API,
+        # because API-set values do not survive a pod restart - proven
+        # live 2026-09-07: all four were raised via
+        # POST /api/v2/app/setPreferences, confirmed applied, and were
+        # back at their old values within the hour once vpn-healer
+        # recreated the pod on a PIA peer rotation. Qt only flushes its
+        # in-memory config wholesale at shutdown, so anything set at
+        # runtime is lost whenever the pod goes away without a clean
+        # flush - which, for this pod, is routine rather than rare.
+        #
+        # The defaults (10/15/5) are far too low for a bulk backfill.
+        # With 15 active slots, a handful of magnets stuck in metaDL
+        # plus a few stalled torrents held every slot and 38 healthy
+        # torrents sat queued behind them, whole-client throughput
+        # 13 kB/s. IgnoreSlowTorrentsForQueueing is the structural half
+        # of the fix: a torrent doing nothing stops occupying a slot at
+        # all, so a dead magnet can no longer wedge the queue the way
+        # it did.
+        "BitTorrent": {
+            "Session\\MaxActiveDownloads": "20",
+            "Session\\MaxActiveTorrents": "40",
+            "Session\\MaxActiveUploads": "10",
+            "Session\\IgnoreSlowTorrentsForQueueing": "true",
+        },
     }
 
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
