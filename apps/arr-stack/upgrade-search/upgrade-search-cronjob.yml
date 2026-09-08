@@ -1,0 +1,111 @@
+# Works Radarr's main-library upgrade backlog one batch a night.
+#
+# WHY A CRONJOB, NOT A SIDECAR. The obvious home for this was another
+# container in the arr-stack pod, next to arr-wiring-reconciler, since
+# that one already proves the pattern (read the API key live from the
+# mounted config PVC, call the app on localhost). Two things were
+# checked live on 2026-09-08 and both held, which makes a CronJob
+# strictly better here:
+#   1. A second pod on the same node CAN mount radarr-config while
+#      arr-stack holds it - Longhorn's RWO is per-node, not per-pod, so
+#      a read-only claim alongside the running stack attaches fine.
+#   2. The radarr Service is reachable from an ordinary pod. gluetun's
+#      killswitch force-routes traffic OUT of the arr-stack pod through
+#      the VPN, but inbound to the Service is unaffected (the same path
+#      the Traefik ingress already uses).
+# So this gets real once-a-night semantics, Job history to look at, and
+# concurrencyPolicy - none of which a sleeping sidecar loop would give -
+# without a new image, new RBAC, or a restart of the 10-container
+# arr-stack pod every time the script changes.
+#
+# The podAffinity below is load-bearing, not a preference: point 1 only
+# holds on arr-stack's own node. Scheduled anywhere else this pod would
+# sit in Multi-Attach and the night would be silently lost.
+#
+# Schedule: 03:30, which resolves to host-local AEST on this cluster,
+# not UTC (same gotcha as every other CronJob here). Deliberately after
+# postgres-backup's 02:00 so the two do not fight for the QNAP.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: radarr-upgrade-search
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: radarr-upgrade-search
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  schedule: "30 3 * * *"
+  # Declared explicitly for the same reason vpn-healer declares it:
+  # ArgoCD cannot diff a field the desired state omits, so a live
+  # suspend would stick and the app would still read Synced.
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # No retry. A failed run means Radarr or the queue was not in a
+      # fit state; the next night picks up the same untagged batch
+      # anyway, so retrying inside the same night just doubles the API
+      # spend for nothing.
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: Never
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app: arr-stack
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: upgrade-search
+              # Borrowed for its python3, exactly as
+              # arr-wiring-reconciler borrows it - no third-party image
+              # to build or keep patched for ~200 lines of stdlib.
+              image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/app/upgrade_search.py"]
+              securityContext:
+                runAsUser: 1000
+                runAsGroup: 1000
+              env:
+                # Everything tunable lives here, so changing the pace is
+                # a one-line edit to this file.
+                - {name: ROOT_FOLDER, value: "/movies"}
+                # 25/night against a 1,111-title backlog is ~45 nights.
+                # Sized off the measured pipeline: a batch this size
+                # lands roughly 15-20 grabs at the hit rate seen on
+                # 2026-09-07, which is a few hours of downloading, not a
+                # queue that is still draining when the next run fires.
+                - {name: BATCH, value: "25"}
+                # Worst-looking first: below 720p, then 720p, then the
+                # 1080p-but-not-Bluray stragglers.
+                - {name: TIERS, value: "1,2,3"}
+                - {name: MAX_QUEUE, value: "75"}
+                - {name: MIN_FREE_TB, value: "1.0"}
+                - {name: DRY_RUN, value: "false"}
+                - {name: TZ, value: Australia/Sydney}
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                  readOnly: true
+                # Read-only, and only ever read: the API key comes from
+                # config.xml, nothing here writes to Radarr's config.
+                - name: radarr-config
+                  mountPath: /app-config/radarr
+                  readOnly: true
+              resources:
+                requests: {memory: "32Mi", cpu: "10m"}
+                limits: {memory: "128Mi", cpu: "200m"}
+          volumes:
+            - name: script
+              configMap:
+                name: radarr-upgrade-search-script
+            - name: radarr-config
+              persistentVolumeClaim:
+                claimName: radarr-config
+                readOnly: true

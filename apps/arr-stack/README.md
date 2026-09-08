@@ -214,6 +214,45 @@ run `vpn-healer/seal-pia-credentials.sh` to create the PIA credentials
 secret, and add the deploy key's public half (in that sealed secret's
 own header comment) as a write-enabled Deploy Key on this GitHub repo.
 
+## LIVE 2026-09-08: nightly upgrade search (radarr-upgrade-search)
+
+The main movie library came under Radarr on 2026-09-08 as 1,120
+unmonitored titles, imported from the existing files on the QNAP.
+Unmonitored means Radarr never searches them, so it held the library as
+a catalogue and upgraded nothing. Measured the same day: 1,111 of 1,146
+titles sit below the "Main HD" cutoff (Bluray-1080p) - 596 are 576p or
+below, 449 are 720p, 66 are 1080p but not Bluray. Only 32 already meet
+the cutoff.
+
+Radarr has no way to work through that on its own. "Search All Cutoff
+Unmet" fires all 1,111 at the indexers in one pass, which burns
+NZBgeek's daily allowance and collides with the /movies-bulk backfill.
+RSS sync never helps - it only sees newly-posted releases, so a 1988
+catalogue title would wait forever.
+
+`upgrade-search/` runs one batch a night instead, worst-quality first:
+below 720p, then 720p, then the 1080p-but-not-Bluray stragglers. It
+monitors each title (Radarr silently ignores a search for an
+unmonitored movie), searches the batch in one command, then tags it.
+
+State is the Radarr tag `upgrade-searched`, not a file - the job is
+stateless, survives being rescheduled or re-imaged, and its progress is
+visible in Radarr's own UI. To re-search a title, remove its tag.
+
+Two guards skip a night rather than making things worse: a queue above
+`MAX_QUEUE` (the pipe, not the search, is the bottleneck - this is how
+both download clients got wedged on 2026-09-07), and less than
+`MIN_FREE_TB` free on the root folder (upgrades replace small files
+with large ones).
+
+First run, 2026-09-08: 25 searched, 15 grabbed, all Bluray-1080p. At
+BATCH=25 the backlog is about 45 nights.
+
+Pace is tuned by env on the CronJob - `BATCH`, `TIERS`, `MAX_QUEUE`,
+`MIN_FREE_TB`. Scope is `ROOT_FOLDER` (/movies); /movies-bulk is left
+alone, `~/gm-dev/bulk_backfill.py` owns that one and works the missing
+list rather than the upgrade list.
+
 ## Removed: bazarr and jdownloader2 (2026-08-08)
 
 Both worked fine - this was a scope/preference call, not a bug, made

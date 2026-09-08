@@ -1,0 +1,242 @@
+# The nightly upgrade-search worker - see upgrade_search.py's module
+# docstring for why it exists and how it picks what to search.
+#
+# Mounted as a whole directory (not subPath) so an edit here reaches
+# the next run without touching the CronJob. Unlike the long-running
+# arr-wiring-reconciler, a code change needs no restart: every run is a
+# fresh Python process that reads this file from scratch.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: radarr-upgrade-search-script
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: radarr-upgrade-search
+    argocd.argoproj.io/managed-by: argocd
+data:
+  upgrade_search.py: |
+    #!/usr/bin/env python3
+    """Nightly paced quality-upgrade search for Radarr's main movie library.
+    
+    The library moved under Radarr's management on 2026-09-08 as 1,120
+    unmonitored titles, so Radarr held it as a catalogue and never searched
+    it. 1,111 of 1,146 sit below the "Main HD" cutoff (Bluray-1080p): 596
+    are 576p or below, 449 are 720p, 66 are 1080p but not Bluray.
+    
+    Radarr has no built-in way to work through that. "Search All Cutoff
+    Unmet" fires every one of them at the indexers at once, which burns
+    NZBgeek's daily API allowance in a single pass and collides with the
+    /movies-bulk backfill (~1,666 titles still to go, see
+    ~/gm-dev/bulk_backfill.py). RSS sync never helps here either - it only
+    sees newly-posted releases, which will never surface a 1988 catalogue
+    title. So this walks the backlog a batch a night instead, worst-quality
+    first.
+    
+    Priority is the current file's resolution, not the profile position:
+      tier 1  below 720p   - SD, DVD, 480p, 576p            (596)
+      tier 2  720p                                          (449)
+      tier 3  1080p but below cutoff - HDTV/WEB 1080p       (66)
+    
+    Tier 1 leads deliberately. It is the tier that actually looks bad on a
+    TV, and it overlaps almost exactly with the legacy mpeg4/.avi files
+    that have no hardware decoder on the TV and force Jellyfin to
+    transcode - upgrading those fixes playback and picture in one pass.
+    
+    STATE lives in Radarr, as a tag on each movie (default
+    "upgrade-searched"), not in a file. The job is stateless and can be
+    deleted, rescheduled or re-imaged without losing its place, and the
+    progress is visible in Radarr's own UI. To re-search a title, remove
+    the tag from it.
+    
+    Movies are switched to monitored before searching - Radarr will not
+    search an unmonitored movie. That is a permanent change: once
+    monitored, RSS keeps watching them for upgrades too, which is the
+    point.
+    
+    Scope is one root folder (default /movies). /movies-bulk is left alone
+    - bulk_backfill.py owns that one and works the missing list, not the
+    upgrade list.
+    """
+    import json
+    import os
+    import sys
+    import time
+    import urllib.error
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    
+    CONFIG_XML = os.environ.get("RADARR_CONFIG", "/app-config/radarr/config.xml")
+    BASE_URL = os.environ.get("RADARR_URL", "http://radarr.arr-stack.svc.cluster.local:7878")
+    ROOT_FOLDER = os.environ.get("ROOT_FOLDER", "/movies")
+    TAG_LABEL = os.environ.get("TAG_LABEL", "upgrade-searched")
+    BATCH = int(os.environ.get("BATCH", "25"))
+    TIERS = [int(t) for t in os.environ.get("TIERS", "1,2,3").split(",") if t.strip()]
+    MAX_QUEUE = int(os.environ.get("MAX_QUEUE", "75"))
+    MIN_FREE_TB = float(os.environ.get("MIN_FREE_TB", "1.0"))
+    DRY_RUN = os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
+    
+    
+    def log(msg):
+        print("%s  %s" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg), flush=True)
+    
+    
+    def api_key():
+        # Read live from Radarr's own config, never from a Secret - the key
+        # is auto-generated and would drift. Same rule the arr-wiring
+        # reconciler follows.
+        key = ET.parse(CONFIG_XML).getroot().findtext("ApiKey")
+        if not key:
+            sys.exit("no <ApiKey> in %s" % CONFIG_XML)
+        return key
+    
+    
+    KEY = None
+    
+    
+    def api(path, method="GET", body=None):
+        url = "%s/api/v3/%s" % (BASE_URL, path)
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(url, data=data, method=method,
+                                     headers={"X-Api-Key": KEY,
+                                              "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                raw = r.read().decode()
+        except urllib.error.HTTPError as e:
+            sys.exit("%s %s -> HTTP %s: %s" % (method, path, e.code, e.read().decode()[:400]))
+        return json.loads(raw) if raw.strip() else {}
+    
+    
+    def cutoff_index(profile):
+        """Position of the profile's cutoff, and every quality's position.
+    
+        Radarr treats a profile as an ordered worst-to-best list where a
+        grouped entry ("WEB 1080p") occupies one position shared by its
+        members. A file meets the cutoff when its position is >= the
+        cutoff's. The cutoff id can name either a quality or a group, so
+        both cases are checked.
+        """
+        pos, cut = {}, None
+        for i, item in enumerate(profile["items"]):
+            if item.get("quality"):
+                pos[item["quality"]["id"]] = i
+                if item["quality"]["id"] == profile["cutoff"]:
+                    cut = i
+            else:
+                if item.get("id") == profile["cutoff"]:
+                    cut = i
+                for sub in item.get("items", []):
+                    pos[sub["quality"]["id"]] = i
+        if cut is None:
+            sys.exit("profile %r: cutoff %s matches no item" % (profile["name"], profile["cutoff"]))
+        return pos, cut
+    
+    
+    def tier_of(resolution):
+        if resolution < 720:
+            return 1
+        if resolution == 720:
+            return 2
+        return 3
+    
+    
+    def ensure_tag():
+        for t in api("tag"):
+            if t["label"] == TAG_LABEL:
+                return t["id"]
+        if DRY_RUN:
+            return None
+        return api("tag", "POST", {"label": TAG_LABEL})["id"]
+    
+    
+    def main():
+        global KEY
+        KEY = api_key()
+    
+        # Guard 1: a backed-up queue means the pipe, not the search, is the
+        # bottleneck. Adding more grabs on top of it is how both download
+        # clients got wedged on 2026-09-07.
+        queue = api("queue?page=1&pageSize=1")["totalRecords"]
+        if queue > MAX_QUEUE:
+            log("queue is %d (max %d) - skipping tonight, downloads are behind" % (queue, MAX_QUEUE))
+            return
+    
+        # Guard 2: upgrades replace small files with large ones. Stop well
+        # before the share fills rather than discovering it mid-import.
+        free_tb = 0.0
+        for rf in api("rootfolder"):
+            if rf["path"] == ROOT_FOLDER:
+                free_tb = rf.get("freeSpace", 0) / 1e12
+        if free_tb < MIN_FREE_TB:
+            log("%s has %.2f TB free (min %.2f) - skipping tonight" % (ROOT_FOLDER, free_tb, MIN_FREE_TB))
+            return
+    
+        tag_id = ensure_tag()
+        profiles = {p["id"]: p for p in api("qualityprofile")}
+        cutoffs = {pid: cutoff_index(p) for pid, p in profiles.items()}
+    
+        candidates = []
+        for m in api("movie"):
+            if m.get("rootFolderPath") != ROOT_FOLDER or not m.get("hasFile"):
+                continue
+            if tag_id is not None and tag_id in m.get("tags", []):
+                continue
+            if not m.get("isAvailable", True):
+                continue
+            prof = profiles.get(m["qualityProfileId"])
+            if prof is None or not prof.get("upgradeAllowed"):
+                continue
+            pos, cut = cutoffs[m["qualityProfileId"]]
+            qual = m["movieFile"]["quality"]["quality"]
+            i = pos.get(qual["id"])
+            if i is None or i >= cut:
+                continue
+            candidates.append((tier_of(qual["resolution"]), m["sortTitle"], m))
+    
+        by_tier = {}
+        for tier, _, _ in candidates:
+            by_tier[tier] = by_tier.get(tier, 0) + 1
+        log("%d untagged upgrade candidates in %s: %s"
+            % (len(candidates), ROOT_FOLDER,
+               ", ".join("tier %d = %d" % (t, by_tier[t]) for t in sorted(by_tier)) or "none"))
+    
+        wanted = [c for c in candidates if c[0] in TIERS]
+        wanted.sort(key=lambda c: (TIERS.index(c[0]), c[1]))
+        batch = [m for _, _, m in wanted[:BATCH]]
+        if not batch:
+            log("nothing left to search in tiers %s - backlog is clear" % TIERS)
+            return
+    
+        for m in batch:
+            log("  tier %d  %-9s  %s (%s)"
+                % (tier_of(m["movieFile"]["quality"]["quality"]["resolution"]),
+                   m["movieFile"]["quality"]["quality"]["name"], m["title"], m["year"]))
+    
+        if DRY_RUN:
+            log("DRY_RUN - would monitor, search and tag %d titles" % len(batch))
+            return
+    
+        ids = [m["id"] for m in batch]
+    
+        # Monitor first: Radarr silently ignores a search for an unmonitored
+        # movie. The editor endpoint does the whole batch in one call.
+        unmonitored = [m["id"] for m in batch if not m["monitored"]]
+        if unmonitored:
+            api("movie/editor", "PUT", {"movieIds": unmonitored, "monitored": True})
+            log("monitored %d previously-unmonitored titles" % len(unmonitored))
+    
+        cmd = api("command", "POST", {"name": "MoviesSearch", "movieIds": ids})
+        log("queued MoviesSearch (command %s) for %d titles" % (cmd.get("id"), len(ids)))
+    
+        # Tag last, and only after the search is accepted - a failure above
+        # exits non-zero with nothing tagged, so tomorrow retries the same
+        # batch instead of skipping it.
+        api("movie/editor", "PUT",
+            {"movieIds": ids, "applyTags": "add", "tags": [tag_id]})
+        log("tagged %d titles %r - %d candidates remain"
+            % (len(ids), TAG_LABEL, len(candidates) - len(batch)))
+    
+    
+    if __name__ == "__main__":
+        main()
