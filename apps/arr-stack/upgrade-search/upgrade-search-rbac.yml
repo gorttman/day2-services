@@ -30,7 +30,10 @@ metadata:
 rules:
   - apiGroups: ["batch"]
     resources: ["cronjobs"]
-    resourceNames: ["radarr-upgrade-search"]
+    # Both temporary jobs share this ServiceAccount and both retire
+    # themselves. Named explicitly rather than left open, so neither can
+    # suspend vpn-healer or anything else that lands in arr-stack later.
+    resourceNames: ["radarr-upgrade-search", "radarr-upgrade-digest"]
     verbs: ["get", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

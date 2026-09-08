@@ -5,3 +5,5 @@ resources:
   - upgrade-search-rbac.yml
   - upgrade-search-script.yml
   - upgrade-search-cronjob.yml
+  - upgrade-digest-script.yml
+  - upgrade-digest-cronjob.yml

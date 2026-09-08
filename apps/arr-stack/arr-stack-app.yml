@@ -34,3 +34,8 @@ spec:
       name: radarr-upgrade-search
       jsonPointers:
         - /spec/suspend
+    - group: batch
+      kind: CronJob
+      name: radarr-upgrade-digest
+      jsonPointers:
+        - /spec/suspend

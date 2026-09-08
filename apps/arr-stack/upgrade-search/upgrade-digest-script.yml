@@ -1,0 +1,257 @@
+# The weekly vault-note worker - see upgrade_digest.py's module
+# docstring for why the reminder goes to Obsidian rather than a push
+# notification.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: radarr-upgrade-digest-script
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: radarr-upgrade-digest
+    argocd.argoproj.io/managed-by: argocd
+data:
+  upgrade_digest.py: |
+    #!/usr/bin/env python3
+    """Weekly progress note for the Radarr upgrade backfill, into the vault.
+    
+    The backfill (see upgrade_search.py) runs unattended every night and is
+    the sort of thing that quietly stops working without anyone noticing.
+    There is no push-notification channel in this cluster - no ntfy or
+    gotify, Home Assistant has no mobile_app integration, no SMTP - so the
+    reminder goes where the user already looks: a dated note in the
+    Obsidian vault inbox, which Obsidian Sync then carries to their other
+    devices.
+    
+    One topic folder, one note a week, matching the vault's existing
+    convention (YYYY-MM-DD-slug.md with title/created/source/status/topics
+    frontmatter). `inbox-topics` picks the folder up like any other, with a
+    fresh last-activity date each week.
+    
+    Like the search job, this one is temporary and retires itself: the week
+    it finds the backlog finished it writes a closing note saying so and
+    suspends its own CronJob. Neither job needs anyone to remember to turn
+    it off.
+    """
+    import datetime
+    import json
+    import os
+    import ssl
+    import sys
+    import urllib.error
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    
+    CONFIG_XML = os.environ.get("RADARR_CONFIG", "/app-config/radarr/config.xml")
+    BASE_URL = os.environ.get("RADARR_URL", "http://radarr.arr-stack.svc.cluster.local:7878")
+    ROOT_FOLDER = os.environ.get("ROOT_FOLDER", "/movies")
+    TAG_LABEL = os.environ.get("TAG_LABEL", "upgrade-searched")
+    BATCH = int(os.environ.get("BATCH", "25"))
+    TOPIC = os.environ.get("TOPIC", "radarr-upgrade-backfill")
+    INBOX = os.environ.get("INBOX", "/vault/inbox")
+    DAYS = int(os.environ.get("DAYS", "7"))
+    CRONJOB_NAME = os.environ.get("CRONJOB_NAME", "")
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    
+    KEY = None
+    
+    
+    def log(msg):
+        print(msg, flush=True)
+    
+    
+    def api(path):
+        req = urllib.request.Request("%s/api/v3/%s" % (BASE_URL, path),
+                                     headers={"X-Api-Key": KEY})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                raw = r.read().decode()
+        except urllib.error.HTTPError as e:
+            sys.exit("GET %s -> HTTP %s: %s" % (path, e.code, e.read().decode()[:300]))
+        return json.loads(raw) if raw.strip() else {}
+    
+    
+    def cutoff_index(profile):
+        pos, cut = {}, None
+        for i, item in enumerate(profile["items"]):
+            if item.get("quality"):
+                pos[item["quality"]["id"]] = i
+                if item["quality"]["id"] == profile["cutoff"]:
+                    cut = i
+            else:
+                if item.get("id") == profile["cutoff"]:
+                    cut = i
+                for sub in item.get("items", []):
+                    pos[sub["quality"]["id"]] = i
+        return pos, cut
+    
+    
+    def suspend_self():
+        if not CRONJOB_NAME:
+            return "not self-suspending (CRONJOB_NAME unset)"
+        with open(SA_DIR + "/token") as f:
+            token = f.read().strip()
+        with open(SA_DIR + "/namespace") as f:
+            ns = f.read().strip()
+        req = urllib.request.Request(
+            "https://kubernetes.default.svc/apis/batch/v1/namespaces/%s/cronjobs/%s" % (ns, CRONJOB_NAME),
+            data=json.dumps({"spec": {"suspend": True}}).encode(), method="PATCH",
+            headers={"Authorization": "Bearer " + token,
+                     "Content-Type": "application/merge-patch+json"})
+        try:
+            urllib.request.urlopen(req, context=ssl.create_default_context(cafile=SA_DIR + "/ca.crt"),
+                                   timeout=30)
+        except urllib.error.HTTPError as e:
+            return "could not self-suspend: HTTP %s" % e.code
+        return "suspended %s - this was the last weekly note" % CRONJOB_NAME
+    
+    
+    def main():
+        global KEY
+        KEY = ET.parse(CONFIG_XML).getroot().findtext("ApiKey")
+    
+        profiles = {p["id"]: p for p in api("qualityprofile")}
+        tag_id = next((t["id"] for t in api("tag") if t["label"] == TAG_LABEL), None)
+        movies = api("movie")
+        mine = {m["id"]: m for m in movies if m.get("rootFolderPath") == ROOT_FOLDER}
+    
+        met, below, untagged = 0, {1: 0, 2: 0, 3: 0}, 0
+        for m in mine.values():
+            if not m.get("hasFile"):
+                continue
+            prof = profiles.get(m["qualityProfileId"])
+            if prof is None:
+                continue
+            pos, cut = cutoff_index(prof)
+            qual = m["movieFile"]["quality"]["quality"]
+            i = pos.get(qual["id"])
+            if i is None or i >= cut:
+                met += 1
+                continue
+            r = qual["resolution"]
+            below[1 if r < 720 else (2 if r == 720 else 3)] += 1
+            if tag_id is None or tag_id not in m.get("tags", []):
+                untagged += 1
+    
+        remaining = sum(below.values())
+        cutoff_date = (datetime.datetime.now(datetime.timezone.utc)
+                       - datetime.timedelta(days=DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+        imported, failed = [], 0
+        page = 1
+        while True:
+            h = api("history?page=%d&pageSize=250&sortKey=date&sortDirection=descending" % page)
+            recs = h.get("records", [])
+            if not recs:
+                break
+            for x in recs:
+                if x["date"] < cutoff_date:
+                    recs = None
+                    break
+                if x["movieId"] not in mine:
+                    continue
+                if x["eventType"] == "downloadFolderImported":
+                    imported.append((mine[x["movieId"]]["title"], mine[x["movieId"]]["year"],
+                                     x["quality"]["quality"]["name"]))
+                elif x["eventType"] == "downloadFailed":
+                    failed += 1
+            if recs is None or page * 250 >= h.get("totalRecords", 0):
+                break
+            page += 1
+    
+        queue = api("queue?page=1&pageSize=200")
+        q_mine = [r for r in queue.get("records", []) if r.get("movieId") in mine]
+        stuck = [r for r in q_mine if r.get("trackedDownloadStatus") in ("warning", "error")]
+    
+        nights = (untagged + BATCH - 1) // BATCH if BATCH else 0
+        finished = untagged == 0
+        today = datetime.date.today().isoformat()
+    
+        lines = []
+        lines.append("---")
+        lines.append('title: "Radarr upgrade backfill - %s"' % ("finished" if finished else "week to " + today))
+        lines.append("created: %s" % today)
+        lines.append("source: radarr-upgrade-search")
+        lines.append("status: needs_review")
+        lines.append("topics: [%s]" % TOPIC)
+        lines.append("---")
+        lines.append("")
+    
+        if finished:
+            lines.append("## The backfill is finished")
+            lines.append("")
+            lines.append("Nothing left to search. Both CronJobs have retired themselves.")
+            lines.append("Their manifests under `apps/arr-stack/upgrade-search/` can be")
+            lines.append("deleted whenever convenient - a suspended CronJob costs nothing.")
+        else:
+            lines.append("## Where it is up to")
+            lines.append("")
+            lines.append("- **%d** of %d titles now meet the Bluray-1080p cutoff" % (met, len(mine)))
+            lines.append("- **%d** still below it - %d under 720p, %d at 720p, %d at 1080p but not Bluray"
+                         % (remaining, below[1], below[2], below[3]))
+            lines.append("- **%d** not yet searched, roughly **%d more nights** at %d a night"
+                         % (untagged, nights, BATCH))
+        lines.append("")
+    
+        lines.append("## Last %d days" % DAYS)
+        lines.append("")
+        if imported:
+            lines.append("**%d files imported.** Mostly upgrades replacing a worse copy, but"
+                         % len(imported))
+            lines.append("a genuinely new title lands here too - the distinction is not worth")
+            lines.append("drawing in a weekly note.")
+            lines.append("")
+            for title, year, q in sorted(set(imported)):
+                lines.append("- %s (%s) - %s" % (title, year, q))
+        else:
+            lines.append("Nothing landed. If that repeats, check the nightly job:")
+            lines.append("`kubectl logs -n arr-stack -l app.kubernetes.io/name=radarr-upgrade-search --tail=30`")
+        lines.append("")
+        if failed:
+            lines.append("%d download failures. These are normally usenet retention or repair"
+                         % failed)
+            lines.append("problems that Radarr blocklists and re-searches on its own - only worth")
+            lines.append("looking at if the number keeps climbing.")
+            lines.append("")
+    
+        lines.append("## Needs a person")
+        lines.append("")
+        if stuck:
+            for r in stuck:
+                msgs = [x["messages"][0] for x in r.get("statusMessages", []) if x.get("messages")]
+                lines.append("- **%s** - %s" % (r.get("title", "?")[:70], msgs[0] if msgs else r.get("status")))
+            lines.append("")
+            lines.append("Stuck queue items do not clear themselves. Radarr - Activity - Queue.")
+        else:
+            lines.append("Nothing. Queue is %d items for %s, none flagged." % (len(q_mine), ROOT_FOLDER))
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("Background and design notes: `~/gm-dev/radarr_upgrade_context.md`")
+    
+        note = "\n".join(lines) + "\n"
+        folder = os.path.join(INBOX, TOPIC)
+        os.makedirs(folder, exist_ok=True)
+        # Group-write to match the rest of the vault. The QNAP export hands
+        # out 0644/0755 by default, which leaves notes this job wrote
+        # subtly different from every other note in the vault.
+        try:
+            os.chmod(folder, 0o775)
+        except OSError:
+            pass
+        slug = "backfill-finished" if finished else "progress"
+        path = os.path.join(folder, "%s-radarr-upgrade-%s.md" % (today, slug))
+        with open(path, "w") as f:
+            f.write(note)
+        try:
+            os.chmod(path, 0o664)
+        except OSError:
+            pass
+        log("wrote %s (%d bytes)" % (path, len(note)))
+    
+        if finished:
+            log(suspend_self())
+    
+    
+    if __name__ == "__main__":
+        main()

@@ -271,6 +271,16 @@ only - vpn-healer's explicit `suspend: false` protection is unchanged.
 Deleting `upgrade-search/` afterwards is then housekeeping, not an
 operational requirement: a suspended CronJob costs nothing.
 
+**A weekly note lands in the Obsidian vault.**
+`radarr-upgrade-digest` runs Sunday 08:17 and writes a dated note into
+`inbox/radarr-upgrade-backfill/` - where it is up to, what landed that
+week, and anything genuinely needing a person (stuck queue items do not
+clear themselves). Obsidian Sync carries it to the user's other
+devices, which is the closest thing to a push notification available:
+there is no ntfy or gotify here, Home Assistant has no mobile_app
+integration, and there is no SMTP. It retires itself the same way the
+search job does, and writes a closing note when it does.
+
 Pace is tuned by env on the CronJob - `BATCH`, `TIERS`, `MAX_QUEUE`,
 `MIN_FREE_TB`. Scope is `ROOT_FOLDER` (/movies); /movies-bulk is left
 alone, `~/gm-dev/bulk_backfill.py` owns that one and works the missing

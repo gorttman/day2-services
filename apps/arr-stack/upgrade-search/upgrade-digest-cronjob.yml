@@ -1,0 +1,105 @@
+# Weekly progress note for the upgrade backfill, written into the
+# Obsidian vault inbox.
+#
+# The backfill runs unattended nightly and is exactly the sort of thing
+# that stops working without anyone noticing. There is no push channel
+# in this cluster to alert on - no ntfy or gotify, Home Assistant has
+# no mobile_app integration, no SMTP - so the reminder goes somewhere
+# the user already looks. Obsidian Sync then carries the note to their
+# other devices, which is the closest thing to a push available here.
+#
+# Sunday 08:17 local (CronJob schedules resolve to host-local AEST on
+# this cluster, not UTC). Off the hour deliberately - nothing else
+# needs to contend with it, and :00 is where every scheduler crowds.
+#
+# Same shape as the nightly search job it reports on: co-located with
+# arr-stack because it reads the Radarr API key from that pod's config
+# PVC, and self-retiring so neither job outlives its purpose.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: radarr-upgrade-digest
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: radarr-upgrade-digest
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  schedule: "17 8 * * 0"
+  # Also listed in arr-stack-app.yml's ignoreDifferences, for the same
+  # reason as the search job - it suspends itself once the backfill is
+  # done, and selfHeal would otherwise resurrect it.
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: radarr-upgrade-search
+          # Load-bearing, not a preference: the radarr-config mount
+          # below only works on arr-stack's own node (Longhorn RWO is
+          # per-node). See the search CronJob for the full reasoning.
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app: arr-stack
+                  topologyKey: kubernetes.io/hostname
+          # Vault files are owned 1000:1000 on the QNAP export, which is
+          # the same PUID/PGID every arr-stack container already runs
+          # as - a note written here is indistinguishable from one the
+          # user wrote.
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+            - name: upgrade-digest
+              image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/app/upgrade_digest.py"]
+              env:
+                - {name: ROOT_FOLDER, value: "/movies"}
+                # Must match the search job's BATCH for the "nights
+                # remaining" estimate to mean anything.
+                - {name: BATCH, value: "25"}
+                - {name: DAYS, value: "7"}
+                - {name: TOPIC, value: "radarr-upgrade-backfill"}
+                - {name: INBOX, value: "/vault/inbox"}
+                - {name: CRONJOB_NAME, value: "radarr-upgrade-digest"}
+                - {name: TZ, value: Australia/Sydney}
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                  readOnly: true
+                - name: radarr-config
+                  mountPath: /app-config/radarr
+                  readOnly: true
+                - name: vault
+                  mountPath: /vault
+                  subPath: obsidian
+              resources:
+                requests: {memory: "32Mi", cpu: "10m"}
+                limits: {memory: "128Mi", cpu: "200m"}
+          volumes:
+            - name: script
+              configMap:
+                name: radarr-upgrade-digest-script
+            - name: radarr-config
+              persistentVolumeClaim:
+                claimName: radarr-config
+                readOnly: true
+            # Raw NFS volume rather than a PVC, the same pattern
+            # books-import already uses in this namespace - the vault is
+            # a shared export, not a 1:1 bound claim. subPath narrows
+            # this to the obsidian vault itself.
+            - name: vault
+              nfs:
+                server: qnap
+                path: /vault
