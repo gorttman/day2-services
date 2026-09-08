@@ -10,8 +10,11 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
-  # Internal-only: no Cloudflare Tunnel annotation; DNS for this host
-  # lives in dns-conf.
+  # This Ingress is LAN-only: no Cloudflare Tunnel annotation, reached via
+  # the split-horizon dns-conf record (pihole + coredns -> Traefik VIP).
+  # Off-LAN access is separate - cloudflare-tf tunnels jellyfin.i3sec.com.au
+  # straight to the jellyfin Service, bypassing this Ingress (added
+  # 2026-09-08, behind the zone-wide mTLS WAF rule).
   ingressClassName: traefik
   tls:
   - hosts:
