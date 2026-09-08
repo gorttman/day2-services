@@ -239,11 +239,20 @@ State is the Radarr tag `upgrade-searched`, not a file - the job is
 stateless, survives being rescheduled or re-imaged, and its progress is
 visible in Radarr's own UI. To re-search a title, remove its tag.
 
-Two guards skip a night rather than making things worse: a queue above
-`MAX_QUEUE` (the pipe, not the search, is the bottleneck - this is how
-both download clients got wedged on 2026-09-07), and less than
-`MIN_FREE_TB` free on the root folder (upgrades replace small files
-with large ones).
+Two guards skip a night rather than making things worse: more than
+`MAX_QUEUE` queue items **for this root folder** (the pipe, not the
+search, is the bottleneck - this is how both download clients got
+wedged on 2026-09-07), and less than `MIN_FREE_TB` free on the root
+folder (upgrades replace small files with large ones).
+
+The queue guard counts one root folder, not the whole queue. It was
+whole-queue at first and tripped on its second night: 76 items against
+a limit of 75, but 48 of those were /movies-bulk and 47 were merely
+queued, while /movies had 21 actively downloading and was not backed up
+at all. Both pipelines share one Radarr queue, so an unscoped guard
+lets a stalled bulk backlog pause upgrades indefinitely - for a
+bottleneck upgrades neither cause nor can clear. `MAX_QUEUE` came down
+to 50 with the change, since it now counts a much smaller set.
 
 First run, 2026-09-08: 25 searched, 15 grabbed, all Bluray-1080p. At
 BATCH=25 the backlog is about 45 nights.
