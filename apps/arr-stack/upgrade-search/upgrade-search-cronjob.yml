@@ -85,7 +85,13 @@ spec:
                 # Worst-looking first: below 720p, then 720p, then the
                 # 1080p-but-not-Bluray stragglers.
                 - {name: TIERS, value: "1,2,3"}
-                - {name: MAX_QUEUE, value: "75"}
+                # Counts only this root folder's items (see the script's
+                # guard 1). 50 is two batches in flight: enough that a
+                # slow night does not block the next one, low enough
+                # that the queue cannot run away. The old value of 75
+                # was sized for a whole-queue count and tripped on
+                # night two against a queue that was 63% /movies-bulk.
+                - {name: MAX_QUEUE, value: "50"}
                 - {name: MIN_FREE_TB, value: "1.0"}
                 - {name: DRY_RUN, value: "false"}
                 - {name: TZ, value: Australia/Sydney}

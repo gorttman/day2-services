@@ -54,9 +54,11 @@ data:
     monitored, RSS keeps watching them for upgrades too, which is the
     point.
     
-    Scope is one root folder (default /movies). /movies-bulk is left alone
-    - bulk_backfill.py owns that one and works the missing list, not the
-    upgrade list.
+    Scope is one root folder (default /movies), and that scoping is applied
+    to the queue guard too, not just the search - the two pipelines share
+    one Radarr queue and would otherwise starve each other. /movies-bulk is
+    left alone: bulk_backfill.py owns that one and works the missing list,
+    not the upgrade list.
     """
     import json
     import os
@@ -108,6 +110,22 @@ data:
         return json.loads(raw) if raw.strip() else {}
     
     
+    def queue_movie_ids():
+        """Every movieId currently in Radarr's queue, across all pages.
+    
+        Paged rather than one big pageSize: the queue routinely carries the
+        /movies-bulk backfill's whole backlog, and a single-page assumption
+        would silently undercount once that passes the page size.
+        """
+        ids, page = [], 1
+        while True:
+            batch = api("queue?page=%d&pageSize=200" % page)
+            ids += [r["movieId"] for r in batch.get("records", []) if r.get("movieId")]
+            if len(ids) >= batch.get("totalRecords", 0) or not batch.get("records"):
+                return ids
+            page += 1
+    
+    
     def cutoff_index(profile):
         """Position of the profile's cutoff, and every quality's position.
     
@@ -154,12 +172,25 @@ data:
         global KEY
         KEY = api_key()
     
+        movies = api("movie")
+    
         # Guard 1: a backed-up queue means the pipe, not the search, is the
         # bottleneck. Adding more grabs on top of it is how both download
         # clients got wedged on 2026-09-07.
-        queue = api("queue?page=1&pageSize=1")["totalRecords"]
-        if queue > MAX_QUEUE:
-            log("queue is %d (max %d) - skipping tonight, downloads are behind" % (queue, MAX_QUEUE))
+        #
+        # Counted for THIS root folder only. The whole-queue version tripped
+        # on its second night (2026-09-09): 76 items against a limit of 75,
+        # but 48 of those were /movies-bulk and 47 of them were merely
+        # queued, while /movies had 21 actively downloading and was not
+        # backed up at all. The two pipelines share a queue and would
+        # otherwise starve each other - a stalled bulk backlog would pause
+        # upgrades indefinitely, for a bottleneck upgrades are not causing
+        # and cannot clear.
+        mine = {m["id"] for m in movies if m.get("rootFolderPath") == ROOT_FOLDER}
+        queued = [mid for mid in queue_movie_ids() if mid in mine]
+        if len(queued) > MAX_QUEUE:
+            log("%d queue items for %s (max %d) - skipping tonight, downloads are behind"
+                % (len(queued), ROOT_FOLDER, MAX_QUEUE))
             return
     
         # Guard 2: upgrades replace small files with large ones. Stop well
@@ -177,8 +208,8 @@ data:
         cutoffs = {pid: cutoff_index(p) for pid, p in profiles.items()}
     
         candidates = []
-        for m in api("movie"):
-            if m.get("rootFolderPath") != ROOT_FOLDER or not m.get("hasFile"):
+        for m in movies:
+            if m["id"] not in mine or not m.get("hasFile"):
                 continue
             if tag_id is not None and tag_id in m.get("tags", []):
                 continue
