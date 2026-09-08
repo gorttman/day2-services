@@ -54,6 +54,11 @@ data:
     monitored, RSS keeps watching them for upgrades too, which is the
     point.
     
+    This job is deliberately temporary. The backlog it clears is a one-off,
+    so the night it runs out of candidates it suspends its own CronJob and
+    says so in the log, rather than leaving a "delete this later" note for
+    someone to forget. See suspend_self().
+    
     Scope is one root folder (default /movies), and that scoping is applied
     to the queue guard too, not just the search - the two pipelines share
     one Radarr queue and would otherwise starve each other. /movies-bulk is
@@ -62,6 +67,7 @@ data:
     """
     import json
     import os
+    import ssl
     import sys
     import time
     import urllib.error
@@ -77,6 +83,11 @@ data:
     MAX_QUEUE = int(os.environ.get("MAX_QUEUE", "75"))
     MIN_FREE_TB = float(os.environ.get("MIN_FREE_TB", "1.0"))
     DRY_RUN = os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
+    # Set to this CronJob's own name to let it retire itself once the
+    # backlog is gone. Empty disables that entirely and the job just
+    # no-ops nightly instead.
+    CRONJOB_NAME = os.environ.get("CRONJOB_NAME", "")
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
     
     
     def log(msg):
@@ -168,6 +179,52 @@ data:
         return api("tag", "POST", {"label": TAG_LABEL})["id"]
     
     
+    def suspend_self():
+        """Switch this job's own CronJob off, permanently.
+    
+        This whole job is temporary - it exists to clear a one-off backlog
+        left by the 2026-09-08 library import, and once that is done there
+        is nothing for it to do ever again. Rather than leaving "remember to
+        delete this" as a note for someone, it retires itself the night the
+        backlog empties, and says so loudly in its last log.
+    
+        ArgoCD would normally revert spec.suspend straight back to false on
+        the next selfHeal pass - which is exactly what vpn-healer's explicit
+        `suspend: false` is there to guarantee. This CronJob is the one
+        exception, so arr-stack-app.yml carries an ignoreDifferences entry
+        scoped to THIS name only, leaving vpn-healer's protection intact.
+    
+        Deleting the manifests afterwards is then plain housekeeping, not
+        an operational requirement - a suspended CronJob costs nothing.
+        """
+        if not CRONJOB_NAME:
+            log("backlog clear. CRONJOB_NAME unset, so not self-suspending - "
+                "this job can be deleted whenever convenient.")
+            return
+        with open(SA_DIR + "/token") as f:
+            token = f.read().strip()
+        with open(SA_DIR + "/namespace") as f:
+            ns = f.read().strip()
+        url = ("https://kubernetes.default.svc/apis/batch/v1/namespaces/%s/cronjobs/%s"
+               % (ns, CRONJOB_NAME))
+        req = urllib.request.Request(
+            url, data=json.dumps({"spec": {"suspend": True}}).encode(), method="PATCH",
+            headers={"Authorization": "Bearer " + token,
+                     "Content-Type": "application/merge-patch+json"})
+        ctx = ssl.create_default_context(cafile=SA_DIR + "/ca.crt")
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=30) as r:
+                suspended = json.load(r)["spec"].get("suspend")
+        except urllib.error.HTTPError as e:
+            log("could not self-suspend %s: HTTP %s %s"
+                % (CRONJOB_NAME, e.code, e.read().decode()[:300]))
+            return
+        log("SUSPENDED %s (spec.suspend=%s). The upgrade backlog is finished - "
+            "this job has retired itself and will not run again. Its manifests "
+            "under apps/arr-stack/upgrade-search/ can now be deleted."
+            % (CRONJOB_NAME, suspended))
+    
+    
     def main():
         global KEY
         KEY = api_key()
@@ -237,6 +294,8 @@ data:
         batch = [m for _, _, m in wanted[:BATCH]]
         if not batch:
             log("nothing left to search in tiers %s - backlog is clear" % TIERS)
+            if not DRY_RUN:
+                suspend_self()
             return
     
         for m in batch:

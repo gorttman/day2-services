@@ -257,6 +257,20 @@ to 50 with the change, since it now counts a much smaller set.
 First run, 2026-09-08: 25 searched, 15 grabbed, all Bluray-1080p. At
 BATCH=25 the backlog is about 45 nights.
 
+**It retires itself.** This job is temporary by design - the backlog is
+a one-off left by the import, and once it is gone there is nothing for
+the job to do again. The night it runs out of candidates it patches its
+own CronJob to `suspend: true` and says so in its final log, rather
+than leaving a "delete this later" note for someone to skip. RBAC for
+that is `resourceNames`-pinned to this one CronJob (get + patch, one
+namespace), so it cannot suspend vpn-healer or anything else.
+
+selfHeal would normally undo that within minutes, so arr-stack-app.yml
+carries an `ignoreDifferences` on `/spec/suspend` scoped to this name
+only - vpn-healer's explicit `suspend: false` protection is unchanged.
+Deleting `upgrade-search/` afterwards is then housekeeping, not an
+operational requirement: a suspended CronJob costs nothing.
+
 Pace is tuned by env on the CronJob - `BATCH`, `TIERS`, `MAX_QUEUE`,
 `MIN_FREE_TB`. Scope is `ROOT_FOLDER` (/movies); /movies-bulk is left
 alone, `~/gm-dev/bulk_backfill.py` owns that one and works the missing

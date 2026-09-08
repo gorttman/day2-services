@@ -20,3 +20,17 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+  # radarr-upgrade-search is a deliberately temporary job: it clears the
+  # one-off upgrade backlog left by the 2026-09-08 library import, then
+  # suspends its own CronJob (see upgrade-search/upgrade_search.py's
+  # suspend_self). selfHeal would otherwise flip suspend straight back
+  # to false and resurrect it the night it retires. Scoped to that one
+  # name on purpose - vpn-healer's explicit `suspend: false` keeps
+  # working exactly as before, which is what stops a live suspend there
+  # sitting unnoticed while the app still reads Synced.
+  ignoreDifferences:
+    - group: batch
+      kind: CronJob
+      name: radarr-upgrade-search
+      jsonPointers:
+        - /spec/suspend

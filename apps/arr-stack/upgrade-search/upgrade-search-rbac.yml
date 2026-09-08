@@ -1,0 +1,52 @@
+# Lets the nightly upgrade-search switch its own CronJob off once the
+# backlog it exists to clear is gone - see suspend_self() in
+# upgrade_search.py. Without this the job would keep firing forever
+# after finishing its work, and "remember to delete it" would be a note
+# someone eventually skips.
+#
+# Scoped as tightly as arr-stack-seed's equivalent: two verbs on one
+# resource in one namespace, and resourceNames pins it to this single
+# CronJob - it cannot suspend vpn-healer or anything else that lands in
+# arr-stack later.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: radarr-upgrade-search
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: radarr-upgrade-search
+    argocd.argoproj.io/managed-by: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: radarr-upgrade-search-self-suspend
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: radarr-upgrade-search
+    argocd.argoproj.io/managed-by: argocd
+rules:
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    resourceNames: ["radarr-upgrade-search"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: radarr-upgrade-search-self-suspend
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: radarr-upgrade-search
+    argocd.argoproj.io/managed-by: argocd
+subjects:
+  - kind: ServiceAccount
+    name: radarr-upgrade-search
+    namespace: arr-stack
+roleRef:
+  kind: Role
+  name: radarr-upgrade-search-self-suspend
+  apiGroup: rbac.authorization.k8s.io

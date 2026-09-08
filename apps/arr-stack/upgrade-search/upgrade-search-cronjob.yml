@@ -38,7 +38,11 @@ spec:
   schedule: "30 3 * * *"
   # Declared explicitly for the same reason vpn-healer declares it:
   # ArgoCD cannot diff a field the desired state omits, so a live
-  # suspend would stick and the app would still read Synced.
+  # suspend would stick and the app would still read Synced. Unlike
+  # vpn-healer, this one is ALSO listed in arr-stack-app.yml's
+  # ignoreDifferences, because the job is meant to suspend itself once
+  # its backlog is done - selfHeal would otherwise resurrect it the
+  # night it retires. The exception is scoped to this name only.
   suspend: false
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
@@ -54,6 +58,7 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          serviceAccountName: radarr-upgrade-search
           affinity:
             podAffinity:
               requiredDuringSchedulingIgnoredDuringExecution:
@@ -94,6 +99,10 @@ spec:
                 - {name: MAX_QUEUE, value: "50"}
                 - {name: MIN_FREE_TB, value: "1.0"}
                 - {name: DRY_RUN, value: "false"}
+                # Its own name, which is what lets it retire itself the
+                # night the backlog empties (see suspend_self()). Unset
+                # this and it just no-ops nightly instead.
+                - {name: CRONJOB_NAME, value: "radarr-upgrade-search"}
                 - {name: TZ, value: Australia/Sydney}
               volumeMounts:
                 - name: script
