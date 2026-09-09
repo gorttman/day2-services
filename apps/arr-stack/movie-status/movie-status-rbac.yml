@@ -1,0 +1,36 @@
+# The board shows whether the nightly upgrade job is still active or has
+# retired itself, which means one read of that CronJob. Its own
+# ServiceAccount with get only - deliberately not the search job's
+# account, which also carries patch. A dashboard has no business being
+# able to suspend anything.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: movie-status
+  namespace: arr-stack
+  labels: {app: arr-stack, app.kubernetes.io/name: movie-status, argocd.argoproj.io/managed-by: argocd}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: movie-status-read-cronjob
+  namespace: arr-stack
+  labels: {app: arr-stack, app.kubernetes.io/name: movie-status, argocd.argoproj.io/managed-by: argocd}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    resourceNames: ["radarr-upgrade-search"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: movie-status-read-cronjob
+  namespace: arr-stack
+  labels: {app: arr-stack, app.kubernetes.io/name: movie-status, argocd.argoproj.io/managed-by: argocd}
+subjects:
+  - {kind: ServiceAccount, name: movie-status, namespace: arr-stack}
+roleRef:
+  kind: Role
+  name: movie-status-read-cronjob
+  apiGroup: rbac.authorization.k8s.io

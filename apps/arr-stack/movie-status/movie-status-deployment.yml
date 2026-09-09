@@ -1,0 +1,94 @@
+# On-demand status board for both movie backfills.
+#
+# Every request re-reads Radarr and renders fresh - no cache, no
+# CronJob writing a static file whose age you then have to trust. Same
+# shape and same reasoning as backup-dashboard, which replaced exactly
+# that pattern.
+#
+# podAffinity to arr-stack is load-bearing, not a preference: it reads
+# Radarr's API key from that pod's config PVC, and Longhorn's RWO only
+# permits the second mount on the node already holding the volume. It
+# also pins to k8smaster through that affinity, which is where the
+# bulk-backfill state file lives.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: movie-status
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: movie-status
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  # Recreate, not RollingUpdate: two replicas cannot both hold the
+  # radarr-config RWO mount cleanly, and a second pod would just sit
+  # ContainerCreating while the first is still terminating.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: movie-status
+  template:
+    metadata:
+      # Deliberately NOT app: arr-stack. Every Service in this namespace
+      # selects on that single label, so a pod wearing it is silently
+      # added as an endpoint of radarr, sonarr, sabnzbd and the rest -
+      # which sends about half of all traffic to those apps here, to a
+      # port nothing is listening on. Hit live on 2026-09-10.
+      # The podAffinity above still selects app: arr-stack, which is
+      # what matches the real stack pod; only this pod's own labels
+      # changed.
+      labels:
+        app.kubernetes.io/name: movie-status
+        app.kubernetes.io/part-of: arr-stack
+    spec:
+      serviceAccountName: movie-status
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: arr-stack
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: movie-status
+          image: python:3.12-alpine
+          command: ["python3", "/app/movie_status.py"]
+          ports:
+            - {name: http, containerPort: 8080}
+          env:
+            # Must match the search CronJob's BATCH or the "nights
+            # remaining" figure lies.
+            - {name: MAIN_BATCH, value: "25"}
+            # bulk_backfill.py's own default batch size.
+            - {name: BULK_BATCH, value: "50"}
+            - {name: TZ, value: Australia/Sydney}
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+            - {name: radarr-config, mountPath: /app-config/radarr, readOnly: true}
+            - {name: bulk-state, mountPath: /state/bulk_backfill_state.json, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 2
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests: {memory: "48Mi", cpu: "10m"}
+            limits: {memory: "192Mi", cpu: "500m"}
+      volumes:
+        - name: app
+          configMap: {name: movie-status}
+        - name: radarr-config
+          persistentVolumeClaim: {claimName: radarr-config, readOnly: true}
+        # bulk_backfill.py is a host script with a host state file, and
+        # rewrites it in place (open "w", same inode), so a File
+        # hostPath stays valid across runs. Scoped to the one file
+        # rather than the directory - nothing else in ~/gm-dev is this
+        # pod's business.
+        - name: bulk-state
+          hostPath:
+            path: /home/gorttman/gm-dev/bulk_backfill_state.json
+            type: File

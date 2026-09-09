@@ -1,0 +1,509 @@
+# Server and page for the on-demand backfill status board. See
+# movie_status.py's docstring for why this is self-hosted rather than a
+# hosted page: the data only exists on the LAN.
+#
+# Whole-directory mount, not subPath, so editing either file here
+# reaches the pod on kubelet's next sync. The Python process still
+# needs a restart to pick up code changes (it loads movie_status.py
+# once at start) - index.html is re-read per request and does not.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: movie-status
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: movie-status
+    argocd.argoproj.io/managed-by: argocd
+data:
+  movie_status.py: |
+    #!/usr/bin/env python3
+    """On-demand status page for the two movie backfills.
+
+    Same shape as backup-dashboard and for the same reason: every request
+    re-reads live state and renders fresh, rather than a CronJob writing a
+    static file someone then has to trust the age of. Nothing is cached and
+    nothing is scheduled - the Refresh button is the whole mechanism.
+
+    Self-hosted rather than a claude.ai artifact because the data lives on
+    the LAN: Radarr is only reachable in-cluster, and a hosted page cannot
+    fetch it. That decision was already made once for backup-dashboard.
+
+    Two libraries, two different jobs, deliberately not merged into one
+    number:
+
+      /movies       upgrade backfill - every title already has a file, the
+                    job is replacing bad copies with better ones. Runs
+                    itself nightly. Progress = how many have been searched.
+
+      /movies-bulk  the midday-movie library - titles that have no file at
+                    all. Driven by hand from ~/gm-dev/bulk_backfill.py, so
+                    it has no schedule and no honest wall-clock ETA, only a
+                    measured recent rate.
+    """
+    import datetime
+    import json
+    import os
+    import ssl
+    import urllib.error
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    CONFIG_XML = os.environ.get("RADARR_CONFIG", "/app-config/radarr/config.xml")
+    BASE_URL = os.environ.get("RADARR_URL", "http://radarr.arr-stack.svc.cluster.local:7878")
+    MAIN_ROOT = os.environ.get("MAIN_ROOT", "/movies")
+    BULK_ROOT = os.environ.get("BULK_ROOT", "/movies-bulk")
+    TAG_LABEL = os.environ.get("TAG_LABEL", "upgrade-searched")
+    MAIN_BATCH = int(os.environ.get("MAIN_BATCH", "25"))
+    BULK_BATCH = int(os.environ.get("BULK_BATCH", "50"))
+    BULK_STATE = os.environ.get("BULK_STATE", "/state/bulk_backfill_state.json")
+    SEARCH_CRONJOB = os.environ.get("SEARCH_CRONJOB", "radarr-upgrade-search")
+    PORT = int(os.environ.get("PORT", "8080"))
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    HISTORY_PAGES = int(os.environ.get("HISTORY_PAGES", "12"))
+
+
+    def api(path):
+        key = ET.parse(CONFIG_XML).getroot().findtext("ApiKey")
+        req = urllib.request.Request("%s/api/v3/%s" % (BASE_URL, path),
+                                     headers={"X-Api-Key": key})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read().decode()
+        return json.loads(raw) if raw.strip() else {}
+
+
+    def cutoff_index(profile):
+        pos, cut = {}, None
+        for i, item in enumerate(profile["items"]):
+            if item.get("quality"):
+                pos[item["quality"]["id"]] = i
+                if item["quality"]["id"] == profile["cutoff"]:
+                    cut = i
+            else:
+                if item.get("id") == profile["cutoff"]:
+                    cut = i
+                for sub in item.get("items", []):
+                    pos[sub["quality"]["id"]] = i
+        return pos, cut
+
+
+    def cronjob_state(name):
+        """Whether the nightly job is still active or has retired itself.
+
+        Read-only, through the same ServiceAccount the CronJobs use - the
+        Role already grants get on exactly these two names.
+        """
+        try:
+            with open(SA_DIR + "/token") as f:
+                token = f.read().strip()
+            with open(SA_DIR + "/namespace") as f:
+                ns = f.read().strip()
+            req = urllib.request.Request(
+                "https://kubernetes.default.svc/apis/batch/v1/namespaces/%s/cronjobs/%s" % (ns, name),
+                headers={"Authorization": "Bearer " + token})
+            with urllib.request.urlopen(
+                    req, context=ssl.create_default_context(cafile=SA_DIR + "/ca.crt"),
+                    timeout=15) as r:
+                cj = json.load(r)
+            return {"found": True,
+                    "suspended": bool(cj["spec"].get("suspend")),
+                    "schedule": cj["spec"].get("schedule"),
+                    "lastRun": cj.get("status", {}).get("lastScheduleTime")}
+        except Exception as e:
+            return {"found": False, "error": str(e)[:120]}
+
+
+    def collect():
+        profiles = {p["id"]: p for p in api("qualityprofile")}
+        cutoffs = {pid: cutoff_index(p) for pid, p in profiles.items()}
+        tag_id = next((t["id"] for t in api("tag") if t["label"] == TAG_LABEL), None)
+        movies = api("movie")
+        roots = {r["path"]: r for r in api("rootfolder")}
+
+        by_root = {MAIN_ROOT: {}, BULK_ROOT: {}}
+        for m in movies:
+            if m.get("rootFolderPath") in by_root:
+                by_root[m["rootFolderPath"]][m["id"]] = m
+
+        # Queue, all pages - it routinely carries both libraries at once.
+        queue, page = [], 1
+        while True:
+            q = api("queue?page=%d&pageSize=200" % page)
+            queue += q.get("records", [])
+            if len(queue) >= q.get("totalRecords", 0) or not q.get("records"):
+                break
+            page += 1
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        day = (now - datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        week = (now - datetime.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        hist, page = [], 1
+        while page <= HISTORY_PAGES:
+            h = api("history?page=%d&pageSize=250&sortKey=date&sortDirection=descending" % page)
+            recs = h.get("records", [])
+            hist += recs
+            if not recs or len(hist) >= h.get("totalRecords", 0):
+                break
+            page += 1
+
+        def stats(root, mode):
+            mine = by_root[root]
+            met = below = withfile = 0
+            tiers = {"1": 0, "2": 0, "3": 0}
+            searched = 0
+            for m in mine.values():
+                if tag_id is not None and tag_id in m.get("tags", []):
+                    searched += 1
+                if not m.get("hasFile"):
+                    continue
+                withfile += 1
+                prof = profiles.get(m["qualityProfileId"])
+                if prof is None:
+                    continue
+                pos, cut = cutoffs[m["qualityProfileId"]]
+                qual = m["movieFile"]["quality"]["quality"]
+                i = pos.get(qual["id"])
+                if i is None or i >= cut:
+                    met += 1
+                else:
+                    below += 1
+                    r = qual["resolution"]
+                    tiers[str(1 if r < 720 else (2 if r == 720 else 3))] += 1
+
+            qm = [r for r in queue if r.get("movieId") in mine]
+            qcount = {}
+            for r in qm:
+                qcount[r.get("status", "?")] = qcount.get(r.get("status", "?"), 0) + 1
+            flagged = []
+            for r in qm:
+                if r.get("trackedDownloadStatus") in ("warning", "error"):
+                    msgs = [x["messages"][0] for x in r.get("statusMessages", []) if x.get("messages")]
+                    flagged.append({"title": r.get("title", "?")[:90],
+                                    "status": r.get("status"),
+                                    "message": msgs[0] if msgs else ""})
+
+            hm = [x for x in hist if x["movieId"] in mine]
+            replaced = sum(1 for x in hm if x["eventType"] == "movieFileDeleted"
+                           and x.get("data", {}).get("reason") == "Upgrade")
+            imported = [x for x in hm if x["eventType"] == "downloadFolderImported"]
+            recent = [{"title": mine[x["movieId"]]["title"],
+                       "year": mine[x["movieId"]].get("year"),
+                       "quality": x["quality"]["quality"]["name"],
+                       "date": x["date"]}
+                      for x in imported[:12]]
+
+            if mode == "upgrade":
+                # What the nightly job still has to work through: has a
+                # file, is below cutoff, and has not been searched yet.
+                # Deliberately not "below cutoff" on its own - a title that
+                # upgraded 480p -> WEB 1080p is still below the Bluray
+                # cutoff but is finished as far as this job is concerned.
+                # Filters kept identical to upgrade_search.py's own
+                # candidate query, isAvailable and upgradeAllowed included -
+                # a board that disagrees with the job it reports on by three
+                # titles is worse than no board.
+                remaining = sum(1 for m in mine.values()
+                                if m.get("hasFile")
+                                and m.get("isAvailable", True)
+                                and (tag_id is None or tag_id not in m.get("tags", []))
+                                and profiles.get(m["qualityProfileId"], {}).get("upgradeAllowed")
+                                and _below(m, profiles, cutoffs))
+                nights = (remaining + MAIN_BATCH - 1) // MAIN_BATCH
+                eta = (datetime.date.today() + datetime.timedelta(days=nights)).isoformat() if nights else None
+                cron = cronjob_state(SEARCH_CRONJOB)
+            else:
+                searched = 0
+                try:
+                    with open(BULK_STATE) as f:
+                        searched = len(json.load(f).get("searched", []))
+                except Exception:
+                    searched = None
+                remaining = len(mine) - withfile
+                nights = None
+                eta = None
+                cron = {"found": False, "manual": True}
+
+            return {
+                "root": root, "mode": mode,
+                "titles": len(mine), "withFile": withfile,
+                "meetCutoff": met, "belowCutoff": below, "tiers": tiers,
+                "searched": searched, "remaining": remaining,
+                "queue": {"total": len(qm), "byStatus": qcount, "flagged": flagged},
+                "replaced": replaced,
+                "imported24h": sum(1 for x in imported if x["date"] >= day),
+                "imported7d": sum(1 for x in imported if x["date"] >= week),
+                "grabbed7d": sum(1 for x in hm if x["eventType"] == "grabbed" and x["date"] >= week),
+                "failed7d": sum(1 for x in hm if x["eventType"] == "downloadFailed" and x["date"] >= week),
+                "recent": recent,
+                "batch": MAIN_BATCH if mode == "upgrade" else BULK_BATCH,
+                "nights": nights, "eta": eta, "cron": cron,
+            }
+
+        return {
+            "generated": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "historyTruncated": len(hist) >= HISTORY_PAGES * 250,
+            "freeTB": round(roots.get(MAIN_ROOT, {}).get("freeSpace", 0) / 1e12, 2),
+            "main": stats(MAIN_ROOT, "upgrade"),
+            "bulk": stats(BULK_ROOT, "missing"),
+        }
+
+
+    def _below(m, profiles, cutoffs):
+        prof = profiles.get(m["qualityProfileId"])
+        if prof is None:
+            return False
+        pos, cut = cutoffs[m["qualityProfileId"]]
+        i = pos.get(m["movieFile"]["quality"]["quality"]["id"])
+        return i is not None and i < cut
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, body, ctype):
+            raw = body.encode()
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Cache-Control", "no-store, must-revalidate")
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            if self.path.startswith("/api/status"):
+                try:
+                    self._send(200, json.dumps(collect()), "application/json")
+                except Exception as e:
+                    self._send(500, json.dumps({"error": str(e)[:300]}), "application/json")
+            elif self.path == "/healthz":
+                self._send(200, "ok", "text/plain")
+            else:
+                with open("/app/index.html") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+
+
+    if __name__ == "__main__":
+        ThreadingHTTPServer(("", PORT), Handler).serve_forever()
+  index.html: |
+    <!-- Rendered by movie_status.py. React from CDN, no build step: this is
+         a one-user LAN dashboard, and a toolchain to maintain would cost
+         more than it saves. -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Movie backfill status</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f6f7f9; --card: #fff; --ink: #14161a; --muted: #666e7a;
+        --line: #e3e6ea; --accent: #2f6feb; --good: #1a7f4b; --warn: #b45309;
+        --bad: #b42318; --track: #e8ebef;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1216; --card: #171b21; --ink: #e8eaed; --muted: #98a1ad;
+          --line: #262c34; --accent: #6ea8fe; --good: #4ade80; --warn: #fbbf24;
+          --bad: #f87171; --track: #232931;
+        }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink);
+             font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
+      header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+               margin-bottom: 18px; }
+      h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+      .stamp { color: var(--muted); font-size: 13px; }
+      button { margin-left: auto; font: inherit; font-weight: 600; cursor: pointer;
+               background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+               padding: 8px 16px; }
+      button[disabled] { opacity: .55; cursor: default; }
+      .card { background: var(--card); border: 1px solid var(--line);
+              border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+      .card > h2 { font-size: 16px; margin: 0 0 2px; }
+      .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+      .badge { display: inline-block; font-size: 12px; font-weight: 600;
+               padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line);
+               color: var(--muted); }
+      .badge.on { color: var(--good); border-color: currentColor; }
+      .badge.off { color: var(--muted); }
+      .badge.man { color: var(--warn); border-color: currentColor; }
+      .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+              gap: 12px; margin-bottom: 16px; }
+      .num { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+      .num b { display: block; font-size: 24px; font-weight: 650; letter-spacing: -.02em; }
+      .num span { color: var(--muted); font-size: 12px; }
+      .bar { height: 8px; background: var(--track); border-radius: 99px; overflow: hidden;
+             display: flex; margin: 4px 0 6px; }
+      .bar i { display: block; height: 100%; }
+      .legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted);
+                font-size: 12px; margin-bottom: 14px; }
+      .legend s { width: 8px; height: 8px; border-radius: 2px; display: inline-block;
+                  margin-right: 5px; }
+      .eta { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+      .eta b { color: var(--ink); }
+      h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
+           color: var(--muted); margin: 16px 0 8px; }
+      ul { margin: 0; padding: 0; list-style: none; }
+      li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px;
+           display: flex; gap: 10px; }
+      li span { color: var(--muted); font-size: 12px; margin-left: auto;
+                white-space: nowrap; }
+      .alert { border-left: 3px solid var(--bad); background: color-mix(in srgb, var(--bad) 7%, transparent);
+               border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; }
+      .alert b { color: var(--bad); }
+      .none { color: var(--muted); font-size: 14px; }
+      .err { color: var(--bad); }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      td { padding: 5px 0; border-top: 1px solid var(--line); }
+      td:last-child { text-align: right; color: var(--muted); }
+    </style>
+    <div id="root" class="wrap"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+    <script>
+    const html = htm.bind(React.createElement);
+    const {useState, useEffect, useCallback} = React;
+
+    const pct = (n, d) => d > 0 ? Math.round(n / d * 1000) / 10 : 0;
+    const when = s => s ? new Date(s).toLocaleString([], {dateStyle:'medium', timeStyle:'short'}) : '-';
+
+    function Num({v, label}) {
+      return html`<div class="num"><b>${v === null || v === undefined ? '?' : v.toLocaleString()}</b><span>${label}</span></div>`;
+    }
+
+    function Flagged({items}) {
+      if (!items.length) return null;
+      return html`<div class="alert">
+        <b>Needs a person - ${items.length} item${items.length > 1 ? 's' : ''} stuck.</b>
+        These do not clear themselves; Radarr, Activity, Queue.
+        <ul>${items.map((f, i) => html`<li key=${i}>${f.title}<span>${f.message || f.status}</span></li>`)}</ul>
+      </div>`;
+    }
+
+    function Upgrade({d, free}) {
+      const done = d.replaced, queued = d.queue.total, left = d.remaining;
+      const total = done + queued + left || 1;
+      const cron = d.cron.found
+        ? (d.cron.suspended
+            ? html`<span class="badge off">retired - backlog finished</span>`
+            : html`<span class="badge on">nightly ${d.cron.schedule}</span>`)
+        : html`<span class="badge">schedule unknown</span>`;
+      return html`<div class="card">
+        <h2>Main library ${cron}</h2>
+        <div class="sub">${d.root} - replacing poor copies with better ones. ${d.titles.toLocaleString()} titles, ${free} TB free.</div>
+        <${Flagged} items=${d.queue.flagged} />
+        <div class="nums">
+          <${Num} v=${done} label="replaced so far" />
+          <${Num} v=${queued} label="in the queue now" />
+          <${Num} v=${left} label="still to search" />
+          <${Num} v=${d.meetCutoff} label="at Bluray-1080p" />
+        </div>
+        <div class="bar">
+          <i style=${{width: pct(done, total)+'%', background:'var(--good)'}}></i>
+          <i style=${{width: pct(queued, total)+'%', background:'var(--accent)'}}></i>
+        </div>
+        <div class="legend">
+          <span><s style=${{background:'var(--good)'}}></s>done ${pct(done,total)}%</span>
+          <span><s style=${{background:'var(--accent)'}}></s>queued</span>
+          <span><s style=${{background:'var(--track)'}}></s>remaining</span>
+        </div>
+        <div class="eta">
+          ${d.cron.suspended
+            ? html`Finished. Nothing left to search.`
+            : html`<b>${d.nights}</b> more nights at ${d.batch} a night - about <b>${d.eta}</b>.
+                   Last run ${when(d.cron.lastRun)}.`}
+        </div>
+        <h3>Still below cutoff (${d.belowCutoff.toLocaleString()})</h3>
+        <table><tbody>
+          <tr><td>Under 720p</td><td>${d.tiers['1'].toLocaleString()}</td></tr>
+          <tr><td>720p</td><td>${d.tiers['2'].toLocaleString()}</td></tr>
+          <tr><td>1080p, not Bluray</td><td>${d.tiers['3'].toLocaleString()}</td></tr>
+        </tbody></table>
+        <div class="eta" style=${{marginTop:'10px'}}>
+          Some of these are already finished as far as the job is concerned - a title
+          that went 480p to WEB 1080p is a big win but still below a Bluray cutoff,
+          and it will not be searched again.
+        </div>
+        <${Recent} d=${d} />
+      </div>`;
+    }
+
+    function Bulk({d}) {
+      const have = d.withFile, missing = d.remaining, queued = d.queue.total;
+      const total = d.titles || 1;
+      const searched = d.searched;
+      return html`<div class="card">
+        <h2>Midday movies <span class="badge man">run by hand</span></h2>
+        <div class="sub">${d.root} - finding titles there is no copy of at all. ${d.titles.toLocaleString()} tracked.</div>
+        <${Flagged} items=${d.queue.flagged} />
+        <div class="nums">
+          <${Num} v=${have} label="found and kept" />
+          <${Num} v=${queued} label="in the queue now" />
+          <${Num} v=${missing} label="still missing" />
+          <${Num} v=${searched} label="searched so far" />
+        </div>
+        <div class="bar">
+          <i style=${{width: pct(have, total)+'%', background:'var(--good)'}}></i>
+          <i style=${{width: pct(queued, total)+'%', background:'var(--accent)'}}></i>
+        </div>
+        <div class="legend">
+          <span><s style=${{background:'var(--good)'}}></s>have ${pct(have,total)}%</span>
+          <span><s style=${{background:'var(--accent)'}}></s>queued</span>
+          <span><s style=${{background:'var(--track)'}}></s>missing</span>
+        </div>
+        <div class="eta">
+          No schedule - this one only moves when <b>bulk_backfill.py</b> is run.
+          ${searched === null ? '' : html`${(total - searched).toLocaleString()} never searched,
+            about ${Math.ceil((total - searched) / d.batch).toLocaleString()} more batches of ${d.batch}.`}
+          Last 7 days: ${d.grabbed7d} grabbed, ${d.imported7d} imported.
+        </div>
+        <${Recent} d=${d} />
+      </div>`;
+    }
+
+    function Recent({d}) {
+      return html`<div>
+        <h3>Landed recently - ${d.imported24h} in 24h, ${d.imported7d} in 7 days${d.failed7d ? `, ${d.failed7d} failed` : ''}</h3>
+        ${d.recent.length
+          ? html`<ul>${d.recent.map((r, i) => html`<li key=${i}>${r.title} ${r.year ? `(${r.year})` : ''}<span>${r.quality} - ${when(r.date)}</span></li>`)}</ul>`
+          : html`<div class="none">Nothing in the window this report covers.</div>`}
+      </div>`;
+    }
+
+    function App() {
+      const [data, setData] = useState(null);
+      const [err, setErr] = useState(null);
+      const [busy, setBusy] = useState(false);
+
+      const load = useCallback(() => {
+        setBusy(true); setErr(null);
+        fetch('/api/status', {cache: 'no-store'})
+          .then(r => r.json())
+          .then(j => j.error ? Promise.reject(new Error(j.error)) : setData(j))
+          .catch(e => setErr(e.message))
+          .finally(() => setBusy(false));
+      }, []);
+
+      useEffect(load, [load]);
+
+      return html`<div>
+        <header>
+          <h1>Movie backfill</h1>
+          <div class="stamp">${data ? `as at ${when(data.generated)}` : busy ? 'loading' : ''}</div>
+          <button onClick=${load} disabled=${busy}>${busy ? 'Refreshing' : 'Refresh'}</button>
+        </header>
+        ${err && html`<div class="card err">Could not read Radarr: ${err}</div>`}
+        ${data && html`<${Upgrade} d=${data.main} free=${data.freeTB} />`}
+        ${data && html`<${Bulk} d=${data.bulk} />`}
+        ${data && data.historyTruncated && html`<div class="stamp">
+          History window is capped, so "replaced so far" counts only as far back as that reaches.
+        </div>`}
+      </div>`;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);
+    </script>

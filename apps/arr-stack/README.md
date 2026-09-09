@@ -286,6 +286,36 @@ Pace is tuned by env on the CronJob - `BATCH`, `TIERS`, `MAX_QUEUE`,
 alone, `~/gm-dev/bulk_backfill.py` owns that one and works the missing
 list rather than the upgrade list.
 
+## LIVE 2026-09-10: on-demand status board (movie-status)
+
+`movie-status.i3sec.com.au` - one page, two cards, a Refresh button and
+no cache. Every request re-reads Radarr and renders fresh, the same
+shape and reasoning as backup-dashboard: a CronJob writing a static
+file leaves you trusting its age instead of the data.
+
+Self-hosted rather than a claude.ai artifact because the data only
+exists on the LAN - Radarr is in-cluster only and a hosted page cannot
+reach it. That call was already made once, for backup-dashboard.
+
+Shows, for each library: what has been replaced, what is queued, what
+is left, expected finish, what landed recently, and separately anything
+stuck that needs a person. `/movies` is the upgrade backfill and has a
+real nightly schedule, so it gets a date. `/movies-bulk` - the midday
+movies - is driven by hand from `~/gm-dev/bulk_backfill.py`, so it
+shows a measured rate and batch count instead of a fake ETA. Its
+"searched" figure comes from that script's own state file, mounted as a
+single-file read-only hostPath (the script rewrites it in place, so the
+inode is stable).
+
+**The pod must not carry `app: arr-stack`.** Every Service in this
+namespace selects on that one label, so a pod wearing it silently
+joins radarr, sonarr, sabnzbd and the rest as an endpoint - sending
+about half their traffic to a port nothing listens on. Done by accident
+on 2026-09-10 and caught within a minute by the board's own API failing
+with connection-refused. The podAffinity still selects `app: arr-stack`
+to co-locate with the real stack pod; only this pod's own labels
+differ. Same trap applies to anything else added to this namespace.
+
 ## Removed: bazarr and jdownloader2 (2026-08-08)
 
 Both worked fine - this was a scope/preference call, not a bug, made
