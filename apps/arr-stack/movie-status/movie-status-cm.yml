@@ -161,6 +161,33 @@ data:
             return {"ok": False, "error": str(e)[:120]}
 
 
+    def in_flight(app, recs):
+        """What is actually moving right now, newest progress first.
+
+        "43 items queued" answers nothing on its own - the question is
+        always which ones, and whether any of them are stuck at 0%. Size
+        and sizeleft give real progress; estimatedCompletionTime is
+        Radarr's own guess and is often absent, so it is passed through
+        rather than recomputed.
+        """
+        out = []
+        for r in recs:
+            if r.get("status") != "downloading":
+                continue
+            size = float(r.get("size") or 0)
+            left = float(r.get("sizeleft") or 0)
+            out.append({
+                "app": app,
+                "title": (r.get("title") or "?")[:95],
+                "pct": round(100 * (size - left) / size, 1) if size else 0,
+                "gb": round(size / 1e9, 2),
+                "protocol": r.get("protocol"),
+                "eta": r.get("estimatedCompletionTime"),
+            })
+        out.sort(key=lambda x: -x["pct"])
+        return out
+
+
     def flagged_of(recs):
         out = []
         for r in recs:
@@ -257,7 +284,7 @@ data:
 
         return (side(MAIN_ROOT, "upgrade"), side(BULK_ROOT, "missing"),
                 round(roots.get(MAIN_ROOT, {}).get("freeSpace", 0) / 1e12, 2),
-                flagged_of(queue), len(queue))
+                flagged_of(queue), len(queue), in_flight("radarr", queue))
 
 
     def tv_side():
@@ -287,6 +314,7 @@ data:
                       "torrent": sum(1 for r in queue if r.get("protocol") == "torrent"),
                       "usenet": sum(1 for r in queue if r.get("protocol") == "usenet")},
             "flagged": flagged_of(queue),
+            "inFlight": in_flight("sonarr", queue),
         }
 
 
@@ -306,19 +334,21 @@ data:
 
 
     def collect():
-        main, bulk, free, rflag, rq = movie_side()
+        main, bulk, free, rflag, rq, rflight = movie_side()
         tv = tv_side()
         try:
             wq = arr_queue("whisparr")
             wflag = flagged_of(wq)
+            wflight = in_flight("whisparr", wq)
         except Exception:
-            wq, wflag = [], []
+            wq, wflag, wflight = [], [], []
         return {
             "generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "freeTB": free,
             "health": health(),
             "sab": sab(),
             "needsPerson": rflag + tv["flagged"] + wflag,
+            "inFlight": sorted(rflight + tv["inFlight"] + wflight, key=lambda x: -x["pct"]),
             "queues": {"radarr": rq, "sonarr": tv["queue"]["total"], "whisparr": len(wq)},
             "main": main, "bulk": bulk, "tv": tv,
             "jobs": [cronjob_state(c) for c in CRONJOBS],
@@ -354,77 +384,87 @@ data:
     if __name__ == "__main__":
         ThreadingHTTPServer(("", PORT), Handler).serve_forever()
   index.html: |
-    <!-- Rendered by movie_status.py. React from CDN, no build step: this is
-         a one-user LAN dashboard, and a toolchain to maintain would cost
-         more than it saves. -->
+    <!-- Rendered by movie_status.py. React from CDN, no build step: a
+         one-user LAN dashboard, where a toolchain would cost more than it
+         saves.
+
+         Colours are the dataviz reference palette used verbatim - the first
+         three categorical slots plus the fixed status palette. Nothing was
+         re-stepped or invented, so the documented validation for that set
+         still applies (the validator itself needs node, which this host
+         does not have). Only two categorical slots are ever on screen at
+         once; "remaining" is the neutral track, not a third hue, because it
+         is absence rather than a category.
+
+         Status colours are reserved for state and always ship with a label,
+         never colour alone - warning and serious sit below 3:1 on the light
+         surface by design, and the label is the mitigation. -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Media pipeline status</title>
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #f6f7f9; --card: #fff; --ink: #14161a; --muted: #666e7a;
-        --line: #e3e6ea; --accent: #2f6feb; --good: #1a7f4b; --warn: #b45309;
-        --bad: #b42318; --track: #e8ebef;
+        --plane:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --ink3:#77766f;
+        --line:#e3e6ea; --track:#e8ebef;
+        --s1:#2a78d6; --s2:#eb6834;
+        --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
       }
       @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #0f1216; --card: #171b21; --ink: #e8eaed; --muted: #98a1ad;
-          --line: #262c34; --accent: #6ea8fe; --good: #4ade80; --warn: #fbbf24;
-          --bad: #f87171; --track: #232931;
+        :root:not([data-theme="light"]) {
+          --plane:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --ink3:#96958c;
+          --line:#2b2b29; --track:#262624;
+          --s1:#3987e5; --s2:#d95926;
         }
       }
-      * { box-sizing: border-box; }
-      body { margin: 0; background: var(--bg); color: var(--ink);
-             font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-      .wrap { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
-      header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
-               margin-bottom: 18px; }
-      h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
-      .stamp { color: var(--muted); font-size: 13px; }
-      button { margin-left: auto; font: inherit; font-weight: 600; cursor: pointer;
-               background: var(--accent); color: #fff; border: 0; border-radius: 8px;
-               padding: 8px 16px; }
-      button[disabled] { opacity: .55; cursor: default; }
-      .card { background: var(--card); border: 1px solid var(--line);
-              border-radius: 12px; padding: 18px; margin-bottom: 16px; }
-      .card > h2 { font-size: 16px; margin: 0 0 2px; }
-      .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
-      .badge { display: inline-block; font-size: 12px; font-weight: 600;
-               padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line);
-               color: var(--muted); }
-      .badge.on { color: var(--good); border-color: currentColor; }
-      .badge.off { color: var(--muted); }
-      .badge.man { color: var(--warn); border-color: currentColor; }
-      .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-              gap: 12px; margin-bottom: 16px; }
-      .num { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-      .num b { display: block; font-size: 24px; font-weight: 650; letter-spacing: -.02em; }
-      .num span { color: var(--muted); font-size: 12px; }
-      .bar { height: 8px; background: var(--track); border-radius: 99px; overflow: hidden;
-             display: flex; margin: 4px 0 6px; }
-      .bar i { display: block; height: 100%; }
-      .legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted);
-                font-size: 12px; margin-bottom: 14px; }
-      .legend s { width: 8px; height: 8px; border-radius: 2px; display: inline-block;
-                  margin-right: 5px; }
-      .eta { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
-      .eta b { color: var(--ink); }
-      h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
-           color: var(--muted); margin: 16px 0 8px; }
-      ul { margin: 0; padding: 0; list-style: none; }
-      li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px;
-           display: flex; gap: 10px; }
-      li span { color: var(--muted); font-size: 12px; margin-left: auto;
-                white-space: nowrap; }
-      .alert { border-left: 3px solid var(--bad); background: color-mix(in srgb, var(--bad) 7%, transparent);
-               border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; }
-      .alert b { color: var(--bad); }
-      .none { color: var(--muted); font-size: 14px; }
-      .err { color: var(--bad); }
-      table { width: 100%; border-collapse: collapse; font-size: 14px; }
-      td { padding: 5px 0; border-top: 1px solid var(--line); }
-      td:last-child { text-align: right; color: var(--muted); }
+      * { box-sizing:border-box; }
+      body { margin:0; background:var(--plane); color:var(--ink);
+             font:15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .wrap { max-width:1040px; margin:0 auto; padding:22px 16px 60px; }
+      header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+      h1 { font-size:19px; margin:0; letter-spacing:-.01em; }
+      .stamp { color:var(--ink3); font-size:13px; }
+      button { margin-left:auto; font:inherit; font-weight:600; cursor:pointer; background:var(--s1);
+               color:#fff; border:0; border-radius:8px; padding:8px 16px; }
+      button[disabled] { opacity:.55; cursor:default; }
+      .card { background:var(--surface); border:1px solid var(--line); border-radius:12px;
+              padding:18px; margin-bottom:14px; }
+      .card h2 { font-size:15px; margin:0 0 3px; }
+      .sub { color:var(--ink2); font-size:13px; margin-bottom:16px; }
+
+      /* hero: the one number the board leads with */
+      .hero { display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+      .hero .figure { font-size:52px; font-weight:650; letter-spacing:-.03em; line-height:1; }
+      .hero .what { color:var(--ink2); font-size:14px; }
+      .pill { display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:600;
+              border-radius:999px; padding:5px 13px; border:1.5px solid currentColor; }
+      .pill .dot { width:9px; height:9px; border-radius:50%; background:currentColor; flex:none; }
+
+      /* KPI row of stat tiles */
+      .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:10px; }
+      .kpi { border:1px solid var(--line); border-radius:10px; padding:11px 13px; }
+      .kpi b { display:block; font-size:26px; font-weight:650; letter-spacing:-.02em; line-height:1.15; }
+      .kpi span { color:var(--ink3); font-size:12px; }
+
+      /* meters and part-to-whole bars: thin marks, 2px surface gaps, rounded data ends */
+      .meter { margin:14px 0 6px; }
+      .meter .track { height:10px; background:var(--track); border-radius:99px; display:flex; gap:2px;
+                      overflow:hidden; }
+      .meter .seg { height:100%; }
+      .meter .seg:first-child { border-radius:99px 0 0 99px; }
+      .meter .seg.cap { border-radius:99px; }
+      .labels { display:flex; gap:16px; flex-wrap:wrap; margin-top:9px; font-size:12.5px;
+                color:var(--ink2); }
+      .labels s { width:9px; height:9px; border-radius:2px; display:inline-block; margin-right:6px;
+                  text-decoration:none; }
+      .labels b { color:var(--ink); font-weight:650; }
+      .note { color:var(--ink3); font-size:12.5px; margin-top:10px; }
+      .note b { color:var(--ink2); }
+      .jobs { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px; }
+      .job { border:1px solid var(--line); border-radius:10px; padding:11px 13px; }
+      .job .n { font-size:13px; font-weight:600; }
+      .job .m { color:var(--ink3); font-size:12px; margin-top:3px; }
+      .err { color:var(--critical); }
     </style>
     <div id="root" class="wrap"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
@@ -433,143 +473,93 @@ data:
     <script>
     const html = htm.bind(React.createElement);
     const {useState, useEffect, useCallback} = React;
-    const pct = (n, d) => d > 0 ? Math.round(n / d * 1000) / 10 : 0;
-    const when = s => s ? new Date(s).toLocaleString([], {dateStyle:'medium', timeStyle:'short'}) : '-';
-    const ago = s => { if(!s) return '-'; const m=Math.round((Date.now()-new Date(s))/60000);
-      return m<60 ? m+'m ago' : (m<1440 ? Math.round(m/60)+'h ago' : Math.round(m/1440)+'d ago'); };
     const N = v => (v===null||v===undefined) ? '?' : v.toLocaleString();
+    const pc = (n,d) => d>0 ? Math.round(n/d*1000)/10 : 0;
+    const when = s => s ? new Date(s).toLocaleString([], {dateStyle:'medium', timeStyle:'short'}) : '-';
+    const ago = s => { if(!s) return 'never'; const m=Math.round((Date.now()-new Date(s))/60000);
+      return m<1?'just now':m<60?m+'m ago':m<1440?Math.round(m/60)+'h ago':Math.round(m/1440)+'d ago'; };
 
-    function Num({v, label}) {
-      return html`<div class="num"><b>${N(v)}</b><span>${label}</span></div>`;
+    function Kpi({v,label}) { return html`<div class="kpi"><b>${v}</b><span>${label}</span></div>`; }
+
+    // Part-to-whole. Segments carry a 2px surface gap; the track itself is the
+    // remainder, so absence is never given a hue of its own.
+    function Meter({segs,total}) {
+      return html`<div class="meter">
+        <div class="track">
+          ${segs.filter(s=>s.v>0).map((s,i)=>html`<i key=${i} class=${'seg'+(segs.filter(x=>x.v>0).length===1?' cap':'')}
+            style=${{width:pc(s.v,total)+'%', background:s.c}}></i>`)}
+        </div>
+        <div class="labels">
+          ${segs.map((s,i)=>html`<span key=${i}><s style=${{background:s.c}}></s>${s.k} <b>${N(s.v)}</b></span>`)}
+          <span><s style=${{background:'var(--track)'}}></s>${'remaining'} <b>${N(total-segs.reduce((a,s)=>a+s.v,0))}</b></span>
+        </div>
+      </div>`;
     }
 
     function Health({d}) {
-      const stall = d.health.stall || {};
-      const stalled = Object.keys(stall).filter(k => stall[k].stalled);
-      const need = d.needsPerson || [];
-      const ok = !stalled.length && !need.length;
+      const stalled = Object.keys(d.health.stall||{}).filter(k=>d.health.stall[k].stalled);
+      const stuck = (d.needsPerson||[]).length;
+      const bad = stalled.length>0, warn = stuck>0;
+      const state = bad ? {t:'Stalled', c:'var(--critical)'} : warn ? {t:'Needs a look', c:'var(--warning)'}
+                                                                    : {t:'All moving', c:'var(--good)'};
+      const dl = (d.inFlight||[]).length;
       return html`<div class="card">
-        <h2>Right now ${ok ? html`<span class="badge on">all moving</span>`
-                           : html`<span class="badge" style=${{color:'var(--bad)',borderColor:'currentColor'}}>needs a look</span>`}</h2>
-        <div class="sub">
-          ${d.sab.ok ? html`SABnzbd ${d.sab.paused ? 'paused' : d.sab.speed} - ${d.sab.jobs} jobs.` : html`SABnzbd unreadable.`}
-          ${' '}Queues: radarr ${d.queues.radarr}, sonarr ${d.queues.sonarr}, whisparr ${d.queues.whisparr}.
-          ${' '}${d.freeTB} TB free.
-          ${d.health.checkedAt ? html` Stall check ${ago(d.health.checkedAt)}.` : html` Stall watcher has not run yet.`}
+        <div class="hero">
+          <div>
+            <div class="figure" style=${{color:state.c}}>${dl}</div>
+            <div class="what">downloading right now</div>
+          </div>
+          <div style=${{marginLeft:'auto',textAlign:'right'}}>
+            <div class="pill" style=${{color:state.c}}><i class="dot"></i>${state.t}</div>
+            <div class="what" style=${{marginTop:'8px'}}>stall check ${ago(d.health.checkedAt)}</div>
+          </div>
         </div>
-        ${stalled.length ? html`<div class="alert">
-          <b>Not moving: ${stalled.join(', ')}.</b> Queue is non-empty and bytes-left has not
-          dropped across consecutive checks. Clear dead items through the owning app's queue
-          (blocklist=true) so they are re-searched, then re-check - more usually surface behind them.
-        </div>` : null}
-        ${need.length ? html`<div class="alert">
-          <b>${need.length} item${need.length>1?'s':''} stuck.</b> These never clear themselves.
-          <ul>${need.slice(0,8).map((f,i)=>html`<li key=${i}>${f.title}<span>${f.why}</span></li>`)}</ul>
-        </div>` : null}
-        ${ok ? html`<div class="none">Nothing flagged, nothing stalled.</div>` : null}
+        <div class="kpis" style=${{marginTop:'18px'}}>
+          <${Kpi} v=${stuck} label="stuck, needs a person" />
+          <${Kpi} v=${d.sab.ok ? (d.sab.paused?'paused':d.sab.speed) : '?'} label="usenet speed" />
+          <${Kpi} v=${N(d.queues.radarr+d.queues.sonarr+d.queues.whisparr)} label="queued in total" />
+          <${Kpi} v=${d.freeTB+' TB'} label="free space" />
+        </div>
+        ${bad ? html`<div class="note"><b>Not moving:</b> ${stalled.join(', ')} - queue is
+          non-empty and bytes-left has not dropped across consecutive checks.</div>` : null}
+        ${warn && !bad ? html`<div class="note"><b>${stuck} stuck item${stuck>1?'s':''}</b> -
+          these never clear themselves; Activity, then Queue, in the owning app.</div>` : null}
       </div>`;
     }
 
-    function Movies({d, free}) {
-      const done=d.replaced, q=d.queue.total, left=d.remaining, total=done+q+left||1;
+    function Library({d,title,sub,segs,total,note}) {
+      const done = segs[0].v;
       return html`<div class="card">
-        <h2>Main library <span class="badge">${d.root}</span></h2>
-        <div class="sub">Replacing poor copies with better ones. ${N(d.titles)} titles.</div>
-        <div class="nums">
-          <${Num} v=${done} label="replaced" /><${Num} v=${q} label="in the queue" />
-          <${Num} v=${left} label="left to search" /><${Num} v=${d.meetCutoff} label="at Bluray-1080p" />
+        <h2>${title}</h2>
+        <div class="sub">${sub}</div>
+        <div class="hero">
+          <div><div class="figure">${pc(done,total)}<span style=${{fontSize:'22px'}}>%</span></div>
+            <div class="what">${segs[0].k}</div></div>
+          <div class="kpis" style=${{flex:'1 1 320px'}}>
+            ${d.kpis.map((k,i)=>html`<${Kpi} key=${i} v=${k[0]} label=${k[1]} />`)}
+          </div>
         </div>
-        <div class="bar">
-          <i style=${{width:pct(done,total)+'%',background:'var(--good)'}}></i>
-          <i style=${{width:pct(q,total)+'%',background:'var(--accent)'}}></i></div>
-        <div class="legend">
-          <span><s style=${{background:'var(--good)'}}></s>done ${pct(done,total)}%</span>
-          <span><s style=${{background:'var(--accent)'}}></s>queued (${d.queue.usenet} usenet / ${d.queue.torrent} torrent)</span>
-          <span><s style=${{background:'var(--track)'}}></s>remaining</span></div>
-        <div class="eta">${d.nights
-          ? html`<b>${d.nights}</b> more nights at ${d.batch}/night - about <b>${d.eta}</b>.`
-          : html`Backlog finished.`}</div>
-        <h3>Still below cutoff (${N(d.belowCutoff)})</h3>
-        <table><tbody>
-          <tr><td>Under 720p</td><td>${N(d.tiers['1'])}</td></tr>
-          <tr><td>720p</td><td>${N(d.tiers['2'])}</td></tr>
-          <tr><td>1080p, not Bluray</td><td>${N(d.tiers['3'])}</td></tr>
-        </tbody></table>
-        <div class="eta" style=${{marginTop:'10px'}}>A title that went 480p to WEB 1080p is a big
-          win but still below a Bluray cutoff - it counts here and will not be searched again.</div>
-        <${Recent} d=${d} />
-      </div>`;
-    }
-
-    function Bulk({d}) {
-      const have=d.withFile, q=d.queue.total, total=d.titles||1;
-      return html`<div class="card">
-        <h2>Midday movies <span class="badge man">run by hand</span></h2>
-        <div class="sub">${d.root} - titles with no copy at all. ${N(d.titles)} tracked.</div>
-        <div class="nums">
-          <${Num} v=${have} label="found and kept" /><${Num} v=${q} label="in the queue" />
-          <${Num} v=${d.remaining} label="still missing" /><${Num} v=${d.searched} label="searched" />
-        </div>
-        <div class="bar">
-          <i style=${{width:pct(have,total)+'%',background:'var(--good)'}}></i>
-          <i style=${{width:pct(q,total)+'%',background:'var(--accent)'}}></i></div>
-        <div class="legend">
-          <span><s style=${{background:'var(--good)'}}></s>have ${pct(have,total)}%</span>
-          <span><s style=${{background:'var(--accent)'}}></s>queued</span>
-          <span><s style=${{background:'var(--track)'}}></s>missing</span></div>
-        <div class="eta">No schedule - only moves when <b>bulk_backfill.py</b> is run.
-          ${d.searched===null?'':html` ${N(total-d.searched)} never searched, about
-          ${Math.ceil((total-d.searched)/d.batch)} more batches of ${d.batch}.`}</div>
-        <${Recent} d=${d} />
-      </div>`;
-    }
-
-    function TV({d}) {
-      return html`<div class="card">
-        <h2>TV <span class="badge">${d.series} series</span></h2>
-        <div class="sub">Legacy XviD/DivX episodes have no hardware decoder on the TV, so Jellyfin
-          transcodes them. That is the codec worth chasing, not resolution.</div>
-        <div class="nums">
-          <${Num} v=${d.episodeFiles} label="episode files" />
-          <${Num} v=${d.legacyFiles} label="legacy codec" />
-          <${Num} v=${d.queue.total} label="in the queue" />
-          <${Num} v=${d.shows.length} label="shows affected" />
-        </div>
-        <div class="bar">
-          <i style=${{width:pct(d.episodeFiles-d.legacyFiles,d.episodeFiles||1)+'%',background:'var(--good)'}}></i></div>
-        <div class="legend"><span><s style=${{background:'var(--good)'}}></s>modern
-          ${pct(d.episodeFiles-d.legacyFiles,d.episodeFiles||1)}%</span>
-          <span><s style=${{background:'var(--track)'}}></s>legacy</span></div>
-        ${d.shows.length ? html`<h3>Worst offenders</h3><table><tbody>
-          ${d.shows.map((s,i)=>html`<tr key=${i}><td>${s.title}${s.upgradeAllowed?'':' *'}</td>
-            <td>${s.legacy} of ${s.files}</td></tr>`)}
-        </tbody></table>
-        <div class="eta" style=${{marginTop:'10px'}}>* profile does not allow upgrades, so Sonarr
-          will never replace these on its own.</div>` : html`<div class="none">No legacy codecs left.</div>`}
-      </div>`;
-    }
-
-    function Recent({d}) {
-      return html`<div>
-        <h3>Landed - ${d.imported24h} in 24h, ${d.imported7d} in 7 days${d.failed7d?`, ${d.failed7d} failed`:''}</h3>
-        ${d.recent.length
-          ? html`<ul>${d.recent.map((r,i)=>html`<li key=${i}>${r.title} ${r.year?`(${r.year})`:''}
-              <span>${r.quality} - ${ago(r.date)}</span></li>`)}</ul>`
-          : html`<div class="none">Nothing in the window this covers.</div>`}
+        <${Meter} segs=${segs} total=${total} />
+        ${note ? html`<div class="note">${note}</div>` : null}
       </div>`;
     }
 
     function Jobs({jobs}) {
       return html`<div class="card">
         <h2>Unattended jobs</h2>
-        <div class="sub">These run without anyone watching. Two of them switch themselves off when
-          their backlog is done.</div>
-        <table><tbody>
-          ${jobs.map((j,i)=>html`<tr key=${i}>
-            <td>${j.name}${j.found && j.suspended ? ' - retired' : ''}</td>
-            <td>${j.found ? html`${j.schedule} - last ${ago(j.lastRun)}` : 'unreadable'}</td>
-          </tr>`)}
-        </tbody></table>
+        <div class="sub">Two of these switch themselves off once their backlog is done.</div>
+        <div class="jobs">
+          ${jobs.map((j,i)=>{
+            const c = !j.found ? 'var(--critical)' : j.suspended ? 'var(--ink3)' : 'var(--good)';
+            const t = !j.found ? 'unreadable' : j.suspended ? 'retired' : 'active';
+            return html`<div class="job" key=${i}>
+              <div class="n">${j.name}</div>
+              <div style=${{marginTop:'7px'}}><span class="pill" style=${{color:c,fontSize:'12px',padding:'3px 10px'}}>
+                <i class="dot"></i>${t}</span></div>
+              <div class="m">${j.found ? `${j.schedule} - ran ${ago(j.lastRun)}` : (j.error||'')}</div>
+            </div>`;
+          })}
+        </div>
       </div>`;
     }
 
@@ -580,17 +570,38 @@ data:
           .then(j=>j.error?Promise.reject(new Error(j.error)):setD(j))
           .catch(e=>setErr(e.message)).finally(()=>setBusy(false)); },[]);
       useEffect(load,[load]);
+      if (err) return html`<div><header><h1>Media pipeline</h1>
+        <button onClick=${load} disabled=${busy}>Retry</button></header>
+        <div class="card err">Could not read the pipeline: ${err}</div></div>`;
       return html`<div>
-        <header>
-          <h1>Media pipeline</h1>
+        <header><h1>Media pipeline</h1>
           <div class="stamp">${d?`as at ${when(d.generated)}`:busy?'loading':''}</div>
-          <button onClick=${load} disabled=${busy}>${busy?'Refreshing':'Refresh'}</button>
-        </header>
-        ${err && html`<div class="card err">Could not read the pipeline: ${err}</div>`}
+          <button onClick=${load} disabled=${busy}>${busy?'Refreshing':'Refresh'}</button></header>
         ${d && html`<${Health} d=${d} />`}
-        ${d && html`<${Movies} d=${d.main} free=${d.freeTB} />`}
-        ${d && html`<${Bulk} d=${d.bulk} />`}
-        ${d && html`<${TV} d=${d.tv} />`}
+        ${d && html`<${Library}
+          title="Main library" sub=${`${d.main.root} - replacing poor copies with better ones`}
+          total=${d.main.replaced + d.main.queue.total + d.main.remaining}
+          segs=${[{k:'replaced',v:d.main.replaced,c:'var(--s1)'},{k:'queued',v:d.main.queue.total,c:'var(--s2)'}]}
+          d=${{kpis:[[N(d.main.titles),'titles'],[N(d.main.meetCutoff),'at Bluray-1080p'],
+                     [d.main.nights?d.main.nights+' nights':'done','to finish'],[d.main.eta||'-','expected']]}}
+          note=${html`A title that went 480p to WEB 1080p is a big win but still below a Bluray
+            cutoff - it counts as remaining and will not be searched again.`} />`}
+        ${d && html`<${Library}
+          title="Midday movies" sub=${`${d.bulk.root} - titles with no copy at all, run by hand`}
+          total=${d.bulk.titles}
+          segs=${[{k:'have',v:d.bulk.withFile,c:'var(--s1)'},{k:'queued',v:d.bulk.queue.total,c:'var(--s2)'}]}
+          d=${{kpis:[[N(d.bulk.titles),'tracked'],[N(d.bulk.searched),'searched'],
+                     [N(d.bulk.remaining),'still missing'],['manual','no schedule']]}}
+          note=${html`Only moves when <b>bulk_backfill.py</b> is run.`} />`}
+        ${d && html`<${Library}
+          title="TV" sub="Legacy XviD and DivX episodes have no hardware decoder on the TV, so Jellyfin transcodes them"
+          total=${d.tv.episodeFiles}
+          segs=${[{k:'modern',v:d.tv.episodeFiles-d.tv.legacyFiles,c:'var(--s1)'},
+                  {k:'queued',v:d.tv.queue.total,c:'var(--s2)'}]}
+          d=${{kpis:[[N(d.tv.series),'series'],[N(d.tv.episodeFiles),'episode files'],
+                     [N(d.tv.legacyFiles),'legacy codec'],[N(d.tv.shows.length),'shows affected']]}}
+          note=${html`The track is legacy codec. Most affected shows sit on a profile with upgrades
+            disabled, so Sonarr will never replace them on its own.`} />`}
         ${d && html`<${Jobs} jobs=${d.jobs} />`}
       </div>`;
     }
