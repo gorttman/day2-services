@@ -237,20 +237,49 @@ data:
         return out
 
 
+    def stuck_reason(r, cutoff):
+        """Why the Clear button would act on this item, or None.
+
+        The single predicate for both the button and the board. They used
+        different rules at first, which produced the worst possible result:
+        the board offered "Clear" for things the button refused, and stayed
+        silent about phantoms the button could actually fix. One function
+        now, so the two cannot drift apart again.
+        """
+        why_msgs = " ".join(m for x in r.get("statusMessages", []) for m in (x.get("messages") or []))
+        if "executable file" in why_msgs.lower():
+            return "bundled executable - not a real release"
+        if r.get("status") == "completed":
+            return None      # downloaded fine, import failed - a person's job
+        size = float(r.get("size") or 0)
+        left = float(r.get("sizeleft") or 0)
+        old_enough = (r.get("added") or "9999") < cutoff
+        if r.get("trackedDownloadStatus") in ("warning", "error"):
+            return "flagged by the app"
+        if size > 0 and left >= size and old_enough:
+            return "no progress in %dh" % STUCK_HOURS
+        if size == 0 and left == 0 and old_enough:
+            return "empty phantom entry"
+        return None
+
+
+    def cutoff_stamp():
+        return (datetime.datetime.now(datetime.timezone.utc)
+                - datetime.timedelta(hours=STUCK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
     def flagged_of(recs):
-        out = []
+        out, cutoff = [], cutoff_stamp()
         for r in recs:
-            if r.get("trackedDownloadStatus") in ("warning", "error"):
-                msgs = [m["messages"][0] for m in r.get("statusMessages", []) if m.get("messages")]
-                why = (msgs[0] if msgs else r.get("status", ""))[:130]
-                # Same rule the Clear button applies, so the board never
-                # promises an action the button will decline.
-                clearable = (r.get("status") != "completed"
-                             or "executable file" in why.lower())
-                out.append({"title": (r.get("title") or "?")[:90],
-                            "status": r.get("status"),
-                            "clearable": clearable,
-                            "why": why})
+            reason = stuck_reason(r, cutoff)
+            flagged = r.get("trackedDownloadStatus") in ("warning", "error")
+            if not reason and not flagged:
+                continue
+            msgs = [m["messages"][0] for m in r.get("statusMessages", []) if m.get("messages")]
+            out.append({"title": (r.get("title") or "?")[:90],
+                        "status": r.get("status"),
+                        "clearable": bool(reason),
+                        "why": (reason or (msgs[0] if msgs else r.get("status", "")))[:130]})
         return out
 
 
@@ -490,8 +519,7 @@ data:
         bad grab and a replacement is searched. Nothing of value is lost -
         the "file" was never the episode.
         """
-        now = datetime.datetime.now(datetime.timezone.utc)
-        cutoff = (now - datetime.timedelta(hours=STUCK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cutoff = cutoff_stamp()
         removed, skipped, failed = [], [], []
         for app in ARRS:
             try:
@@ -501,33 +529,16 @@ data:
                 continue
             for r in recs:
                 title = (r.get("title") or "?")[:90]
-                flagged = r.get("trackedDownloadStatus") in ("warning", "error")
-                size = float(r.get("size") or 0)
-                left = float(r.get("sizeleft") or 0)
-                old_enough = (r.get("added") or "9999") < cutoff
-                no_progress = size > 0 and left >= size and old_enough
-                # A queue entry with no bytes at all is a phantom - it will
-                # never download, never fail, and never leave on its own.
-                # Whisparr carried one for a day and it was invisible to
-                # every check because the *arr reports it as healthy.
-                phantom = size == 0 and left == 0 and old_enough
-                if not (flagged or no_progress or phantom):
-                    continue
-                why_msgs = " ".join(
-                    m for x in r.get("statusMessages", []) for m in (x.get("messages") or []))
-                bad_release = "executable file" in why_msgs.lower()
-                if r.get("status") == "completed" and not bad_release:
-                    skipped.append({"app": app, "title": title,
-                                    "why": "downloaded fine, import failed - needs a manual import"})
+                reason = stuck_reason(r, cutoff)
+                if not reason:
+                    if r.get("trackedDownloadStatus") in ("warning", "error"):
+                        skipped.append({"app": app, "title": title,
+                                        "why": "downloaded fine, import failed - needs a manual import"})
                     continue
                 try:
                     arr_delete(app, "queue/%s?removeFromClient=true&blocklist=true&skipRedownload=false"
                                % r["id"])
-                    removed.append({"app": app, "title": title,
-                                    "why": "bundled executable - not a real release" if bad_release
-                                           else ("flagged by %s" % app if flagged
-                                                 else ("empty phantom entry" if phantom
-                                                       else "no progress in %dh" % STUCK_HOURS))})
+                    removed.append({"app": app, "title": title, "why": reason})
                 except Exception as e:
                     failed.append({"app": app, "title": title, "why": str(e)[:100]})
         msg = "Removed %d and blocklisted them, so replacements are being searched." % len(removed)
