@@ -70,7 +70,11 @@ spec:
             - {name: sonarr-config, mountPath: /app-config/sonarr, readOnly: true}
             - {name: whisparr-config, mountPath: /app-config/whisparr, readOnly: true}
             - {name: sabnzbd-config, mountPath: /app-config/sabnzbd, readOnly: true}
-            - {name: bulk-state, mountPath: /state/bulk_backfill_state.json, readOnly: true}
+            # Writable: the "search more" button records what it tried
+            # in the same state file bulk_backfill.py uses, so running
+            # the button and running the script by hand cannot disagree
+            # about what has already been searched.
+            - {name: bulk-state, mountPath: /state/bulk_backfill_state.json}
             # Read-only: the board reports the stall watcher's verdict
             # rather than recomputing it, so the two can never disagree.
             - {name: vault, mountPath: /vault, subPath: obsidian, readOnly: true}
