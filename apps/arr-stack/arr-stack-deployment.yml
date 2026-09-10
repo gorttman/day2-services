@@ -493,6 +493,26 @@ spec:
       # the full mechanism). Loops every 5 minutes, re-reading the
       # mounted wiring-config each pass, so an indexer/category change
       # is a commit away with no pod restart and no manual UI step.
+      # Re-asserts qBittorrent's queue limits through its WebUI API,
+      # because seeding them into qBittorrent.conf does not stick - see
+      # enforce_prefs.py's docstring for the evidence. A loop rather
+      # than a one-shot: the limits are what stop a few dead magnets
+      # taking the whole client to zero throughput, and that has now
+      # happened twice.
+      - name: qbittorrent-prefs
+        image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+        imagePullPolicy: IfNotPresent
+        command: ["python3", "/app/enforce_prefs.py"]
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+        volumeMounts:
+        - name: qbittorrent-config-seed-script
+          mountPath: /app
+          readOnly: true
+        resources:
+          requests: {memory: "24Mi", cpu: "5m"}
+          limits: {memory: "96Mi", cpu: "100m"}
       - name: arr-wiring-reconciler
         image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
         imagePullPolicy: IfNotPresent

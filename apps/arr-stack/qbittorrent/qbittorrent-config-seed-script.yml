@@ -101,7 +101,18 @@ data:
 
     if changed:
         with open(CONFIG_PATH, "w") as f:
-            # space_around_delimiters=False is load-bearing. configparser
+            # space_around_delimiters=False writes qBittorrent's own
+            # native format instead of configparser's "key = value".
+            # NOT the fix for the queue limits - that hypothesis was
+            # tested on 2026-09-10 and disproved: with this in place the
+            # init container patched 20/40/10 in native format, its log
+            # said so, and qBittorrent still came up at 10/15/5 and
+            # rewrote the file four seconds later. Kept anyway, because
+            # rewriting the whole file in a foreign format is worth
+            # avoiding on its own. The limits are now enforced through
+            # the WebUI API by the qbittorrent-prefs sidecar instead -
+            # see enforce_prefs.py below.
+            # Original note kept for the record: configparser
             # defaults to writing "key = value"; qBittorrent writes and
             # expects "key=value", and rewriting the whole file in the
             # spaced form is what made this seed silently ineffective -
@@ -114,3 +125,94 @@ data:
         print("qBittorrent.conf seeded/patched", flush=True)
     else:
         print("qBittorrent.conf already correct, nothing to do", flush=True)
+  enforce_prefs.py: |
+    #!/usr/bin/env python3
+    """Keep qBittorrent's queue limits at the values we actually want.
+
+    Seeding qBittorrent.conf does not work for these keys, and that is not
+    a formatting problem - it was tested. On 2026-09-10 the init container
+    patched the file to 20/40/10 in qBittorrent's own native format (no
+    spaces around "="), its log confirmed the change, and qBittorrent still
+    came up at the stock 10/15/5 four seconds later and rewrote the file.
+    Its own log shows no config error. Whatever the reason, qBittorrent
+    does not honour these three keys from disk on this build, while it does
+    honour others seeded the same way in the same file - IgnoreSlow-
+    TorrentsForQueueing has survived every restart.
+
+    So stop arguing with the config file. The WebUI API applies these
+    immediately and reliably, which is proven every time someone fixes the
+    jam by hand. This asserts them through that API instead, once qBittorrent
+    is actually up, and then keeps re-asserting - same shape as
+    arr-wiring-reconciler, and for the same reason: re-applying desired
+    state on a loop is simpler and more honest than tracking drift.
+
+    Why it matters that this is enforced rather than set once: at the stock
+    15 active-torrent limit, a handful of dead magnets in metaDL takes the
+    whole client to zero throughput with dozens of healthy torrents queued
+    behind them. That has now happened twice, on 2026-09-07 and again on
+    2026-09-10.
+    """
+    import json
+    import os
+    import time
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    BASE = os.environ.get("QBIT_URL", "http://localhost:8090")
+    INTERVAL = int(os.environ.get("INTERVAL_SECONDS", "300"))
+    DESIRED = {
+        "max_active_downloads": int(os.environ.get("MAX_ACTIVE_DOWNLOADS", "20")),
+        "max_active_torrents": int(os.environ.get("MAX_ACTIVE_TORRENTS", "40")),
+        "max_active_uploads": int(os.environ.get("MAX_ACTIVE_UPLOADS", "10")),
+        # The structural half of the fix: a torrent doing nothing stops
+        # occupying a slot at all, so a dead magnet cannot wedge the queue.
+        "dont_count_slow_torrents": True,
+        "queueing_enabled": True,
+    }
+
+
+    def log(msg):
+        print("%s  %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg), flush=True)
+
+
+    def get_prefs():
+        with urllib.request.urlopen(BASE + "/api/v2/app/preferences", timeout=20) as r:
+            return json.load(r)
+
+
+    def set_prefs(payload):
+        data = urllib.parse.urlencode({"json": json.dumps(payload)}).encode()
+        req = urllib.request.Request(BASE + "/api/v2/app/setPreferences", data=data,
+                                     method="POST")
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status
+
+
+    def main():
+        # No auth: WebUI\LocalHostAuth=false, and this runs in the same pod,
+        # so every call is genuine 127.0.0.1 - the same path every other
+        # app-to-app call in this stack already uses.
+        while True:
+            try:
+                current = get_prefs()
+                drift = {k: v for k, v in DESIRED.items() if current.get(k) != v}
+                if drift:
+                    set_prefs(drift)
+                    after = get_prefs()
+                    still = {k: after.get(k) for k in drift if after.get(k) != DESIRED[k]}
+                    if still:
+                        log("applied %s but qBittorrent still reports %s" % (drift, still))
+                    else:
+                        log("corrected %s" % drift)
+            except urllib.error.URLError as e:
+                # Expected while qBittorrent is still starting, or during the
+                # window where gluetun is reconnecting the tunnel.
+                log("qBittorrent not reachable yet (%s)" % str(e)[:80])
+            except Exception as e:
+                log("unexpected: %s" % str(e)[:150])
+            time.sleep(INTERVAL)
+
+
+    if __name__ == "__main__":
+        main()
