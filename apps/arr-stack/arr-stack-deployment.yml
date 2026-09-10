@@ -503,6 +503,13 @@ spec:
         image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
         imagePullPolicy: IfNotPresent
         command: ["python3", "/app/enforce_prefs.py"]
+        env:
+        # 60s, not the 300s default. qBittorrent reverts these within a
+        # few seconds of starting, so a 5-minute loop leaves the stock
+        # 15-torrent limit in force for most of that window - which is
+        # exactly when a restart has just re-queued everything and the
+        # limit matters most.
+        - {name: INTERVAL_SECONDS, value: "60"}
         securityContext:
           runAsUser: 1000
           runAsGroup: 1000
