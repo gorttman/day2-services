@@ -101,7 +101,16 @@ data:
 
     if changed:
         with open(CONFIG_PATH, "w") as f:
-            cp.write(f)
+            # space_around_delimiters=False is load-bearing. configparser
+            # defaults to writing "key = value"; qBittorrent writes and
+            # expects "key=value", and rewriting the whole file in the
+            # spaced form is what made this seed silently ineffective -
+            # the init container patched 10/15/5 -> 20/40/10 on every
+            # single boot (its log says so), and qBittorrent came up with
+            # the old values anyway and flushed them back over the file
+            # minutes later. Found 2026-09-10, after the queue wedged a
+            # second time with 61 torrents stuck behind 15 dead slots.
+            cp.write(f, space_around_delimiters=False)
         print("qBittorrent.conf seeded/patched", flush=True)
     else:
         print("qBittorrent.conf already correct, nothing to do", flush=True)
