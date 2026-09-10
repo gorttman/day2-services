@@ -316,6 +316,38 @@ with connection-refused. The podAffinity still selects `app: arr-stack`
 to co-locate with the real stack pod; only this pod's own labels
 differ. Same trap applies to anything else added to this namespace.
 
+## LIVE 2026-09-10: stall watch (download-stall-watch)
+
+The pipeline has gone to zero throughput twice without anything
+noticing - 2026-09-07 and again 2026-09-10, the second time for about
+half a day. Both times the *arrs looked healthy: full queues, nothing
+failing. A queue that never progresses looks identical to a busy one
+unless something measures the change.
+
+It costs more than downtime. The nightly upgrade search tags 25 titles
+a night as "searched" whether or not their downloads ever land, so
+every night a jam goes unnoticed permanently burns 25 titles off the
+backlog.
+
+`stall-watch/` checks every 30 minutes: per *arr, total bytes left
+across the queue. Queue non-empty and that total not going DOWN across
+two consecutive checks means that app is not moving, and it alerts
+about an hour into a real jam. One flat reading is not enough - a large
+file can sit in post-processing.
+
+It reads the *arr queues, not qBittorrent and SABnzbd. That is the
+honest measure - what matters is whether work finishes, not whether a
+client claims a connection - and it sidesteps qBittorrent's WebUI
+refusing unauthenticated calls from outside its own pod
+(`LocalHostAuth=false` only covers genuine 127.0.0.1, so the ClusterIP
+Service returns 403).
+
+Alerts land in `inbox/media-pipeline-alerts/` in the Obsidian vault,
+the same channel as the weekly digest, and only on a change of state -
+one note per jam plus one when it clears, never one per check. The note
+names the flagged items and anything sitting over 24h, and carries the
+blocklist-and-re-search command that actually fixes it.
+
 ## Removed: bazarr and jdownloader2 (2026-08-08)
 
 Both worked fine - this was a scope/preference call, not a bug, made

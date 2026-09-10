@@ -1,0 +1,238 @@
+# See stall_watch.py's docstring for what this measures and why it
+# reads the *arr queues rather than the download clients.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: download-stall-watch-script
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: download-stall-watch
+    argocd.argoproj.io/managed-by: argocd
+data:
+  stall_watch.py: |
+    #!/usr/bin/env python3
+    """Notice when the download pipeline has work but is not moving.
+    
+    Twice now the whole pipeline has gone to zero throughput and stayed
+    there without anything complaining: 2026-09-07 and again 2026-09-10,
+    the second time for roughly half a day. Both times the *arrs looked
+    busy - queues full, nothing failing - because a queue full of items
+    that never progress looks exactly like a queue full of items that are
+    progressing, unless something measures the difference.
+    
+    The nightly upgrade search makes that worse rather than better. It
+    keeps tagging 25 titles a night as "searched" whether or not their
+    downloads ever land, so every night a jam goes unnoticed burns 25
+    titles off the backlog that may never arrive.
+    
+    What this measures, per *arr: the total bytes left across its queue.
+    If the queue is non-empty and that total has not gone DOWN since the
+    last check, that app is not moving. One flat check is meaningless (a
+    big file can sit in post-processing), so a stall has to persist for
+    STALL_CHECKS consecutive runs before it counts.
+    
+    Deliberately reads the *arr queues rather than qBittorrent and
+    SABnzbd directly. It is the honest measure - what matters is whether
+    work is finishing, not whether a client claims a connection - and it
+    avoids needing qBittorrent's credentials, whose WebUI refuses
+    unauthenticated calls from outside its own pod.
+    
+    Alerts go to the Obsidian vault, the same channel as the weekly
+    digest, because this cluster has no push notification path at all.
+    It writes only on a change of state - healthy to stalled, or stalled
+    to recovered - so a long jam produces one note, not one per check.
+    """
+    import datetime
+    import json
+    import os
+    import time
+    import urllib.error
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    
+    APPS = {
+        "radarr":   ("/app-config/radarr/config.xml",   "http://radarr.arr-stack.svc.cluster.local:7878"),
+        "sonarr":   ("/app-config/sonarr/config.xml",   "http://sonarr.arr-stack.svc.cluster.local:8989"),
+        "whisparr": ("/app-config/whisparr/config.xml", "http://whisparr.arr-stack.svc.cluster.local:6969"),
+    }
+    STATE_PATH = os.environ.get("STATE_PATH", "/vault/inbox/media-pipeline-alerts/.stall_state.json")
+    INBOX = os.environ.get("INBOX", "/vault/inbox")
+    TOPIC = os.environ.get("TOPIC", "media-pipeline-alerts")
+    STALL_CHECKS = int(os.environ.get("STALL_CHECKS", "2"))
+    STUCK_HOURS = int(os.environ.get("STUCK_HOURS", "24"))
+    
+    
+    def log(msg):
+        print("%s  %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg), flush=True)
+    
+    
+    def api(base, key, path):
+        req = urllib.request.Request("%s/api/v3/%s" % (base, path), headers={"X-Api-Key": key})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read().decode()
+        return json.loads(raw) if raw.strip() else {}
+    
+    
+    def queue_of(app):
+        config, base = APPS[app]
+        key = ET.parse(config).getroot().findtext("ApiKey")
+        records, page = [], 1
+        while True:
+            q = api(base, key, "queue?page=%d&pageSize=200" % page)
+            records += q.get("records", [])
+            if len(records) >= q.get("totalRecords", 0) or not q.get("records"):
+                return records
+            page += 1
+    
+    
+    def snapshot():
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff = (now - datetime.timedelta(hours=STUCK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        out = {}
+        for app in APPS:
+            try:
+                recs = queue_of(app)
+            except Exception as e:
+                out[app] = {"error": str(e)[:120]}
+                continue
+            active = [r for r in recs if r.get("status") in ("downloading", "queued", "paused")]
+            out[app] = {
+                "items": len(recs),
+                "active": len(active),
+                "bytesLeft": sum(int(r.get("sizeleft") or 0) for r in recs),
+                "flagged": [
+                    {"title": (r.get("title") or "?")[:90],
+                     "why": ([m["messages"][0] for m in r.get("statusMessages", []) if m.get("messages")]
+                             or [r.get("status", "?")])[0][:120]}
+                    for r in recs if r.get("trackedDownloadStatus") in ("warning", "error")
+                ],
+                "old": [(r.get("title") or "?")[:90] for r in recs
+                        if (r.get("added") or "9999") < cutoff and (r.get("sizeleft") or 0) > 0],
+            }
+        return out
+    
+    
+    def load_state():
+        try:
+            with open(STATE_PATH) as f:
+                return json.load(f)
+        except Exception:
+            return {"previous": {}, "strikes": {}, "stalled": {}}
+    
+    
+    def save_state(state):
+        os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+        with open(STATE_PATH, "w") as f:
+            json.dump(state, f, indent=1)
+        try:
+            os.chmod(STATE_PATH, 0o664)
+        except OSError:
+            pass
+    
+    
+    def write_note(kind, lines):
+        folder = os.path.join(INBOX, TOPIC)
+        os.makedirs(folder, exist_ok=True)
+        try:
+            os.chmod(folder, 0o775)
+        except OSError:
+            pass
+        today = datetime.date.today().isoformat()
+        stamp = time.strftime("%H%M")
+        path = os.path.join(folder, "%s-%s-%s.md" % (today, stamp, kind))
+        head = [
+            "---",
+            'title: "Download pipeline %s - %s %s"' % (kind, today, time.strftime("%H:%M")),
+            "created: %s" % today,
+            "source: download-stall-watch",
+            "status: needs_review",
+            "topics: [%s]" % TOPIC,
+            "---",
+            "",
+        ]
+        with open(path, "w") as f:
+            f.write("\n".join(head + lines) + "\n")
+        try:
+            os.chmod(path, 0o664)
+        except OSError:
+            pass
+        log("wrote %s" % path)
+    
+    
+    def main():
+        state = load_state()
+        now = snapshot()
+        prev = state.get("previous", {})
+        strikes = state.get("strikes", {})
+        stalled = state.get("stalled", {})
+    
+        newly_stalled, recovered = [], []
+        for app, cur in now.items():
+            if cur.get("error"):
+                log("%s: unreachable (%s)" % (app, cur["error"]))
+                continue
+            before = prev.get(app) or {}
+            moving = (not before) or cur["bytesLeft"] < before.get("bytesLeft", 0)
+            idle = cur["active"] == 0
+            if idle or moving:
+                strikes[app] = 0
+            else:
+                strikes[app] = strikes.get(app, 0) + 1
+            was = bool(stalled.get(app))
+            is_now = strikes[app] >= STALL_CHECKS
+            if is_now and not was:
+                newly_stalled.append(app)
+            elif was and not is_now:
+                recovered.append(app)
+            stalled[app] = is_now
+            log("%s: items=%s active=%s bytesLeft=%s strikes=%s stalled=%s"
+                % (app, cur["items"], cur["active"], cur["bytesLeft"], strikes[app], is_now))
+    
+        if newly_stalled:
+            lines = ["## Nothing is downloading", ""]
+            for app in newly_stalled:
+                c = now[app]
+                lines.append("**%s** has %d items queued (%d active) and %.1f GB still to fetch, "
+                             "and that number has not moved across %d consecutive checks."
+                             % (app, c["items"], c["active"], c["bytesLeft"] / 1e9, STALL_CHECKS))
+                if c["flagged"]:
+                    lines.append("")
+                    lines.append("Items already flagged by %s:" % app)
+                    for f in c["flagged"][:10]:
+                        lines.append("- %s - %s" % (f["title"], f["why"]))
+                if c["old"]:
+                    lines.append("")
+                    lines.append("Sitting more than %dh with bytes outstanding:" % STUCK_HOURS)
+                    for t in c["old"][:10]:
+                        lines.append("- %s" % t)
+                lines.append("")
+            lines += [
+                "## What this usually is",
+                "",
+                "Dead torrents holding every active slot. Clear them through the owning",
+                "app's queue, not the client, so the release is blocklisted and re-searched:",
+                "",
+                "    DELETE /api/v3/queue/<id>?removeFromClient=true&blocklist=true",
+                "",
+                "Then re-check: clearing the blockers usually promotes more dead items that",
+                "were hidden behind the queue limit, so it takes a few passes.",
+                "",
+                "Background: `~/gm-dev/radarr_upgrade_context.md`",
+            ]
+            write_note("stalled", lines)
+    
+        if recovered:
+            write_note("recovered", [
+                "## Moving again", "",
+                "%s started making progress again." % ", ".join(recovered),
+                "No action needed - this note exists so the earlier alert is not left open.",
+            ])
+    
+        save_state({"previous": now, "strikes": strikes, "stalled": stalled,
+                    "checkedAt": datetime.datetime.now(datetime.timezone.utc)
+                    .strftime("%Y-%m-%dT%H:%M:%SZ")})
+    
+    
+    if __name__ == "__main__":
+        main()

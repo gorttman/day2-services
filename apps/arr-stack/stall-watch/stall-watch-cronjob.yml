@@ -1,0 +1,91 @@
+# Watches for the pipeline having work but not moving.
+#
+# This exists because the failure has now happened twice without
+# anything noticing: 2026-09-07, and again 2026-09-10 for about half a
+# day. Both times the *arrs looked healthy - full queues, nothing
+# failing - because a queue that never progresses looks identical to a
+# busy one unless something measures the change.
+#
+# It matters more than it sounds: the nightly upgrade search tags 25
+# titles a night as "searched" whether or not their downloads ever
+# land, so every night a jam goes unnoticed permanently burns 25 titles
+# off the backlog.
+#
+# Every 30 minutes, and a stall must persist across two consecutive
+# checks before it alerts - one flat reading is meaningless, a large
+# file can sit in post-processing for a while. So the alert lands about
+# an hour into a real jam.
+#
+# Alerts go to the Obsidian vault, the same channel as the weekly
+# digest, and only on a change of state - one note per jam, plus one
+# when it clears, rather than one per check.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: download-stall-watch
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: download-stall-watch
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  schedule: "*/30 * * * *"
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          # Load-bearing, as with every other job here that reads an
+          # app's API key from its config PVC: Longhorn RWO only allows
+          # the second mount on the node already holding the volume.
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app: arr-stack
+                  topologyKey: kubernetes.io/hostname
+          # Vault notes must look like every other note in the vault.
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+            - name: stall-watch
+              image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/app/stall_watch.py"]
+              env:
+                # Two consecutive flat checks, i.e. ~1 hour, before it
+                # calls a stall. Raise if it ever cries wolf.
+                - {name: STALL_CHECKS, value: "2"}
+                - {name: STUCK_HOURS, value: "24"}
+                - {name: TZ, value: Australia/Sydney}
+              volumeMounts:
+                - {name: script, mountPath: /app, readOnly: true}
+                - {name: radarr-config, mountPath: /app-config/radarr, readOnly: true}
+                - {name: sonarr-config, mountPath: /app-config/sonarr, readOnly: true}
+                - {name: whisparr-config, mountPath: /app-config/whisparr, readOnly: true}
+                - {name: vault, mountPath: /vault, subPath: obsidian}
+              resources:
+                requests: {memory: "32Mi", cpu: "10m"}
+                limits: {memory: "128Mi", cpu: "200m"}
+          volumes:
+            - name: script
+              configMap: {name: download-stall-watch-script}
+            - name: radarr-config
+              persistentVolumeClaim: {claimName: radarr-config, readOnly: true}
+            - name: sonarr-config
+              persistentVolumeClaim: {claimName: sonarr-config, readOnly: true}
+            - name: whisparr-config
+              persistentVolumeClaim: {claimName: whisparr-config, readOnly: true}
+            - name: vault
+              nfs:
+                server: qnap
+                path: /vault
