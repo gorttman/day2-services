@@ -464,11 +464,18 @@ data:
         the download client, so the bad release is remembered and a
         replacement is looked for straight away.
 
-        Deliberately leaves 'completed' items alone even when flagged. Those
-        are the "Manual Import required" ones - the download actually
-        succeeded and only the import failed, so blocklisting would throw
-        away a good file and ban a good release. They are reported back as
-        needing a person instead.
+        'completed' items are mostly left alone even when flagged: those
+        are the "Manual Import required" and "already imported" ones, where
+        the download actually succeeded and only the import failed, so
+        blocklisting would throw away a good file and ban a good release.
+
+        The exception is a release carrying a bundled executable. Sonarr
+        reports those as "Found executable file with extension: '.exe'" -
+        a .exe inside a TV release is a malware pattern, not a real episode,
+        and four of them were sitting in the queue on 2026-09-10. There the
+        release itself is the problem, so it gets blocklisted like any other
+        bad grab and a replacement is searched. Nothing of value is lost -
+        the "file" was never the episode.
         """
         now = datetime.datetime.now(datetime.timezone.utc)
         cutoff = (now - datetime.timedelta(hours=STUCK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -487,7 +494,10 @@ data:
                 no_progress = size > 0 and left >= size and (r.get("added") or "9999") < cutoff
                 if not (flagged or no_progress):
                     continue
-                if r.get("status") == "completed":
+                why_msgs = " ".join(
+                    m for x in r.get("statusMessages", []) for m in (x.get("messages") or []))
+                bad_release = "executable file" in why_msgs.lower()
+                if r.get("status") == "completed" and not bad_release:
                     skipped.append({"app": app, "title": title,
                                     "why": "downloaded fine, import failed - needs a manual import"})
                     continue
@@ -495,11 +505,15 @@ data:
                     arr_delete(app, "queue/%s?removeFromClient=true&blocklist=true&skipRedownload=false"
                                % r["id"])
                     removed.append({"app": app, "title": title,
-                                    "why": "flagged by %s" % app if flagged
-                                           else "no progress in %dh" % STUCK_HOURS})
+                                    "why": "bundled executable - not a real release" if bad_release
+                                           else ("flagged by %s" % app if flagged
+                                                 else "no progress in %dh" % STUCK_HOURS)})
                 except Exception as e:
                     failed.append({"app": app, "title": title, "why": str(e)[:100]})
         msg = "Removed %d and blocklisted them, so replacements are being searched." % len(removed)
+        junk = sum(1 for r in removed if "executable" in r["why"])
+        if junk:
+            msg += " %d of those carried a bundled executable rather than media." % junk
         if skipped:
             msg += " %d left alone - they downloaded fine and need a manual import." % len(skipped)
         if failed:
