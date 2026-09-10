@@ -288,8 +288,11 @@ list rather than the upgrade list.
 
 ## LIVE 2026-09-10: on-demand status board (movie-status)
 
-`movie-status.i3sec.com.au` - one page, two cards, a Refresh button and
-no cache. Every request re-reads Radarr and renders fresh, the same
+`movie-status.i3sec.com.au` - one page, one Refresh button, no cache.
+Broadened 2026-09-10 from two movie cards to the whole pipeline: what
+is stuck right now, both movie libraries, TV legacy codecs, and the
+unattended jobs. The hostname stayed as-is deliberately - it already
+has DNS and a cert, and a second board would defeat the point. Every request re-reads Radarr and renders fresh, the same
 shape and reasoning as backup-dashboard: a CronJob writing a static
 file leaves you trusting its age instead of the data.
 

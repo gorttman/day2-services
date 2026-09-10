@@ -67,7 +67,13 @@ spec:
           volumeMounts:
             - {name: app, mountPath: /app, readOnly: true}
             - {name: radarr-config, mountPath: /app-config/radarr, readOnly: true}
+            - {name: sonarr-config, mountPath: /app-config/sonarr, readOnly: true}
+            - {name: whisparr-config, mountPath: /app-config/whisparr, readOnly: true}
+            - {name: sabnzbd-config, mountPath: /app-config/sabnzbd, readOnly: true}
             - {name: bulk-state, mountPath: /state/bulk_backfill_state.json, readOnly: true}
+            # Read-only: the board reports the stall watcher's verdict
+            # rather than recomputing it, so the two can never disagree.
+            - {name: vault, mountPath: /vault, subPath: obsidian, readOnly: true}
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             initialDelaySeconds: 2
@@ -83,6 +89,16 @@ spec:
           configMap: {name: movie-status}
         - name: radarr-config
           persistentVolumeClaim: {claimName: radarr-config, readOnly: true}
+        - name: sonarr-config
+          persistentVolumeClaim: {claimName: sonarr-config, readOnly: true}
+        - name: whisparr-config
+          persistentVolumeClaim: {claimName: whisparr-config, readOnly: true}
+        - name: sabnzbd-config
+          persistentVolumeClaim: {claimName: sabnzbd-config, readOnly: true}
+        - name: vault
+          nfs:
+            server: qnap
+            path: /vault
         # bulk_backfill.py is a host script with a host state file, and
         # rewrites it in place (open "w", same inode), so a File
         # hostPath stays valid across runs. Scoped to the one file
