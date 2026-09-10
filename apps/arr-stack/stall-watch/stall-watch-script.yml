@@ -13,31 +13,31 @@ data:
   stall_watch.py: |
     #!/usr/bin/env python3
     """Notice when the download pipeline has work but is not moving.
-    
+
     Twice now the whole pipeline has gone to zero throughput and stayed
     there without anything complaining: 2026-09-07 and again 2026-09-10,
     the second time for roughly half a day. Both times the *arrs looked
     busy - queues full, nothing failing - because a queue full of items
     that never progress looks exactly like a queue full of items that are
     progressing, unless something measures the difference.
-    
+
     The nightly upgrade search makes that worse rather than better. It
     keeps tagging 25 titles a night as "searched" whether or not their
     downloads ever land, so every night a jam goes unnoticed burns 25
     titles off the backlog that may never arrive.
-    
+
     What this measures, per *arr: the total bytes left across its queue.
     If the queue is non-empty and that total has not gone DOWN since the
     last check, that app is not moving. One flat check is meaningless (a
     big file can sit in post-processing), so a stall has to persist for
     STALL_CHECKS consecutive runs before it counts.
-    
+
     Deliberately reads the *arr queues rather than qBittorrent and
     SABnzbd directly. It is the honest measure - what matters is whether
     work is finishing, not whether a client claims a connection - and it
     avoids needing qBittorrent's credentials, whose WebUI refuses
     unauthenticated calls from outside its own pod.
-    
+
     Alerts go to the Obsidian vault, the same channel as the weekly
     digest, because this cluster has no push notification path at all.
     It writes only on a change of state - healthy to stalled, or stalled
@@ -50,7 +50,7 @@ data:
     import urllib.error
     import urllib.request
     import xml.etree.ElementTree as ET
-    
+
     APPS = {
         "radarr":   ("/app-config/radarr/config.xml",   "http://radarr.arr-stack.svc.cluster.local:7878"),
         "sonarr":   ("/app-config/sonarr/config.xml",   "http://sonarr.arr-stack.svc.cluster.local:8989"),
@@ -61,19 +61,19 @@ data:
     TOPIC = os.environ.get("TOPIC", "media-pipeline-alerts")
     STALL_CHECKS = int(os.environ.get("STALL_CHECKS", "2"))
     STUCK_HOURS = int(os.environ.get("STUCK_HOURS", "24"))
-    
-    
+
+
     def log(msg):
         print("%s  %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg), flush=True)
-    
-    
+
+
     def api(base, key, path):
         req = urllib.request.Request("%s/api/v3/%s" % (base, path), headers={"X-Api-Key": key})
         with urllib.request.urlopen(req, timeout=60) as r:
             raw = r.read().decode()
         return json.loads(raw) if raw.strip() else {}
-    
-    
+
+
     def queue_of(app):
         config, base = APPS[app]
         key = ET.parse(config).getroot().findtext("ApiKey")
@@ -84,8 +84,8 @@ data:
             if len(records) >= q.get("totalRecords", 0) or not q.get("records"):
                 return records
             page += 1
-    
-    
+
+
     def snapshot():
         now = datetime.datetime.now(datetime.timezone.utc)
         cutoff = (now - datetime.timedelta(hours=STUCK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -96,7 +96,16 @@ data:
             except Exception as e:
                 out[app] = {"error": str(e)[:120]}
                 continue
-            active = [r for r in recs if r.get("status") in ("downloading", "queued", "paused")]
+            # Only work with bytes still to fetch counts as active. A queue
+            # entry with sizeleft 0 has nothing left to move, so measuring
+            # it for progress is meaningless - and worse, its bytes-left can
+            # never decrease, which scores as a stall on every single check.
+            # Whisparr sat "stalled" for ten hours on one zero-byte phantom
+            # entry and produced five spurious vault notes before this was
+            # spotted (2026-09-11).
+            active = [r for r in recs
+                      if r.get("status") in ("downloading", "queued", "paused")
+                      and int(r.get("sizeleft") or 0) > 0]
             out[app] = {
                 "items": len(recs),
                 "active": len(active),
@@ -111,16 +120,16 @@ data:
                         if (r.get("added") or "9999") < cutoff and (r.get("sizeleft") or 0) > 0],
             }
         return out
-    
-    
+
+
     def load_state():
         try:
             with open(STATE_PATH) as f:
                 return json.load(f)
         except Exception:
             return {"previous": {}, "strikes": {}, "stalled": {}}
-    
-    
+
+
     def save_state(state):
         os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
         with open(STATE_PATH, "w") as f:
@@ -129,8 +138,8 @@ data:
             os.chmod(STATE_PATH, 0o664)
         except OSError:
             pass
-    
-    
+
+
     def write_note(kind, lines):
         folder = os.path.join(INBOX, TOPIC)
         os.makedirs(folder, exist_ok=True)
@@ -158,15 +167,15 @@ data:
         except OSError:
             pass
         log("wrote %s" % path)
-    
-    
+
+
     def main():
         state = load_state()
         now = snapshot()
         prev = state.get("previous", {})
         strikes = state.get("strikes", {})
         stalled = state.get("stalled", {})
-    
+
         newly_stalled, recovered = [], []
         for app, cur in now.items():
             if cur.get("error"):
@@ -174,7 +183,8 @@ data:
                 continue
             before = prev.get(app) or {}
             moving = (not before) or cur["bytesLeft"] < before.get("bytesLeft", 0)
-            idle = cur["active"] == 0
+            # Nothing outstanding is not the same as nothing moving.
+            idle = cur["active"] == 0 or cur["bytesLeft"] == 0
             if idle or moving:
                 strikes[app] = 0
             else:
@@ -188,7 +198,7 @@ data:
             stalled[app] = is_now
             log("%s: items=%s active=%s bytesLeft=%s strikes=%s stalled=%s"
                 % (app, cur["items"], cur["active"], cur["bytesLeft"], strikes[app], is_now))
-    
+
         if newly_stalled:
             lines = ["## Nothing is downloading", ""]
             for app in newly_stalled:
@@ -221,18 +231,18 @@ data:
                 "Background: `~/gm-dev/radarr_upgrade_context.md`",
             ]
             write_note("stalled", lines)
-    
+
         if recovered:
             write_note("recovered", [
                 "## Moving again", "",
                 "%s started making progress again." % ", ".join(recovered),
                 "No action needed - this note exists so the earlier alert is not left open.",
             ])
-    
+
         save_state({"previous": now, "strikes": strikes, "stalled": stalled,
                     "checkedAt": datetime.datetime.now(datetime.timezone.utc)
                     .strftime("%Y-%m-%dT%H:%M:%SZ")})
-    
-    
+
+
     if __name__ == "__main__":
         main()
