@@ -86,7 +86,8 @@ spec:
             limits: {memory: "192Mi", cpu: "500m"}
       volumes:
         - name: app
-          configMap: {name: movie-status}
+          configMap:
+            name: movie-status
         - name: radarr-config
           persistentVolumeClaim: {claimName: radarr-config, readOnly: true}
         - name: sonarr-config

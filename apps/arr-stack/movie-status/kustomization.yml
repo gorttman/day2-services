@@ -3,28 +3,7 @@ kind: Kustomization
 
 resources:
   - movie-status-rbac.yml
+  - movie-status-cm.yml
   - movie-status-deployment.yml
   - movie-status-service.yml
   - movie-status-ingress.yml
-
-# Generated, not a literal ConfigMap, and the script/page live as real
-# files rather than indented inside YAML.
-#
-# The point is the name hash. movie_status.py is loaded once when the
-# process starts, so editing a plain ConfigMap updates the file on disk
-# and changes nothing until someone remembers to restart the Deployment
-# - which is exactly the trap arr-wiring-reconciler documents, and it
-# bit this board on 2026-09-10: the pod had the new code on disk and
-# kept serving the old shape. A content hash in the name makes the
-# Deployment's own spec change, so any edit rolls the pod on its own.
-configMapGenerator:
-  - name: movie-status
-    files:
-      - movie_status.py
-      - index.html
-
-generatorOptions:
-  labels:
-    app: arr-stack
-    app.kubernetes.io/name: movie-status
-    argocd.argoproj.io/managed-by: argocd
