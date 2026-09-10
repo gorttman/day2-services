@@ -230,11 +230,13 @@ data:
         def side(root, mode):
             mine = {m["id"]: m for m in movies if m.get("rootFolderPath") == root}
             met = withfile = 0
+            on_disk = 0
             tiers = {"1": 0, "2": 0, "3": 0}
             for m in mine.values():
                 if not m.get("hasFile"):
                     continue
                 withfile += 1
+                on_disk += int(m["movieFile"].get("size") or 0)
                 if not below(m):
                     met += 1
                 else:
@@ -267,9 +269,11 @@ data:
                 "searched": searched, "remaining": remaining,
                 "replaced": sum(1 for x in hm if x["eventType"] == "movieFileDeleted"
                                 and x.get("data", {}).get("reason") == "Upgrade"),
+                "onDisk": on_disk,
                 "queue": {"total": len(qm),
-                          "byStatus": {s: sum(1 for r in qm if r.get("status") == s)
-                                       for s in {r.get("status") for r in qm}},
+                          "downloading": sum(1 for r in qm if r.get("status") == "downloading"),
+                          "queued": sum(1 for r in qm if r.get("status") != "downloading"),
+                          "inFlightBytes": sum(int(r.get("size") or 0) for r in qm),
                           "torrent": sum(1 for r in qm if r.get("protocol") == "torrent"),
                           "usenet": sum(1 for r in qm if r.get("protocol") == "usenet")},
                 "imported24h": sum(1 for x in imported if x["date"] >= day),
@@ -293,6 +297,7 @@ data:
         queue = arr_queue("sonarr")
         shows = []
         legacy_total = ep_total = 0
+        on_disk = [0]
         for s in series:
             try:
                 files = arr("sonarr", "episodefile?seriesId=%d" % s["id"])
@@ -302,6 +307,7 @@ data:
                       if ((f.get("mediaInfo") or {}).get("videoCodec", "") or "").lower() in LEGACY_CODECS]
             ep_total += len(files)
             legacy_total += len(legacy)
+            on_disk[0] += sum(int(f.get("size") or 0) for f in files)
             if legacy:
                 shows.append({"title": s["title"], "legacy": len(legacy), "files": len(files),
                               "profile": profiles.get(s["qualityProfileId"], {}).get("name", "?"),
@@ -310,7 +316,11 @@ data:
         return {
             "series": len(series), "episodeFiles": ep_total,
             "legacyFiles": legacy_total, "shows": shows[:12],
+            "onDisk": on_disk[0],
             "queue": {"total": len(queue),
+                      "downloading": sum(1 for r in queue if r.get("status") == "downloading"),
+                      "queued": sum(1 for r in queue if r.get("status") != "downloading"),
+                      "inFlightBytes": sum(int(r.get("size") or 0) for r in queue),
                       "torrent": sum(1 for r in queue if r.get("protocol") == "torrent"),
                       "usenet": sum(1 for r in queue if r.get("protocol") == "usenet")},
             "flagged": flagged_of(queue),
@@ -350,9 +360,59 @@ data:
             "needsPerson": rflag + tv["flagged"] + wflag,
             "inFlight": sorted(rflight + tv["inFlight"] + wflight, key=lambda x: -x["pct"]),
             "queues": {"radarr": rq, "sonarr": tv["queue"]["total"], "whisparr": len(wq)},
+            "groups": groups(main, bulk, tv),
             "main": main, "bulk": bulk, "tv": tv,
             "jobs": [cronjob_state(c) for c in CRONJOBS],
         }
+
+
+    def groups(main, bulk, tv):
+        """The four things being worked on, in one shape.
+
+        Every group answers the same four questions - how far through, how
+        much is queued, how much is downloading, how much is finished - so
+        the board can render them identically and they can be compared at a
+        glance. "Finished" means the same thing in each: a file that is on
+        disk and is what we want.
+
+        Regular movies and replacements are split deliberately. They share a
+        root folder but are different jobs: one is "do we have it at all",
+        the other is "is the copy any good", and merging them hides whichever
+        is going badly.
+        """
+        return [
+            {"key": "movies", "name": "Regular movies",
+             "what": "titles at Bluray-1080p", "root": main["root"],
+             "done": main["meetCutoff"], "total": main["titles"],
+             "queued": main["queue"]["queued"], "downloading": main["queue"]["downloading"],
+             "finished": main["meetCutoff"],
+             "onDisk": main["onDisk"], "inFlight": main["queue"]["inFlightBytes"],
+             "note": "Every title already has a file; this is how many are at the quality we want."},
+            {"key": "replacements", "name": "Replacements",
+             "what": "poor copies replaced", "root": main["root"],
+             "done": main["replaced"], "total": main["replaced"] + main["queue"]["total"] + main["remaining"],
+             "queued": main["queue"]["queued"], "downloading": main["queue"]["downloading"],
+             "finished": main["replaced"],
+             "onDisk": None, "inFlight": main["queue"]["inFlightBytes"],
+             "eta": main["eta"], "nights": main["nights"],
+             "note": "Runs itself nightly. A title that went 480p to WEB 1080p counts as remaining "
+                     "but will not be searched again."},
+            {"key": "midday", "name": "Midday movies",
+             "what": "titles found", "root": bulk["root"],
+             "done": bulk["withFile"], "total": bulk["titles"],
+             "queued": bulk["queue"]["queued"], "downloading": bulk["queue"]["downloading"],
+             "finished": bulk["withFile"],
+             "onDisk": bulk["onDisk"], "inFlight": bulk["queue"]["inFlightBytes"],
+             "note": "Titles with no copy at all. Only moves when bulk_backfill.py is run."},
+            {"key": "tv", "name": "TV",
+             "what": "episodes on a modern codec", "root": "/tv",
+             "done": tv["episodeFiles"] - tv["legacyFiles"], "total": tv["episodeFiles"],
+             "queued": tv["queue"]["queued"], "downloading": tv["queue"]["downloading"],
+             "finished": tv["episodeFiles"] - tv["legacyFiles"],
+             "onDisk": tv["onDisk"], "inFlight": tv["queue"]["inFlightBytes"],
+             "note": "The remainder is XviD/DivX, which has no hardware decoder on the TV and "
+                     "forces Jellyfin to transcode."},
+        ]
 
 
     class Handler(BaseHTTPRequestHandler):
@@ -464,6 +524,9 @@ data:
       .job { border:1px solid var(--line); border-radius:10px; padding:11px 13px; }
       .job .n { font-size:13px; font-weight:600; }
       .job .m { color:var(--ink3); font-size:12px; margin-top:3px; }
+      .badge { display:inline-block; font-size:11.5px; font-weight:600; padding:2px 8px;
+               border-radius:999px; border:1px solid var(--line); color:var(--ink3);
+               vertical-align:middle; margin-left:4px; }
       .err { color:var(--critical); }
     </style>
     <div id="root" class="wrap"></div>
@@ -527,20 +590,35 @@ data:
       </div>`;
     }
 
-    function Library({d,title,sub,segs,total,note}) {
-      const done = segs[0].v;
+    const sz = b => { if(b===null||b===undefined) return null;
+      return b>=1e12 ? (b/1e12).toFixed(2)+' TB' : b>=1e9 ? (b/1e9).toFixed(0)+' GB' : (b/1e6).toFixed(0)+' MB'; };
+
+    // One shape for every group, so four different jobs can be compared at a
+    // glance instead of each inventing its own layout.
+    function Group({g}) {
+      const rest = Math.max(g.total - g.done - g.queued - g.downloading, 0);
       return html`<div class="card">
-        <h2>${title}</h2>
-        <div class="sub">${sub}</div>
+        <h2>${g.name} <span class="badge">${g.root}</span></h2>
+        <div class="sub">${g.note}</div>
         <div class="hero">
-          <div><div class="figure">${pc(done,total)}<span style=${{fontSize:'22px'}}>%</span></div>
-            <div class="what">${segs[0].k}</div></div>
-          <div class="kpis" style=${{flex:'1 1 320px'}}>
-            ${d.kpis.map((k,i)=>html`<${Kpi} key=${i} v=${k[0]} label=${k[1]} />`)}
+          <div>
+            <div class="figure">${N(g.done)}<span style=${{fontSize:'22px',color:'var(--ink3)'}}> of ${N(g.total)}</span></div>
+            <div class="what">${g.what} - ${pc(g.done,g.total)}%</div>
+          </div>
+          <div class="kpis" style=${{flex:'1 1 300px'}}>
+            <${Kpi} v=${N(g.queued)} label="queued" />
+            <${Kpi} v=${N(g.downloading)} label="downloading" />
+            <${Kpi} v=${N(g.finished)} label="finished" />
           </div>
         </div>
-        <${Meter} segs=${segs} total=${total} />
-        ${note ? html`<div class="note">${note}</div>` : null}
+        <${Meter} segs=${[
+          {k:'finished', v:g.done, c:'var(--s1)'},
+          {k:'downloading', v:g.downloading, c:'var(--s2)'}]} total=${g.total} />
+        <div class="note">
+          ${g.onDisk!==null ? html`<b>${sz(g.onDisk)}</b> on disk. ` : null}
+          ${g.inFlight ? html`<b>${sz(g.inFlight)}</b> in flight. ` : null}
+          ${g.nights ? html`About <b>${g.nights}</b> more nights - <b>${g.eta}</b>.` : null}
+        </div>
       </div>`;
     }
 
@@ -578,30 +656,7 @@ data:
           <div class="stamp">${d?`as at ${when(d.generated)}`:busy?'loading':''}</div>
           <button onClick=${load} disabled=${busy}>${busy?'Refreshing':'Refresh'}</button></header>
         ${d && html`<${Health} d=${d} />`}
-        ${d && html`<${Library}
-          title="Main library" sub=${`${d.main.root} - replacing poor copies with better ones`}
-          total=${d.main.replaced + d.main.queue.total + d.main.remaining}
-          segs=${[{k:'replaced',v:d.main.replaced,c:'var(--s1)'},{k:'queued',v:d.main.queue.total,c:'var(--s2)'}]}
-          d=${{kpis:[[N(d.main.titles),'titles'],[N(d.main.meetCutoff),'at Bluray-1080p'],
-                     [d.main.nights?d.main.nights+' nights':'done','to finish'],[d.main.eta||'-','expected']]}}
-          note=${html`A title that went 480p to WEB 1080p is a big win but still below a Bluray
-            cutoff - it counts as remaining and will not be searched again.`} />`}
-        ${d && html`<${Library}
-          title="Midday movies" sub=${`${d.bulk.root} - titles with no copy at all, run by hand`}
-          total=${d.bulk.titles}
-          segs=${[{k:'have',v:d.bulk.withFile,c:'var(--s1)'},{k:'queued',v:d.bulk.queue.total,c:'var(--s2)'}]}
-          d=${{kpis:[[N(d.bulk.titles),'tracked'],[N(d.bulk.searched),'searched'],
-                     [N(d.bulk.remaining),'still missing'],['manual','no schedule']]}}
-          note=${html`Only moves when <b>bulk_backfill.py</b> is run.`} />`}
-        ${d && html`<${Library}
-          title="TV" sub="Legacy XviD and DivX episodes have no hardware decoder on the TV, so Jellyfin transcodes them"
-          total=${d.tv.episodeFiles}
-          segs=${[{k:'modern',v:d.tv.episodeFiles-d.tv.legacyFiles,c:'var(--s1)'},
-                  {k:'queued',v:d.tv.queue.total,c:'var(--s2)'}]}
-          d=${{kpis:[[N(d.tv.series),'series'],[N(d.tv.episodeFiles),'episode files'],
-                     [N(d.tv.legacyFiles),'legacy codec'],[N(d.tv.shows.length),'shows affected']]}}
-          note=${html`The track is legacy codec. Most affected shows sit on a profile with upgrades
-            disabled, so Sonarr will never replace them on its own.`} />`}
+        ${d && (d.groups||[]).map((g,i)=>html`<${Group} key=${i} g=${g} />`)}
         ${d && html`<${Jobs} jobs=${d.jobs} />`}
       </div>`;
     }
