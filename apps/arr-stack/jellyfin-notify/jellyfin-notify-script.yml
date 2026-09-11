@@ -1,0 +1,180 @@
+# Backstops the *arrs' own "tell Jellyfin to rescan" notifications
+# rather than replacing them.
+#
+# All three (Sonarr, Radarr, Whisparr) already carry a MediaBrowser
+# Connect notification with onDownload/updateLibrary set - see
+# wiring's reconcile_notifications(). That is supposed to be enough on
+# its own. It is not: a Whisparr import on 2026-09-11 landed on disk
+# and in Whisparr's own history exactly as expected, but no
+# corresponding call ever reached Jellyfin - nothing in Jellyfin's log
+# even mentioned the file - while a Radarr import minutes later on the
+# same day worked fine. No error, no retry, just silence for that one
+# call. Worst case before this existed: Jellyfin's own built-in "Scan
+# Media Library" task, every 12h, would eventually pick it up - fine
+# for a background library, not fine for something someone wants to
+# watch tonight.
+#
+# So this reads each *arr's own /history for "downloadFolderImported"
+# events - the same record the *arr's own notification is built from -
+# and POSTs the specific folder to Jellyfin's own
+# /Library/Media/Updated, the same endpoint the MediaBrowser
+# notification itself calls. A targeted per-folder update, not a full
+# library scan: cheap enough to run every 10 minutes without the
+# multi-minute, whole-library cost a "Scan Media Library" run has (it
+# walks every file's mtime, including the legacy .iso files that throw
+# noisy UDF-parsing errors on every single pass).
+#
+# State (last history date seen per app) lives in the vault next to
+# stall-watch's, for the same reason: small persisted JSON, no PVC of
+# its own needed. First run per app bootstraps to "now" without
+# notifying anything, so this cannot replay years of import history
+# into a flood of Jellyfin calls the moment it is first deployed.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jellyfin-notify-script
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: jellyfin-notify
+    argocd.argoproj.io/managed-by: argocd
+data:
+  jellyfin_notify.py: |
+    #!/usr/bin/env python3
+    import datetime
+    import json
+    import os
+    import posixpath
+    import time
+    import urllib.error
+    import urllib.request
+    import xml.etree.ElementTree as ET
+
+    APPS = {
+        "radarr":   ("/app-config/radarr/config.xml",   "http://radarr.arr-stack.svc.cluster.local:7878"),
+        "sonarr":   ("/app-config/sonarr/config.xml",   "http://sonarr.arr-stack.svc.cluster.local:8989"),
+        "whisparr": ("/app-config/whisparr/config.xml", "http://whisparr.arr-stack.svc.cluster.local:6969"),
+    }
+    JELLYFIN_BASE = "http://jellyfin.jellyfin.svc.cluster.local:8096"
+    JELLYFIN_KEY_PATH = os.environ.get("JELLYFIN_KEY_PATH", "/secrets/jellyfin/jellyfin_api_key")
+    STATE_PATH = os.environ.get("STATE_PATH", "/vault/inbox/media-pipeline-alerts/.jellyfin_notify_state.json")
+    HISTORY_PAGE_SIZE = int(os.environ.get("HISTORY_PAGE_SIZE", "50"))
+
+
+    def log(msg):
+        print("%s  %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg), flush=True)
+
+
+    def arr_api(base, key, path):
+        req = urllib.request.Request("%s/api/v3/%s" % (base, path), headers={"X-Api-Key": key})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read().decode()
+        return json.loads(raw) if raw.strip() else {}
+
+
+    def new_imports_since(app, last_seen):
+        """downloadFolderImported records newer than last_seen, oldest first.
+
+        Paged newest-first and stopped at the first record at or before
+        last_seen, since one page is normally enough - only a genuine
+        backlog burst needs more than HISTORY_PAGE_SIZE records between
+        two 10-minute checks.
+        """
+        config, base = APPS[app]
+        key = ET.parse(config).getroot().findtext("ApiKey")
+        found, page, seen = [], 1, 0
+        while True:
+            h = arr_api(base, key, "history?page=%d&pageSize=%d&sortKey=date&sortDirection=descending"
+                        % (page, HISTORY_PAGE_SIZE))
+            recs = h.get("records", [])
+            if not recs:
+                break
+            seen += len(recs)
+            hit_stop = False
+            for r in recs:
+                if last_seen and (r.get("date") or "") <= last_seen:
+                    hit_stop = True
+                    break
+                if r.get("eventType") == "downloadFolderImported":
+                    found.append(r)
+            if hit_stop or seen >= h.get("totalRecords", 0):
+                break
+            page += 1
+        found.sort(key=lambda r: r["date"])
+        return found
+
+
+    def load_state():
+        try:
+            with open(STATE_PATH) as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+
+    def save_state(state):
+        os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+        with open(STATE_PATH, "w") as f:
+            json.dump(state, f, indent=1)
+        try:
+            os.chmod(STATE_PATH, 0o664)
+        except OSError:
+            pass
+
+
+    def notify_jellyfin(paths):
+        with open(JELLYFIN_KEY_PATH) as f:
+            token = f.read().strip()
+        body = json.dumps({"Updates": [{"Path": p, "UpdateType": "Created"} for p in paths]}).encode()
+        req = urllib.request.Request(
+            JELLYFIN_BASE + "/Library/Media/Updated", data=body, method="POST",
+            headers={"X-Emby-Token": token, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.status
+
+
+    def main():
+        state = load_state()
+        to_notify, next_state = [], dict(state)
+
+        for app in APPS:
+            last_seen = state.get(app)
+            try:
+                recs = new_imports_since(app, last_seen)
+            except Exception as e:
+                log("%s: could not read history (%s)" % (app, str(e)[:150]))
+                continue
+
+            if last_seen is None:
+                # First run for this app: bootstrap only, no backfill flood.
+                if recs:
+                    next_state[app] = recs[-1]["date"]
+                    log("%s: bootstrapping, %d prior import(s) not backfilled" % (app, len(recs)))
+                continue
+
+            for r in recs:
+                path = (r.get("data") or {}).get("importedPath")
+                if path:
+                    to_notify.append(posixpath.dirname(path))
+            if recs:
+                next_state[app] = recs[-1]["date"]
+                log("%s: %d new import(s)" % (app, len(recs)))
+
+        folders = sorted(set(to_notify))
+        if folders:
+            try:
+                status = notify_jellyfin(folders)
+                log("notified Jellyfin of %d folder(s), HTTP %s" % (len(folders), status))
+                for f in folders:
+                    log("  - %s" % f)
+            except urllib.error.URLError as e:
+                log("could not reach Jellyfin: %s - state not advanced, will retry next run" % e)
+                return
+        else:
+            log("nothing new")
+
+        save_state(next_state)
+
+
+    if __name__ == "__main__":
+        main()

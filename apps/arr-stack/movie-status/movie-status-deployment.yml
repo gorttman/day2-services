@@ -65,7 +65,7 @@ spec:
             - {name: BULK_BATCH, value: "50"}
             # Explicit now that a fourth job exists - movie_status.py's
             # own default list would otherwise silently omit queue-clear.
-            - {name: CRONJOBS, value: "radarr-upgrade-search,radarr-upgrade-digest,download-stall-watch,queue-clear"}
+            - {name: CRONJOBS, value: "radarr-upgrade-search,radarr-upgrade-digest,download-stall-watch,queue-clear,jellyfin-notify"}
             - {name: TZ, value: Australia/Sydney}
           volumeMounts:
             - {name: app, mountPath: /app, readOnly: true}

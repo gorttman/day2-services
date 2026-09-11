@@ -1,0 +1,74 @@
+# Every 10 minutes - see jellyfin-notify-script.yml for why. Cheap: a
+# few history reads plus, at most, one small POST to Jellyfin, not a
+# library scan.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jellyfin-notify
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: jellyfin-notify
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  schedule: "*/10 * * * *"
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: Never
+          # Load-bearing, as with every other job here that reads an
+          # app's API key from its config PVC: Longhorn RWO only allows
+          # the second mount on the node already holding the volume.
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app: arr-stack
+                  topologyKey: kubernetes.io/hostname
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+            - name: jellyfin-notify
+              image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/app/jellyfin_notify.py"]
+              env:
+                - {name: TZ, value: Australia/Sydney}
+              volumeMounts:
+                - {name: script, mountPath: /app, readOnly: true}
+                - {name: radarr-config, mountPath: /app-config/radarr, readOnly: true}
+                - {name: sonarr-config, mountPath: /app-config/sonarr, readOnly: true}
+                - {name: whisparr-config, mountPath: /app-config/whisparr, readOnly: true}
+                - {name: jellyfin-key, mountPath: /secrets/jellyfin, readOnly: true}
+                - {name: vault, mountPath: /vault, subPath: obsidian}
+              resources:
+                requests: {memory: "32Mi", cpu: "10m"}
+                limits: {memory: "128Mi", cpu: "200m"}
+          volumes:
+            - name: script
+              configMap: {name: jellyfin-notify-script}
+            - name: radarr-config
+              persistentVolumeClaim: {claimName: radarr-config, readOnly: true}
+            - name: sonarr-config
+              persistentVolumeClaim: {claimName: sonarr-config, readOnly: true}
+            - name: whisparr-config
+              persistentVolumeClaim: {claimName: whisparr-config, readOnly: true}
+            - name: jellyfin-key
+              secret:
+                secretName: arr-stack-wiring-secret
+                items:
+                  - {key: jellyfin_api_key, path: jellyfin_api_key}
+            - name: vault
+              nfs:
+                server: qnap
+                path: /vault
