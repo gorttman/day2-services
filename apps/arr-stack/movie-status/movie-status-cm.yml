@@ -773,6 +773,10 @@ data:
       .result ul { margin:0; padding:0; list-style:none; }
       .result li { display:flex; gap:10px; padding:3px 0; font-size:12.5px; }
       .result li span { margin-left:auto; opacity:.75; text-align:right; }
+      .dls { margin-top:12px; }
+      .dl { display:flex; align-items:center; gap:10px; padding:4px 0; font-size:12.5px; }
+      .dl .t { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink2); }
+      .dl .p { font-weight:700; min-width:40px; text-align:right; }
       .err { color:var(--critical); }
     </style>
     <div id="root" class="wrap"></div>
@@ -787,6 +791,16 @@ data:
     const when = s => s ? new Date(s).toLocaleString([], {dateStyle:'medium', timeStyle:'short'}) : '-';
     const ago = s => { if(!s) return 'never'; const m=Math.round((Date.now()-new Date(s))/60000);
       return m<1?'just now':m<60?m+'m ago':m<1440?Math.round(m/60)+'h ago':Math.round(m/1440)+'d ago'; };
+
+    // Fixed status steps, not a continuous red-green interpolation - a
+    // smooth hue sweep through that axis is exactly what protanopia and
+    // deuteranopia collapse, so it fails for a real fraction of readers.
+    // Four bands read the same "getting better toward green" story
+    // without relying on hue alone. A stalled item's app overrides the
+    // band outright: a stuck download is critical regardless of how far
+    // it got before it stopped.
+    const pctColor = (pct, isStalled) => isStalled ? 'var(--critical)'
+      : pct>=75 ? 'var(--good)' : pct>=40 ? 'var(--warning)' : pct>=10 ? 'var(--serious)' : 'var(--critical)';
 
     function Kpi({v,label}) { return html`<div class="kpi"><b>${v}</b><span>${label}</span></div>`; }
 
@@ -838,7 +852,10 @@ data:
       const bad = stalled.length>0 || clearable>0, warn = needsYou.length>0;
       const state = bad ? {t:'Stalled', c:'var(--critical)'} : warn ? {t:'Needs a look', c:'var(--warning)'}
                                                                     : {t:'All moving', c:'var(--good)'};
-      const dl = (d.inFlight||[]).length;
+      const inFlight = d.inFlight||[];
+      const dl = inFlight.length;
+      const stalledSet = new Set(stalled);
+      const shown = inFlight.slice(0,8);
       return html`<div class="card">
         <div class="hero">
           <div>
@@ -856,6 +873,13 @@ data:
           <${Kpi} v=${N(d.queues.radarr+d.queues.sonarr+d.queues.whisparr)} label="queued in total" />
           <${Kpi} v=${d.freeTB+' TB'} label="free space" />
         </div>
+        ${shown.length ? html`<div class="dls">
+          ${shown.map((it,i)=>html`<div class="dl" key=${i}>
+            <span class="t">${it.title}<span class="badge">${it.app}</span></span>
+            <span class="p" style=${{color:pctColor(it.pct, stalledSet.has(it.app))}}>${it.pct}%</span>
+          </div>`)}
+          ${dl>shown.length ? html`<div class="note">+${dl-shown.length} more downloading</div>` : null}
+        </div>` : null}
         ${stalled.length ? html`<div class="note"><b>Not moving:</b> ${stalled.join(', ')} - queue is
           non-empty and bytes-left has not dropped across consecutive checks.</div>` : null}
         ${clearable ? html`<div class="note"><b>${clearable} dead item${clearable>1?'s':''}</b> -
