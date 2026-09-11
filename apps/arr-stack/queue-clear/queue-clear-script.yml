@@ -1,0 +1,41 @@
+# Runs the same "Clear" the movie-status board's button already offers,
+# on a schedule instead of waiting for a person to notice and click it.
+#
+# No logic lives here - it just POSTs to movie-status's own
+# /api/run/unstick handler, so this can never drift from what the
+# button does. That handler (see run_unstick() in movie_status.py) only
+# ever touches items stuck_reason() calls clearable: dead/no-progress
+# entries, empty phantom queue rows, and releases carrying a bundled
+# executable. Anything that downloaded fine but only failed to import
+# ("Manual Import required", "already imported") is deliberately left
+# alone - stuck_reason() returns None for those - because blocklisting
+# a release that actually worked bans a good release for nothing. That
+# case still needs a person; see the media-queue-fix skill.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: queue-clear-script
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: queue-clear
+    argocd.argoproj.io/managed-by: argocd
+data:
+  queue_clear.py: |
+    #!/usr/bin/env python3
+    import json
+    import sys
+    import urllib.error
+    import urllib.request
+
+    URL = "http://movie-status.arr-stack.svc.cluster.local/api/run/unstick"
+
+    try:
+        with urllib.request.urlopen(urllib.request.Request(URL, method="POST"), timeout=60) as r:
+            body = json.load(r)
+    except urllib.error.URLError as e:
+        sys.exit("queue-clear: could not reach movie-status: %s" % e)
+
+    print(body.get("message", json.dumps(body)))
+    for f in body.get("failed", []):
+        print("FAILED: %s %s - %s" % (f.get("app"), f.get("title", ""), f.get("why")))

@@ -1,0 +1,48 @@
+# Automates the movie-status board's Clear button (see
+# queue-clear-script.yml for why this is safe to run unattended) so
+# junk like a bundled-.exe release does not sit waiting for a person to
+# notice and click it - as one just did on 2026-09-12.
+#
+# Same 30-minute cadence as download-stall-watch, since it is cheap and
+# reads directly off the *arr queues. No PVC/API-key access needed here
+# - it only calls movie-status's own ClusterIP service, so no pod
+# affinity is required either.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: queue-clear
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: queue-clear
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  schedule: "*/30 * * * *"
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+            - name: queue-clear
+              image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/app/queue_clear.py"]
+              volumeMounts:
+                - {name: script, mountPath: /app, readOnly: true}
+              resources:
+                requests: {memory: "32Mi", cpu: "10m"}
+                limits: {memory: "128Mi", cpu: "200m"}
+          volumes:
+            - name: script
+              configMap: {name: queue-clear-script}
