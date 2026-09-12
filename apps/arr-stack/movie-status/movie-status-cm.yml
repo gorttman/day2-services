@@ -94,8 +94,18 @@ data:
     # Drama/Thriller first, Romance demoted because it is the house style
     # and dominates; Christmas matched on text since TMDb has no such genre.
     CORE_GENRES = {"Drama", "Thriller"}
-    XMAS = re.compile(r"christmas|holiday|santa|noel|yule|xmas|advent|mistletoe|"
-                      r"nutcracker|snowman|st\.? nick", re.I)
+    # Leading \b only, not trailing: "the holidays" and "Christmases"
+    # need to still match. advent gets a negative lookahead instead of a
+    # boundary - a bare \badvent\b still matched inside "adventure" and
+    # "adventurous" often enough to misclassify Finding Nemo, Harry
+    # Potter and 40+ other clearly-not-Christmas titles (found 2026-09-12
+    # chasing why upgrade-search's own copy of this pattern was giving
+    # Hallmark precedence to the wrong movies). "holiday" itself stays
+    # genuinely ambiguous - also a surname and English's word for a
+    # vacation - so a rare non-Christmas title still slips in; not worth
+    # chasing further with more regex guessing.
+    XMAS = re.compile(r"\bchristmas|\bholiday|\bsanta|\bnoel|\byule|\bxmas|advent(?!ur)|"
+                      r"\bmistletoe|\bnutcracker|\bsnowman|\bst\.? nick", re.I)
 
 
     def tier_of(mv):
