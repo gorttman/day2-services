@@ -81,12 +81,15 @@ spec:
                 # Everything tunable lives here, so changing the pace is
                 # a one-line edit to this file.
                 - {name: ROOT_FOLDER, value: "/movies"}
-                # 25/night against a 1,111-title backlog is ~45 nights.
-                # Sized off the measured pipeline: a batch this size
-                # lands roughly 15-20 grabs at the hit rate seen on
-                # 2026-09-07, which is a few hours of downloading, not a
-                # queue that is still draining when the next run fires.
-                - {name: BATCH, value: "25"}
+                # Cut from 25 to 10/night on 2026-09-12: this backlog and
+                # the /movies-bulk missing-movie backfill share one
+                # download pipeline, and 25/night of mostly-Bluray
+                # replacements was crowding out the bulk backfill's own
+                # throughput. 10/night against the remaining backlog is
+                # slower progress here in exchange for bulk actually
+                # moving. Must match movie_status.py's MAIN_BATCH, or its
+                # "nights remaining" figure lies.
+                - {name: BATCH, value: "10"}
                 # Worst-looking first: below 720p, then 720p, then the
                 # 1080p-but-not-Bluray stragglers.
                 - {name: TIERS, value: "1,2,3"}

@@ -37,11 +37,21 @@ data:
       tier 1  below 720p   - SD, DVD, 480p, 576p            (596)
       tier 2  720p                                          (449)
       tier 3  1080p but below cutoff - HDTV/WEB 1080p       (66)
-    
+
     Tier 1 leads deliberately. It is the tier that actually looks bad on a
     TV, and it overlaps almost exactly with the legacy mpeg4/.avi files
     that have no hardware decoder on the TV and force Jellyfin to
     transcode - upgrading those fixes playback and picture in one pass.
+
+    Hallmark/Christmas titles jump the resolution tiers entirely (2026-09-12):
+    this backlog and the /movies-bulk missing-movie backfill share one
+    download pipeline, and a batch this size was busy enough to slow the
+    bulk backfill's own throughput. That set matters more than working
+    strictly worst-quality-first, so it is now the actual top priority -
+    identified the same way bulk_backfill.py's tier_of() finds it (title/
+    overview text match, since TMDb has no Christmas genre), independent
+    of resolution tier. Non-Hallmark candidates still sort worst-quality-
+    first among themselves exactly as before.
     
     STATE lives in Radarr, as a tag on each movie (default
     "upgrade-searched"), not in a file. The job is stateless and can be
@@ -67,6 +77,7 @@ data:
     """
     import json
     import os
+    import re
     import ssl
     import sys
     import time
@@ -168,6 +179,28 @@ data:
         if resolution == 720:
             return 2
         return 3
+
+    # Same pattern movie_status.py's bulk-backfill tier_of() uses - kept
+    # identical on purpose so "Hallmark" means the same set of titles in
+    # both places. Leading \b only, not trailing: "the holidays" and
+    # "Christmases" need to still match. advent gets its own negative
+    # lookahead instead of a boundary, since a bare \badvent\b still
+    # matched inside "adventure"/"adventurous" often enough to flip half
+    # of the first live batch (2026-09-12) - Finding Nemo, Harold & Kumar,
+    # The Little Mermaid and others, none of them Christmas movies.
+    #
+    # "holiday" stays genuinely ambiguous even after that fix - it is
+    # also a character surname (Syriana's Bennett Holiday) and English's
+    # everyday word for a vacation (The Ruins: "a sunny holiday in
+    # Mexico"), so a couple of non-Christmas titles will still surface
+    # near the front of a batch. Chasing that to zero needs more than a
+    # regex can tell; left as-is deliberately rather than guessing at
+    # ever-more context rules.
+    XMAS = re.compile(r"\bchristmas|\bholiday|\bsanta|\bnoel|\byule|\bxmas|advent(?!ur)|"
+                      r"\bmistletoe|\bnutcracker|\bsnowman|\bst\.? nick", re.I)
+
+    def is_hallmark(m):
+        return bool(XMAS.search((m.get("title") or "") + " " + (m.get("overview") or "")))
     
     
     def ensure_tag():
@@ -285,12 +318,13 @@ data:
         by_tier = {}
         for tier, _, _ in candidates:
             by_tier[tier] = by_tier.get(tier, 0) + 1
-        log("%d untagged upgrade candidates in %s: %s"
-            % (len(candidates), ROOT_FOLDER,
+        hallmark_n = sum(1 for _, _, m in candidates if is_hallmark(m))
+        log("%d untagged upgrade candidates in %s (%d Hallmark): %s"
+            % (len(candidates), ROOT_FOLDER, hallmark_n,
                ", ".join("tier %d = %d" % (t, by_tier[t]) for t in sorted(by_tier)) or "none"))
     
         wanted = [c for c in candidates if c[0] in TIERS]
-        wanted.sort(key=lambda c: (TIERS.index(c[0]), c[1]))
+        wanted.sort(key=lambda c: (0 if is_hallmark(c[2]) else 1, TIERS.index(c[0]), c[1]))
         batch = [m for _, _, m in wanted[:BATCH]]
         if not batch:
             log("nothing left to search in tiers %s - backlog is clear" % TIERS)
@@ -299,8 +333,9 @@ data:
             return
     
         for m in batch:
-            log("  tier %d  %-9s  %s (%s)"
-                % (tier_of(m["movieFile"]["quality"]["quality"]["resolution"]),
+            log("  %s tier %d  %-9s  %s (%s)"
+                % ("[Hallmark]" if is_hallmark(m) else "          ",
+                   tier_of(m["movieFile"]["quality"]["quality"]["resolution"]),
                    m["movieFile"]["quality"]["quality"]["name"], m["title"], m["year"]))
     
         if DRY_RUN:

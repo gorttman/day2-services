@@ -60,7 +60,7 @@ spec:
           env:
             # Must match the search CronJob's BATCH or the "nights
             # remaining" figure lies.
-            - {name: MAIN_BATCH, value: "25"}
+            - {name: MAIN_BATCH, value: "10"}
             # bulk_backfill.py's own default batch size.
             - {name: BULK_BATCH, value: "50"}
             # Explicit now that a fourth job exists - movie_status.py's
