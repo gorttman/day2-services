@@ -205,6 +205,37 @@ data:
             log("INFO", f"sabnzbd server ensured: {srv['name']} ({srv['host']}:{srv['port']})")
 
 
+    def reconcile_sabnzbd_misc(desired, sab_apikey):
+        """Pin the sabnzbd.ini [misc] keys that keep SABnzbd inside its
+        container memory limit and un-wedge its queue after a crash.
+
+        These live in sabnzbd.ini on the config PVC, i.e. outside git, so
+        without this they only exist until something rebuilds that volume -
+        exactly the kind of remember-it-later step that gets skipped. Set
+        here instead, re-asserted every pass like every other wiring key.
+
+        Why these two specifically (2026-09-18 incident): cache_limit was
+        1G against the sabnzbd container's 2Gi cap. SABnzbd's article cache
+        plus a concurrent par2 repair plus direct_unpack's 3 threads blew
+        past 2Gi, so the kernel cgroup OOM-killed it - and because
+        memory.oom.group is set, it took the container's whole process tree
+        (s6-svscan included) with it, not just python3. dmesg showed
+        CONSTRAINT_MEMCG with python3 at ~1.18 GB anon-rss. SABnzbd's own
+        log showed the resulting restart loop as repeating bursts of
+        "Signal 15 caught, saving and exiting...".
+        fulldisk_autoresume then turned that crash into a permanent stall:
+        at 0, jobs left paused by the crash NEVER resume on their own. All
+        10 queued jobs sat Paused for a week - while the global paused flag
+        read False and free disk was 10.4 T, so nothing looked wrong from
+        the outside - until Sonarr's stall-watch finally flagged it.
+        """
+        base = "http://localhost:8080/api"
+        for key, value in (desired.get("sabnzbd", {}).get("misc") or {}).items():
+            params = f"mode=set_config&section=misc&keyword={urllib.parse.quote(str(key))}&value={urllib.parse.quote(str(value))}&apikey={sab_apikey}&output=json"
+            http_json("GET", f"{base}?{params}")
+            log("INFO", f"sabnzbd misc ensured: {key} = {value}")
+
+
     # ---------------------------------------------------------------------
     # Sonarr/Radarr root folders
     # ---------------------------------------------------------------------
@@ -800,6 +831,10 @@ data:
                 reconcile_sabnzbd_servers(desired, sab_apikey)
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
                 log("CRIT", f"sabnzbd server reconcile failed: {e}")
+            try:
+                reconcile_sabnzbd_misc(desired, sab_apikey)
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+                log("CRIT", f"sabnzbd misc reconcile failed: {e}")
         else:
             log("INFO", "sabnzbd api key not available yet (config.ini not written) - skipping this pass")
 

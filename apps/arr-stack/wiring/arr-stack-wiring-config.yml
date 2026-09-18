@@ -35,6 +35,29 @@ data:
         - name: adult
           dir: ""
 
+      # sabnzbd.ini [misc] keys, applied via set_config like everything
+      # else here. Both exist because of the 2026-09-18 stall: SABnzbd
+      # was being cgroup-OOM-killed against its 2Gi container limit and
+      # then leaving its whole queue paused forever.
+      #
+      # cache_limit: was 1G, which does not fit in a 2Gi container once
+      # par2 repair and direct_unpack's 3 threads run alongside it - the
+      # kernel killed the container's entire process tree (memory.oom.group
+      # is set, so s6-svscan died too, not just python3). 256M leaves
+      # real headroom: measured 370Mi total container RSS with all 10
+      # jobs downloading at ~12 MB/s. Raise it only alongside the
+      # container's own memory limit in arr-stack-deployment.yml, never
+      # on its own.
+      #
+      # fulldisk_autoresume: at 0 - SABnzbd's default - a job paused by a
+      # crash or a transient disk-space check stays paused for good. That
+      # is what turned one OOM into a week-long silent stall: global
+      # paused read False and disk had 10.4 T free, so only the per-job
+      # status showed it. 1 makes SABnzbd pick the queue back up itself.
+      misc:
+        cache_limit: 256M
+        fulldisk_autoresume: 1
+
       # Frugal Usenet account (2026-07-23) - username/password sealed
       # and ready (frugal_username/frugal_password in
       # arr-stack-wiring-sealed-secret.yml). aunews.frugalusenet.com is
