@@ -32,7 +32,16 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      activeDeadlineSeconds: 300
+      # Raised 300 -> 1200 (2026-09-20). A rotation now waits up to
+      # ENDPOINT_POLL_TIMEOUT (300s) per restart attempt for gluetun's
+      # endpoint to be readable, because pod-level Ready is gated by
+      # sabnzbd's ~3.5min startup. Two attempts x (delete 60s + wait 60s +
+      # poll 300s) plus PIA sampling does not fit in 300s, and a rotation
+      # killed midway by this deadline is what left three Failed jobs in
+      # the last 24h with the peer already committed to git.
+      # concurrencyPolicy: Forbid above means a long run just skips the
+      # next 15-minute tick rather than overlapping.
+      activeDeadlineSeconds: 1200
       template:
         spec:
           restartPolicy: Never

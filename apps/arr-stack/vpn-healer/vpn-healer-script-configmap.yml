@@ -64,6 +64,14 @@ data:
     POD_SELECTOR = os.environ.get("POD_SELECTOR", "app=arr-stack")
     GLUETUN_CONTAINER = os.environ.get("GLUETUN_CONTAINER", "gluetun")
     PIA_REGION = os.environ.get("PIA_REGION", "aus")
+    # How long to keep re-reading gluetun's endpoint after a restart before
+    # calling the restart itself failed. Generous on purpose: gluetun is up
+    # in seconds, but this pod's slowest container (sabnzbd, ~3.5min to pass
+    # its probe under load) gates pod-level Ready, and exec can be refused
+    # until then. Cheaper to wait here than to delete the pod again - every
+    # spurious delete aborts an in-flight SABnzbd unpack and strands an
+    # _UNPACK_ folder (1,062 of them, 766 GB, found 2026-09-20).
+    ENDPOINT_POLL_TIMEOUT = int(os.environ.get("ENDPOINT_POLL_TIMEOUT", "300"))
     RESTART_LOOP_WINDOW = os.environ.get("RESTART_LOOP_WINDOW", "5m")
     RESTART_LOOP_THRESHOLD = int(os.environ.get("RESTART_LOOP_THRESHOLD", "10"))
     SEALED_SECRETS_CERT_URL = os.environ.get(
@@ -158,8 +166,51 @@ data:
 
 
     def get_arr_stack_pod_name():
+        # Deliberately NOT `{.items[0].metadata.name}`. During a restart
+        # there are briefly TWO pods matching this selector - the old one
+        # still Terminating and the new one coming up - and items[0] is
+        # whichever the API server lists first, frequently the terminating
+        # one. `kubectl exec` into a terminating pod fails, kubectl() with
+        # check=False turns that into '', and restart_arr_stack() then read
+        # that '' as "the restart did not take" and deleted the pod again.
+        # That is the whole reason a single genuine PIA rotation was costing
+        # four pod restarts (confirmed live 2026-09-20 from a healer job
+        # log: four consecutive "came up with endpoint ''" retries against
+        # four different pod names, while the pod that was actually running
+        # had the correct endpoint all along).
+        #
+        # Filter to a pod that is Running and has no deletionTimestamp, so
+        # the name we hand to exec is one that can actually serve it.
+        #
+        # The filtering is done in Python, NOT in a jsonpath predicate.
+        # `?(@.metadata.deletionTimestamp=='')` looks like it should work
+        # and silently matches NOTHING: on a pod that is not being deleted
+        # the field is absent entirely, and kubectl's jsonpath does not
+        # treat an absent field as equal to ''. Verified live 2026-09-20 -
+        # that predicate returned zero rows against a healthy single-pod
+        # arr-stack, which would have made this fall through to the same
+        # items[0] behaviour it exists to replace. Emit the fields and
+        # decide here instead. Pipe-separated because a literal tab needs
+        # escaping through both YAML and jsonpath to get here intact.
+        rows = kubectl(
+            "get", "pods", "-l", POD_SELECTOR,
+            # NOTE the doubled backslash. kubectl's jsonpath parser wants
+            # the literal two characters \n inside {"..."}; a real newline
+            # there is a parse error ('error parsing jsonpath', rc=1, empty
+            # stdout) which check=False would have turned into a silent
+            # fall-through to items[0] - the exact bug being fixed.
+            # Verified both spellings against live kubectl 2026-09-20.
+            "-o", 'jsonpath={range .items[*]}{.metadata.name}{"|"}'
+                  '{.status.phase}{"|"}{.metadata.deletionTimestamp}{"\\n"}{end}',
+            check=False)
+        for line in (rows or "").splitlines():
+            parts = line.split("|")
+            if len(parts) >= 3 and parts[1] == "Running" and not parts[2]:
+                return parts[0]
+        # Fall back to the old behaviour rather than hard-failing: a
+        # single-pod steady state still resolves fine this way.
         return kubectl("get", "pods", "-l", POD_SELECTOR,
-                        "-o", "jsonpath={.items[0].metadata.name}")
+                        "-o", "jsonpath={.items[0].metadata.name}", check=False)
 
 
     def gluetun_is_restart_looping():
@@ -263,7 +314,11 @@ data:
                 "--type", "merge", "-p", json.dumps(patch))
 
 
-    def restart_arr_stack(expected_endpoint_ip, attempts=4, settle_timeout=60):
+    # attempts dropped 4 -> 2 (2026-09-20). Four existed to fight the race
+    # that read_endpoint_ip() now handles directly; with the read no longer
+    # reporting false failures, extra deletes only cost aborted unpacks.
+    def restart_arr_stack(expected_endpoint_ip, attempts=2, settle_timeout=60,
+                           endpoint_poll_timeout=ENDPOINT_POLL_TIMEOUT):
         # A single delete-and-hope isn't enough: confirmed live 2026-08-09
         # that a concurrent restart (ArgoCD self-heal, or an overlapping
         # healer run - manually triggering a Job alongside this CronJob
@@ -277,18 +332,47 @@ data:
         for attempt in range(1, attempts + 1):
             kubectl("delete", "pod", get_arr_stack_pod_name(), "--wait=true",
                     f"--timeout={settle_timeout}s", check=False, timeout=settle_timeout + 10)
-            pod_name = wait_for_pod_ready(GLUETUN_CONTAINER, timeout=settle_timeout)
-            if pod_name is None:
-                continue
-            actual_ip = kubectl("exec", pod_name, "-c", GLUETUN_CONTAINER,
-                                 "--", "printenv", "WIREGUARD_ENDPOINT_IP", check=False)
+            wait_for_pod_ready(GLUETUN_CONTAINER, timeout=settle_timeout)
+            # Poll the endpoint rather than reading it once. gluetun itself
+            # is serving within seconds, but pod-level condition=Ready needs
+            # ALL of this pod's containers, and sabnzbd alone takes ~3.5min
+            # to pass its probe under load - so wait_for_pod_ready() times
+            # out routinely on a pod that is perfectly fine, and a single
+            # exec fired right after it hits a container that cannot answer
+            # yet. An empty read means "ask again", NOT "the restart
+            # failed": treating it as failure is what caused the delete
+            # storm this function was meant to prevent.
+            actual_ip = read_endpoint_ip(timeout=endpoint_poll_timeout)
             if actual_ip == expected_endpoint_ip:
                 return
-            print(f"restart attempt {attempt}/{attempts}: pod {pod_name} came up with "
+            print(f"restart attempt {attempt}/{attempts}: pod came up with "
                   f"endpoint {actual_ip!r}, expected {expected_endpoint_ip!r} - retrying")
         raise RuntimeError(
             f"arr-stack pod never came up with endpoint {expected_endpoint_ip!r} "
             f"after {attempts} restart attempts - needs a human look")
+
+
+    def read_endpoint_ip(timeout):
+        """Read gluetun's live WIREGUARD_ENDPOINT_IP, tolerating startup.
+
+        Returns the value as soon as it reads non-empty, or '' if the whole
+        window passes without one. Every failure mode here - pod still
+        terminating, container not accepting exec yet, transient API error -
+        surfaces from kubectl(check=False) as '', and all of them are worth
+        retrying for a bounded time instead of concluding anything.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            pod_name = get_arr_stack_pod_name()
+            if pod_name:
+                value = kubectl("exec", pod_name, "-c", GLUETUN_CONTAINER,
+                                 "--", "printenv", "WIREGUARD_ENDPOINT_IP",
+                                 check=False)
+                if value:
+                    return value
+            if time.monotonic() >= deadline:
+                return ""
+            time.sleep(5)
 
 
     def wait_for_pod_ready(container, timeout):
