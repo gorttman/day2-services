@@ -45,7 +45,15 @@ metadata:
     app.kubernetes.io/name: postgres
     argocd.argoproj.io/managed-by: argocd
 spec:
-  schedule: "0 2 * * *"
+  # Moved from 02:00 (2026-09-22): the QNAP snapshot backup (see
+  # day0-infra-build variables/play/qnap_backup_cron.yml) now runs as
+  # 10 staggered per-source jobs spanning 23:59-02:59, each needing a
+  # real wall-clock gap afterward for the kernel to reclaim dentry/
+  # inode cache (see day0-infra-build roles/qnap_snapshot/HISTORY.md
+  # #1 for the OOM this is avoiding). 03:30 leaves margin after the
+  # last snapshot job (prune, 02:59) and before the credentials rsync
+  # at 04:30 (roles/qnap_client).
+  schedule: "30 3 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
