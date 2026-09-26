@@ -325,7 +325,16 @@ data:
     .leaf b{display:block;font:700 20px/1.3 var(--display)}
     .flags{display:flex;flex-direction:column;gap:10px}
     .flag{padding:12px 14px;border-left:3px solid var(--warn);background:var(--surface);border-radius:0 8px 8px 0;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
-    .flag strong{display:block;margin-bottom:2px}
+    .flag{display:flex;flex-direction:column;gap:4px}
+    .flag strong{display:block}
+    .flag.back{border-left-color:var(--info)}
+    .flag .decision{font-style:italic}
+    .flag-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+    .flag-actions button{padding:6px 10px;font-size:12.5px}
+    .decided{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+    .decided summary{cursor:pointer}
+    .drow{display:flex;justify-content:space-between;gap:12px;align-items:center;padding-top:10px;margin-top:10px;border-top:1px solid var(--line)}
+    .drow button{padding:5px 9px;font-size:12px;flex-shrink:0}
     button{font:500 13px var(--body);background:var(--accent);color:var(--surface);border:0;border-radius:7px;padding:8px 12px;cursor:pointer}
     button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
     button:disabled{opacity:.55;cursor:default}
@@ -366,6 +375,9 @@ data:
     const fmtDate = d => d ? `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}` : "—";
     const money = (v, c) => v == null ? "—" : `${SYM[c] || ""}${v.toFixed(2)}`;
     const aud = s => (s.price || 0) * (FX[s.currency] || 1);
+    const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    // A snoozed flag counts as open again once its date arrives.
+    const flagOpen = f => f.state === "open" || (f.state === "snoozed" && (!f.snoozeUntil || parse(f.snoozeUntil) <= today()));
 
     // Roll a stored renewal date forward by its cycle until it is today or later.
     function nextDate(s) {
@@ -390,6 +402,9 @@ data:
       const [dbState, setDbState] = useState("loading");
       const [db, setDb] = useState(null);
       const [canEdit, setCanEdit] = useState(false);
+      const [flags, setFlags] = useState([]);
+      const [busy, setBusy] = useState(null);
+      const [snoozeFor, setSnoozeFor] = useState({});
       const [feed, setFeed] = useState({ state: "loading", threads: [], at: null, error: null });
 
       useEffect(() => {
@@ -398,23 +413,27 @@ data:
         // the list from the JSON file served next to the page instead.
         if (!HOSTED) {
           fetch("subscriptions.json", { cache: "no-store" }).then(r => r.json())
-            .then(d => { setSubs(d.subs); setDbState("ready"); })
+            .then(d => { setSubs(d.subs); setFlags(d.flags || []); setDbState("ready"); })
             .catch(() => setDbState("unavailable"));
           return;
         }
+        let unsubFlags = () => {};
         claude.use("db").then(d => {
           if (!d) { setDbState("unavailable"); return; }
           setDb(d);
           unsub = d.collection("subs").onSnapshot(
             snap => { setSubs(snap.docs.map(x => ({ id: x.id, ...x.data() }))); setDbState("ready"); },
             () => setDbState("unavailable"));
+          unsubFlags = d.collection("flags").onSnapshot(
+            snap => setFlags(snap.docs.map(x => ({ id: x.id, ...x.data() }))),
+            () => setFlags([]));
         });
         claude.use("user").then(u => {
           if (!u) return;
           const w = u.can("data.write");
           setCanEdit(w == null ? u.isOwner() : w);
         });
-        return () => unsub();
+        return () => { unsub(); unsubFlags(); };
       }, []);
 
       useEffect(() => {
@@ -440,6 +459,31 @@ data:
         if (!db) return;
         try { await db.doc("subs/" + id).update({ status }); }
         catch (e) { setCanEdit(false); }
+      }
+
+      // Worth-a-look decisions. "Keep for now" hides a flag until a date, then it
+      // comes back on its own; "Done for good" closes it and, where the flag says
+      // so, marks its subscriptions cancelled so they drop out of the totals.
+      async function decide(f, action) {
+        if (!db || busy) return;
+        setBusy(f.id);
+        const stamp = isoDay(today());
+        try {
+          if (action === "snooze") {
+            const months = Number(snoozeFor[f.id] || 3);
+            const t = today();
+            const until = isoDay(new Date(t.getFullYear(), t.getMonth() + months, t.getDate()));
+            await db.doc("flags/" + f.id).update({ state: "snoozed", snoozeUntil: until, decidedAt: stamp });
+          } else if (action === "resolve") {
+            for (const id of f.resolveSubs || []) {
+              await db.doc("subs/" + id).update({ status: "cancelled", note: f.resolveNote || "Resolved from Worth a look", endDate: stamp });
+            }
+            await db.doc("flags/" + f.id).update({ state: "resolved", decidedAt: stamp });
+          } else if (action === "reopen") {
+            await db.doc("flags/" + f.id).update({ state: "open", snoozeUntil: null, decidedAt: null });
+          }
+        } catch (e) { setCanEdit(false); }
+        setBusy(null);
       }
 
       const view = useMemo(() => {
@@ -482,6 +526,17 @@ data:
         ? html`<select id=${"st-" + s.id} aria-label=${"Status for " + s.name} value=${s.status} onChange=${e => setStatus(s.id, e.target.value)}>
             <option value="active">Active</option><option value="review">Check</option><option value="cancelled">Cancelled</option></select>`
         : html`<span class=${"chip " + (s.status === "active" ? "ok" : s.status)}>${s.status}</span>`;
+
+      const byOrder = (a, b) => (a.order || 99) - (b.order || 99);
+      const openFlags = flags.filter(flagOpen).sort(byOrder);
+      const decidedFlags = flags.filter(f => !flagOpen(f)).sort(byOrder);
+      // Live cost of the subscriptions a flag is about, so the figure moves when prices or statuses do.
+      const flagCost = f => {
+        const linked = (f.subIds || []).map(id => subs.find(s => s.id === id)).filter(s => s && s.status !== "cancelled" && s.cycleMonths);
+        if (!linked.length) return null;
+        const perMonth = linked.reduce((t, s) => t + aud(s) / s.cycleMonths, 0);
+        return html`<span class="sub num">${linked.map(s => s.name).join(" + ")} ≈ A$${perMonth.toFixed(0)}/month</span>`;
+      };
 
       const lastSeen = s => inbox.last[s.id] ? html`<div class="sub">Last email ${fmtDate(inbox.last[s.id])}</div>` : null;
 
@@ -561,11 +616,28 @@ data:
           </section>
 
           <section>
-            <div class="sechead"><h2>Worth a look</h2></div>
+            <div class="sechead"><h2>Worth a look</h2><span class="eyebrow">${openFlags.length} open</span></div>
             <div class="flags">
-              ${view.review.map(s => html`<div class="flag" key=${s.id}><strong>${s.name}</strong><span class="sub">${s.note}</span></div>`)}
-              <div class="flag"><strong>Three AI subscriptions</strong><span class="sub">Claude Pro, SuperGrok and Venice.ai together cost about A$103 a month.</span></div>
-              <div class="flag"><strong>Confirm the Apple list</strong><span class="sub">System Settings → your name → Media & Purchases → Subscriptions is the definitive list for Apple billing.</span></div>
+              ${openFlags.length ? openFlags.map(f => html`<div class=${"flag" + (f.state === "snoozed" ? " back" : "")} key=${f.id}>
+                <strong>${f.title}</strong>
+                <span class="sub">${f.body}</span>
+                ${flagCost(f)}
+                ${f.state === "snoozed" ? html`<span class="sub decision">Back after "keep for now" on ${fmtDate(parse(f.decidedAt))}${f.decision ? ": " + f.decision : ""}</span>` : null}
+                ${canEdit ? html`<div class="flag-actions">
+                  <select id=${"snz-" + f.id} aria-label=${"Keep " + f.title + " for"} value=${snoozeFor[f.id] || "3"} onChange=${e => setSnoozeFor({ ...snoozeFor, [f.id]: e.target.value })}>
+                    <option value="1">1 month</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select>
+                  <button class="ghost" disabled=${busy === f.id} onClick=${() => decide(f, "snooze")}>Keep for now</button>
+                  <button disabled=${busy === f.id} onClick=${() => decide(f, "resolve")}>${f.resolveSubs?.length ? "Done, cancel it" : "Done for good"}</button>
+                </div>` : null}
+              </div>`) : html`<p class="note panel">Nothing needs a decision right now.</p>`}
+              ${decidedFlags.length ? html`<details class="decided">
+                <summary class="eyebrow">Decided · ${decidedFlags.length}</summary>
+                ${decidedFlags.map(f => html`<div class="drow" key=${f.id}>
+                  <div><div class="name">${f.title}</div>
+                    <div class="sub">${f.state === "resolved" ? `Done for good ${fmtDate(parse(f.decidedAt))}` : `Kept for now · flags again ${fmtDate(parse(f.snoozeUntil))}`}${f.decision ? " · " + f.decision : ""}</div></div>
+                  ${canEdit ? html`<button class="ghost" disabled=${busy === f.id} onClick=${() => decide(f, "reopen")}>Reopen</button>` : null}
+                </div>`)}
+              </details>` : null}
             </div>
           </section>
         </div>
@@ -597,33 +669,459 @@ data:
   subscriptions.json: |
     {
       "asOf": "2026-09-26",
-      "fx": {"AUD": 1, "USD": 1.52, "EUR": 1.65},
+      "fx": {
+        "AUD": 1,
+        "USD": 1.52,
+        "EUR": 1.65
+      },
       "subs": [
-        {"id": "claude-pro", "name": "Claude Pro", "category": "AI", "price": 30.00, "currency": "AUD", "cycleMonths": 1, "via": "Apple", "next": "2026-10-25", "status": "active", "note": "Apple Account brett@i3sec.com.au", "match": ["Claude Pro"]},
-        {"id": "icloud", "name": "iCloud+ 2 TB", "category": "Storage", "price": 14.99, "currency": "AUD", "cycleMonths": 1, "via": "Apple", "next": "2026-09-30", "status": "active", "match": ["iCloud+"]},
-        {"id": "apple-tv", "name": "Apple TV", "category": "Streaming", "price": 15.99, "currency": "AUD", "cycleMonths": 1, "via": "Apple", "next": "2026-09-29", "status": "active", "match": ["Apple TV Monthly"]},
-        {"id": "onepassword", "name": "1Password Family", "category": "Security", "price": 12.99, "currency": "AUD", "cycleMonths": 1, "via": "Apple", "next": "2026-10-10", "status": "active", "match": ["1Password"]},
-        {"id": "youtube", "name": "YouTube Premium", "category": "Streaming", "price": 16.99, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": "2026-09-28", "status": "active", "match": ["YouTube Red", "GOOGLE YOUTUBE"]},
-        {"id": "spotify", "name": "Spotify", "category": "Music", "price": 15.99, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": "2026-10-21", "status": "active", "match": ["Spotify"]},
-        {"id": "workspace", "name": "Google Workspace", "category": "Business (i3sec)", "price": 25.96, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": "2026-10-01", "status": "active", "note": "i3sec.com.au business account", "match": ["Google Workspace"]},
-        {"id": "grok", "name": "SuperGrok", "category": "AI", "price": 30.00, "currency": "USD", "cycleMonths": 1, "via": "Card", "next": "2026-10-25", "status": "active", "match": ["Grok"]},
-        {"id": "venice", "name": "Venice.ai", "category": "AI", "price": 18.00, "currency": "USD", "cycleMonths": 1, "via": "Card", "next": "2026-09-27", "status": "active", "match": ["Venice"]},
-        {"id": "usenet", "name": "UsenetNow / BlockNews", "category": "Usenet", "price": 5.99, "currency": "USD", "cycleMonths": 1, "via": "PayPal", "next": "2026-10-22", "status": "active", "note": "PayPal automatic payment", "match": ["UsenetNow", "BlockNews"]},
-        {"id": "paramount", "name": "Paramount+", "category": "Streaming", "price": 115.99, "currency": "AUD", "cycleMonths": 12, "via": "Direct", "next": "2026-10-22", "status": "active", "note": "Price change notice received 22 Sep", "match": ["Paramount"]},
-        {"id": "dyn", "name": "Oracle Dyn DNS", "category": "DNS", "price": 60.00, "currency": "USD", "cycleMonths": 12, "via": "PayPal", "next": "2027-09-08", "status": "active", "note": "flowmotion.com.au · autopay off, renew by hand", "match": ["Dyn", "Dynamic Network"]},
-        {"id": "obsidian", "name": "Obsidian", "category": "Notes", "price": 48.00, "currency": "USD", "cycleMonths": 12, "via": "Card", "next": "2027-07-18", "status": "active", "note": "Probably yearly Sync", "match": ["Obsidian"]},
-        {"id": "make", "name": "Make.com (My Lab)", "category": "Automation", "price": null, "currency": "USD", "cycleMonths": 12, "via": "Card", "next": "2027-07-23", "status": "active", "note": "Price not in email", "match": ["make.com"]},
-        {"id": "fastmail", "name": "Fastmail Duo", "category": "Email", "price": 273.60, "currency": "AUD", "cycleMonths": 24, "via": "Paddle", "next": "2028-08-03", "status": "active", "note": "Last paid A$246.24 with discount", "match": ["Fastmail"]},
-        {"id": "pia", "name": "PIA VPN", "category": "VPN", "price": 77.61, "currency": "AUD", "cycleMonths": 36, "via": "PayPal", "next": "2029-07-18", "status": "active", "note": "3-year plan", "match": ["Private Internet Access"]},
-        {"id": "nzbgeek", "name": "NZBgeek", "category": "Usenet", "price": 40.00, "currency": "USD", "cycleMonths": 60, "via": "PayPal", "next": "2031-07-23", "status": "active", "note": "5-year plan", "match": ["NZBgeek", "Geek Hub"]},
-        {"id": "anthropic-extra", "name": "Anthropic extra usage", "category": "AI", "price": 76.73, "currency": "AUD", "cycleMonths": 0, "via": "Card", "next": null, "status": "review", "note": "Prepaid top-ups on gorttman@ (30 Aug, plus two mid-Aug) on top of Claude Pro via Apple on brett@. Check both accounts are needed.", "match": ["Anthropic, PBC"]},
-        {"id": "airvpn", "name": "AirVPN", "category": "VPN", "price": 7.00, "currency": "EUR", "cycleMonths": 0, "via": "PayPal", "next": null, "status": "review", "note": "€7 on 27 Aug, alongside the PIA 3-year plan. Check it isn't recurring.", "match": ["AirVPN"]},
-        {"id": "evernote", "name": "Evernote", "category": "Notes", "price": 23.24, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": null, "endDate": "2026-09-26", "status": "cancelled", "note": "Payment failed 25 Sep, cancelled", "match": ["Evernote", "Bending Spoons"]},
-        {"id": "disney", "name": "Disney+", "category": "Streaming", "price": 17.99, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": null, "endDate": "2026-08-27", "status": "cancelled", "note": "Autopay cancelled; lapsing after failed payments", "match": ["Disney"]},
-        {"id": "norton", "name": "Norton", "category": "Security", "price": null, "currency": "AUD", "cycleMonths": 12, "via": "Direct", "next": null, "endDate": "2026-08-16", "status": "cancelled", "note": "Renewal cancelled, expired", "match": ["Norton"]},
-        {"id": "darkroom", "name": "Darkroom", "category": "Photo", "price": 49.99, "currency": "AUD", "cycleMonths": 12, "via": "Apple", "next": null, "endDate": "2026-08-28", "status": "cancelled", "note": "Cancelled during free trial", "match": ["Darkroom"]},
-        {"id": "procamera", "name": "ProCamera", "category": "Photo", "price": 29.99, "currency": "AUD", "cycleMonths": 12, "via": "Apple", "next": null, "status": "cancelled", "note": "Set to expire (notice 28 Aug)", "match": ["ProCamera"]},
-        {"id": "photosync", "name": "PhotoSync Premium", "category": "Photo", "price": 9.99, "currency": "AUD", "cycleMonths": 12, "via": "Apple", "next": null, "status": "cancelled", "note": "Replaced by lifetime purchase on 1 Sep", "match": ["PhotoSync"]},
-        {"id": "pdf-expert", "name": "PDF Expert Premium", "category": "Documents", "price": 78.99, "currency": "AUD", "cycleMonths": 12, "via": "Apple", "next": null, "status": "cancelled", "note": "Set to expire (notice 17 Aug)", "match": ["PDF Expert"]}
+        {
+          "id": "claude-pro",
+          "name": "Claude Pro",
+          "category": "AI",
+          "price": 30.0,
+          "currency": "AUD",
+          "cycleMonths": 1,
+          "via": "Apple",
+          "next": "2026-10-25",
+          "status": "active",
+          "note": "Apple Account brett@i3sec.com.au",
+          "match": [
+            "Claude Pro"
+          ]
+        },
+        {
+          "id": "icloud",
+          "name": "iCloud+ 2 TB",
+          "category": "Storage",
+          "price": 14.99,
+          "currency": "AUD",
+          "cycleMonths": 1,
+          "via": "Apple",
+          "next": "2026-09-30",
+          "status": "active",
+          "match": [
+            "iCloud+"
+          ]
+        },
+        {
+          "id": "apple-tv",
+          "name": "Apple TV",
+          "category": "Streaming",
+          "price": 15.99,
+          "currency": "AUD",
+          "cycleMonths": 1,
+          "via": "Apple",
+          "next": "2026-09-29",
+          "status": "active",
+          "match": [
+            "Apple TV Monthly"
+          ]
+        },
+        {
+          "id": "onepassword",
+          "name": "1Password Family",
+          "category": "Security",
+          "price": 12.99,
+          "currency": "AUD",
+          "cycleMonths": 1,
+          "via": "Apple",
+          "next": "2026-10-10",
+          "status": "active",
+          "match": [
+            "1Password"
+          ]
+        },
+        {
+          "id": "youtube",
+          "name": "YouTube Premium",
+          "category": "Streaming",
+          "price": 16.99,
+          "currency": "AUD",
+          "cycleMonths": 1,
+          "via": "PayPal",
+          "next": "2026-09-28",
+          "status": "active",
+          "match": [
+            "YouTube Red",
+            "GOOGLE YOUTUBE"
+          ]
+        },
+        {
+          "id": "spotify",
+          "name": "Spotify",
+          "category": "Music",
+          "price": 15.99,
+          "currency": "AUD",
+          "cycleMonths": 1,
+          "via": "PayPal",
+          "next": "2026-10-21",
+          "status": "active",
+          "match": [
+            "Spotify"
+          ]
+        },
+        {
+          "id": "workspace",
+          "name": "Google Workspace",
+          "category": "Business (i3sec)",
+          "price": 25.96,
+          "currency": "AUD",
+          "cycleMonths": 1,
+          "via": "PayPal",
+          "next": "2026-10-01",
+          "status": "active",
+          "note": "i3sec.com.au business account",
+          "match": [
+            "Google Workspace"
+          ]
+        },
+        {
+          "id": "grok",
+          "name": "SuperGrok",
+          "category": "AI",
+          "price": 30.0,
+          "currency": "USD",
+          "cycleMonths": 1,
+          "via": "Card",
+          "next": "2026-10-25",
+          "status": "active",
+          "match": [
+            "Grok"
+          ]
+        },
+        {
+          "id": "venice",
+          "name": "Venice.ai",
+          "category": "AI",
+          "price": 18.0,
+          "currency": "USD",
+          "cycleMonths": 1,
+          "via": "Card",
+          "next": "2026-09-27",
+          "status": "active",
+          "match": [
+            "Venice"
+          ]
+        },
+        {
+          "id": "usenet",
+          "name": "UsenetNow / BlockNews",
+          "category": "Usenet",
+          "price": 5.99,
+          "currency": "USD",
+          "cycleMonths": 1,
+          "via": "PayPal",
+          "next": "2026-10-22",
+          "status": "active",
+          "note": "PayPal automatic payment",
+          "match": [
+            "UsenetNow",
+            "BlockNews"
+          ]
+        },
+        {
+          "id": "paramount",
+          "name": "Paramount+",
+          "category": "Streaming",
+          "price": 115.99,
+          "currency": "AUD",
+          "cycleMonths": 12,
+          "via": "Direct",
+          "next": "2026-10-22",
+          "status": "active",
+          "note": "Price change notice received 22 Sep",
+          "match": [
+            "Paramount"
+          ]
+        },
+        {
+          "id": "dyn",
+          "name": "Oracle Dyn DNS",
+          "category": "DNS",
+          "price": 60.0,
+          "currency": "USD",
+          "cycleMonths": 12,
+          "via": "PayPal",
+          "next": "2027-09-08",
+          "status": "active",
+          "note": "flowmotion.com.au · autopay off, renew by hand",
+          "match": [
+            "Dyn",
+            "Dynamic Network"
+          ]
+        },
+        {
+          "id": "obsidian",
+          "name": "Obsidian",
+          "category": "Notes",
+          "price": 48.0,
+          "currency": "USD",
+          "cycleMonths": 12,
+          "via": "Card",
+          "next": "2027-07-18",
+          "status": "active",
+          "note": "Probably yearly Sync",
+          "match": [
+            "Obsidian"
+          ]
+        },
+        {
+          "id": "make",
+          "name": "Make.com (My Lab)",
+          "category": "Automation",
+          "price": null,
+          "currency": "USD",
+          "cycleMonths": 12,
+          "via": "Card",
+          "next": "2027-07-23",
+          "status": "active",
+          "note": "Price not in email",
+          "match": [
+            "make.com"
+          ]
+        },
+        {
+          "id": "fastmail",
+          "name": "Fastmail Duo",
+          "category": "Email",
+          "price": 273.6,
+          "currency": "AUD",
+          "cycleMonths": 24,
+          "via": "Paddle",
+          "next": "2028-08-03",
+          "status": "active",
+          "note": "Last paid A$246.24 with discount",
+          "match": [
+            "Fastmail"
+          ]
+        },
+        {
+          "id": "pia",
+          "name": "PIA VPN",
+          "category": "VPN",
+          "price": 77.61,
+          "currency": "AUD",
+          "cycleMonths": 36,
+          "via": "PayPal",
+          "next": "2029-07-18",
+          "status": "active",
+          "note": "3-year plan",
+          "match": [
+            "Private Internet Access"
+          ]
+        },
+        {
+          "id": "nzbgeek",
+          "name": "NZBgeek",
+          "category": "Usenet",
+          "price": 40.0,
+          "currency": "USD",
+          "cycleMonths": 60,
+          "via": "PayPal",
+          "next": "2031-07-23",
+          "status": "active",
+          "note": "5-year plan",
+          "match": [
+            "NZBgeek",
+            "Geek Hub"
+          ]
+        },
+        {
+          "id": "anthropic-extra",
+          "name": "Anthropic extra usage",
+          "category": "AI",
+          "price": 76.73,
+          "currency": "AUD",
+          "cycleMonths": 0,
+          "via": "Card",
+          "next": null,
+          "status": "review",
+          "note": "Prepaid top-ups on gorttman@ (30 Aug, plus two mid-Aug) on top of Claude Pro via Apple on brett@. Check both accounts are needed.",
+          "match": [
+            "Anthropic, PBC"
+          ]
+        },
+        {
+          "id": "airvpn",
+          "name": "AirVPN",
+          "category": "VPN",
+          "price": 7.0,
+          "currency": "EUR",
+          "cycleMonths": 0,
+          "via": "PayPal",
+          "next": null,
+          "status": "cancelled",
+          "note": "Tried once (€7, Aug 2026). Turned off; don't use again.",
+          "match": [
+            "AirVPN"
+          ],
+          "endDate": "2026-09-26"
+        },
+        {
+          "id": "evernote",
+          "name": "Evernote",
+          "category": "Notes",
+          "price": 23.24,
+          "currency": "AUD",
+          "cycleMonths": 1,
+          "via": "PayPal",
+          "next": null,
+          "endDate": "2026-09-26",
+          "status": "cancelled",
+          "note": "Payment failed 25 Sep, cancelled",
+          "match": [
+            "Evernote",
+            "Bending Spoons"
+          ]
+        },
+        {
+          "id": "disney",
+          "name": "Disney+",
+          "category": "Streaming",
+          "price": 17.99,
+          "currency": "AUD",
+          "cycleMonths": 1,
+          "via": "PayPal",
+          "next": null,
+          "endDate": "2026-08-27",
+          "status": "cancelled",
+          "note": "Autopay cancelled; lapsing after failed payments",
+          "match": [
+            "Disney"
+          ]
+        },
+        {
+          "id": "norton",
+          "name": "Norton",
+          "category": "Security",
+          "price": null,
+          "currency": "AUD",
+          "cycleMonths": 12,
+          "via": "Direct",
+          "next": null,
+          "endDate": "2026-08-16",
+          "status": "cancelled",
+          "note": "Renewal cancelled, expired",
+          "match": [
+            "Norton"
+          ]
+        },
+        {
+          "id": "darkroom",
+          "name": "Darkroom",
+          "category": "Photo",
+          "price": 49.99,
+          "currency": "AUD",
+          "cycleMonths": 12,
+          "via": "Apple",
+          "next": null,
+          "endDate": "2026-08-28",
+          "status": "cancelled",
+          "note": "Cancelled during free trial",
+          "match": [
+            "Darkroom"
+          ]
+        },
+        {
+          "id": "procamera",
+          "name": "ProCamera",
+          "category": "Photo",
+          "price": 29.99,
+          "currency": "AUD",
+          "cycleMonths": 12,
+          "via": "Apple",
+          "next": null,
+          "status": "cancelled",
+          "note": "Set to expire (notice 28 Aug)",
+          "match": [
+            "ProCamera"
+          ]
+        },
+        {
+          "id": "photosync",
+          "name": "PhotoSync Premium",
+          "category": "Photo",
+          "price": 9.99,
+          "currency": "AUD",
+          "cycleMonths": 12,
+          "via": "Apple",
+          "next": null,
+          "status": "cancelled",
+          "note": "Replaced by lifetime purchase on 1 Sep",
+          "match": [
+            "PhotoSync"
+          ]
+        },
+        {
+          "id": "pdf-expert",
+          "name": "PDF Expert Premium",
+          "category": "Documents",
+          "price": 78.99,
+          "currency": "AUD",
+          "cycleMonths": 12,
+          "via": "Apple",
+          "next": null,
+          "status": "cancelled",
+          "note": "Set to expire (notice 17 Aug)",
+          "match": [
+            "PDF Expert"
+          ]
+        }
+      ],
+      "flags": [
+        {
+          "id": "anthropic-two-accounts",
+          "order": 1,
+          "title": "Paying for two Claude setups",
+          "body": "Claude Pro is billed through Apple on brett@, and prepaid extra usage was bought directly from Anthropic on gorttman@ (30 Aug, plus two in mid-August). Check both accounts are needed.",
+          "subIds": [
+            "claude-pro",
+            "anthropic-extra"
+          ],
+          "resolveSubs": [
+            "anthropic-extra"
+          ],
+          "resolveNote": "Stopped buying extra usage on gorttman@",
+          "state": "open"
+        },
+        {
+          "id": "ai-trio",
+          "order": 2,
+          "title": "Three AI subscriptions",
+          "body": "Claude, SuperGrok and Venice.ai overlap. Review once the router is working the way you want.",
+          "subIds": [
+            "claude-pro",
+            "grok",
+            "venice"
+          ],
+          "state": "snoozed",
+          "snoozeUntil": "2026-12-26",
+          "decidedAt": "2026-09-26",
+          "decision": "Keeping all three until the router setup settles"
+        },
+        {
+          "id": "airvpn",
+          "order": 3,
+          "title": "AirVPN alongside PIA",
+          "body": "€7 paid on 27 Aug while PIA's 3-year plan is active.",
+          "subIds": [
+            "airvpn"
+          ],
+          "resolveSubs": [
+            "airvpn"
+          ],
+          "resolveNote": "Tried once (€7, Aug 2026). Turned off; don't use again.",
+          "state": "resolved",
+          "decidedAt": "2026-09-26",
+          "decision": "Tried it once, paid once, it's off. Forget it."
+        },
+        {
+          "id": "apple-list",
+          "order": 4,
+          "title": "Confirm the Apple list",
+          "body": "System Settings → your name → Media & Purchases → Subscriptions is the definitive list for Apple billing. Check it matches the four Apple rows here.",
+          "state": "open"
+        }
       ]
     }
