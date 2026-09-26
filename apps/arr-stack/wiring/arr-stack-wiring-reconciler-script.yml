@@ -268,8 +268,15 @@ data:
     # ---------------------------------------------------------------------
 
     def reconcile_radarr_customformats(desired, apikey):
-        base = "http://localhost:7878/api/v3"
-        cfs = desired.get("radarr", {}).get("customFormats", [])
+        # Kept as a thin alias so the existing radarr call site and its
+        # comments stay meaningful; the body is app-generic now because
+        # Sonarr needs the same treatment (foreign-dub scoring, 2026-09-26).
+        return reconcile_customformats("radarr", desired, apikey)
+
+
+    def reconcile_customformats(app, desired, apikey):
+        base = f"http://localhost:{APP_PORTS[app]}/api/v3"
+        cfs = desired.get(app, {}).get("customFormats", [])
         if not cfs:
             return {}
         existing = http_json("GET", f"{base}/customformat?apikey={apikey}") or []
@@ -283,7 +290,7 @@ data:
                     None,
                 )
                 if spec_schema is None:
-                    log("CRIT", f"radarr: no custom format specification {spec_cfg['implementation']!r}")
+                    log("CRIT", f"{app}: no custom format specification {spec_cfg['implementation']!r}")
                     continue
                 spec = json.loads(json.dumps(spec_schema))
                 spec["name"] = spec_cfg.get("name", spec_cfg["implementation"])
@@ -299,13 +306,61 @@ data:
             if match is None:
                 created = http_json("POST", f"{base}/customformat?apikey={apikey}", body=body)
                 ids[cf_cfg["name"]] = created["id"]
-                log("INFO", f"radarr: created custom format {cf_cfg['name']!r}")
+                log("INFO", f"{app}: created custom format {cf_cfg['name']!r}")
             else:
                 body["id"] = match["id"]
                 http_json("PUT", f"{base}/customformat/{match['id']}?apikey={apikey}", body=body)
                 ids[cf_cfg["name"]] = match["id"]
-                log("INFO", f"radarr: re-applied custom format {cf_cfg['name']!r}")
+                log("INFO", f"{app}: re-applied custom format {cf_cfg['name']!r}")
         return ids
+
+
+    def reconcile_customformat_scores(app, desired, apikey, customformat_ids):
+        """Score named custom formats on EVERY existing quality profile.
+
+        Deliberately separate from reconcile_radarr_qualityprofiles(), which
+        builds whole profiles from wiring.yml. Only two profiles are declared
+        there; this app has 7-9 live ones that were made in the UI and are
+        not ours to redefine. Scoring is the one thing that must apply to all
+        of them, so this patches just formatItems and PUTs the profile back
+        otherwise untouched.
+
+        Why it exists (2026-09-26): The Closer S05E01 landed as a French
+        MULTi release with French as audio track 1, so it played in French.
+        Nothing was discouraging those releases - Sonarr had zero custom
+        formats. A negative score means an English release always outranks a
+        MULTi one.
+
+        The score is a strong penalty, NOT a rejection: minFormatScore stays
+        where it is, so a MULTi release can still be grabbed when it is the
+        only copy in existence. Preferring "something" over "nothing" is the
+        house style for this library; do not turn this into a hard reject
+        without deciding that a missing episode is better than a dubbed one.
+        """
+        scores = desired.get(app, {}).get("customFormatScores") or {}
+        if not scores:
+            return
+        base = f"http://localhost:{APP_PORTS[app]}/api/v3"
+        profiles = http_json("GET", f"{base}/qualityprofile?apikey={apikey}") or []
+        for profile in profiles:
+            items = profile.get("formatItems") or []
+            changed = False
+            for cf_name, score in scores.items():
+                cf_id = customformat_ids.get(cf_name)
+                if cf_id is None:
+                    continue
+                entry = next((i for i in items if i.get("format") == cf_id), None)
+                if entry is None:
+                    items.append({"format": cf_id, "name": cf_name, "score": score})
+                    changed = True
+                elif entry.get("score") != score:
+                    entry["score"] = score
+                    changed = True
+            if not changed:
+                continue
+            profile["formatItems"] = items
+            http_json("PUT", f"{base}/qualityprofile/{profile['id']}?apikey={apikey}", body=profile)
+            log("INFO", f"{app}: scored custom formats on profile {profile['name']!r}")
 
 
     # ---------------------------------------------------------------------
@@ -895,6 +950,7 @@ data:
             try:
                 cf_ids = reconcile_radarr_customformats(desired, apikeys["radarr"])
                 reconcile_radarr_qualityprofiles(desired, apikeys["radarr"], cf_ids)
+                reconcile_customformat_scores("radarr", desired, apikeys["radarr"], cf_ids)
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
                 log("CRIT", f"radarr custom format/quality profile reconcile failed: {e}")
             # KeyError included deliberately: a malformed/incomplete entry
@@ -904,6 +960,17 @@ data:
                 reconcile_radarr_importlists(desired, apikeys["radarr"])
             except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
                 log("CRIT", f"radarr import list reconcile failed: {e}")
+
+        # Sonarr custom formats + scoring. Separate block from radarr's
+        # above because only radarr declares qualityProfiles in wiring.yml -
+        # sonarr's 7 profiles are UI-made and stay that way; all this does is
+        # assert format scores on them.
+        if apikeys.get("sonarr"):
+            try:
+                cf_ids = reconcile_customformats("sonarr", desired, apikeys["sonarr"])
+                reconcile_customformat_scores("sonarr", desired, apikeys["sonarr"], cf_ids)
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
+                log("CRIT", f"sonarr custom format reconcile failed: {e}")
 
         # Notifications are reconciled for every *arr, not just radarr, and
         # outside the radarr api-key block above - one app's key not being

@@ -115,6 +115,43 @@ data:
     sonarr:
       rootFolder: /tv
 
+      # Foreign-dub penalty, added 2026-09-26 after The Closer S05E01
+      # arrived as a French MULTi release. The file carries French as audio
+      # track 1 and English as track 2, so it simply played in French.
+      #
+      # Sonarr had ZERO custom formats before this, so nothing preferred an
+      # English release over a dubbed one - the MULTi won purely on being
+      # found first. 3 of The Closer's 108 files are MULTi (S01E08, S02E14,
+      # S05E01), plus 12 movies, so this was never a one-off.
+      #
+      # -500 is a strong penalty, NOT a rejection. minFormatScore is left
+      # alone, so a MULTi release is still grabbable when it is the only
+      # copy that exists - better a dubbed episode than a missing one.
+      # Verified live: on a real S05E01 search the MULTi release scored
+      # -500 and all 12 English releases scored 0.
+      #
+      # The regex is word-bounded so it does NOT catch innocent titles
+      # containing "multi" - checked against Multiplicity (1996) and
+      # The Multiverse, both correctly unmatched.
+      #
+      # This is only half the fix. It stops NEW foreign dubs arriving; it
+      # does nothing for files already on disk. Those are handled at the
+      # playback layer instead - both Jellyfin users have
+      # AudioLanguagePreference=eng with PlayDefaultAudioTrack=false, which
+      # makes Jellyfin pick the English track regardless of which one the
+      # file flags as default. Changing the file's own flags was the
+      # rejected alternative: Sonarr's "HD-1080p Upgrade" profile has
+      # upgradeAllowed=true, so any such edit is silently discarded the
+      # next time the episode is upgraded.
+      customFormats:
+        - name: Foreign dub (MULTi/FRENCH)
+          specifications:
+            - implementation: ReleaseTitleSpecification
+              value: '\b(MULTi|MULTI|FRENCH|TRUEFRENCH|VOSTFR|VFF|VFQ)\b'
+
+      customFormatScores:
+        Foreign dub (MULTi/FRENCH): -500
+
       # Added 2026-09-06. Radarr has had this since 2026-08-26; Sonarr
       # never did, so nothing ever TOLD Jellyfin about a new episode.
       #
@@ -262,6 +299,16 @@ data:
             - implementation: SizeSpecification
               min: 8      # GB - at or above this, hard-rejected
               max: 999
+        # See the identical entry under sonarr: below for the full reasoning.
+        - name: Foreign dub (MULTi/FRENCH)
+          specifications:
+            - implementation: ReleaseTitleSpecification
+              value: '\b(MULTi|MULTI|FRENCH|TRUEFRENCH|VOSTFR|VFF|VFQ)\b'
+
+      # Applied to EVERY live quality profile, not just the ones declared
+      # below - see reconcile_customformat_scores().
+      customFormatScores:
+        Foreign dub (MULTi/FRENCH): -500
 
       # Name kept as-is deliberately: the reconciler matches profiles by
       # name, and every movie already added carries this profile's id.
