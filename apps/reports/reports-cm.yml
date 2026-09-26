@@ -27,6 +27,8 @@ data:
                                backup-dashboard app, moved here unchanged)
       /api/backups             the backup report's overall verdict as JSON,
                                for the landing page's status line
+      /api/media               the same for the media report, summarised from
+                               movie-status's /api/status
       /healthz                 probes
 
     The media report stays at movie-status.i3sec.com.au in arr-stack: it needs
@@ -40,6 +42,9 @@ data:
     """
     import json
     import sys
+    import threading
+    import time
+    import urllib.request
     from datetime import datetime, timezone
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from pathlib import Path
@@ -61,6 +66,39 @@ data:
     SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/"}
 
     ORDER = {"good": 0, "warn": 1, "crit": 2}
+
+    # movie-status's own JSON, read in-cluster - a browser on reports.* cannot
+    # fetch it cross-origin. movie-status re-queries every *arr per request, so
+    # the summary is held for a minute rather than recomputed on every landing
+    # page load.
+    MEDIA_STATUS_URL = "http://movie-status.arr-stack.svc.cluster.local/api/status"
+    MEDIA_TTL = 60
+    _media_cache = {"at": 0.0, "value": None}
+    _media_lock = threading.Lock()
+
+
+    def media_summary():
+        with _media_lock:
+            if _media_cache["value"] and time.time() - _media_cache["at"] < MEDIA_TTL:
+                return _media_cache["value"]
+            with urllib.request.urlopen(MEDIA_STATUS_URL, timeout=45) as resp:
+                d = json.load(resp)
+            stall = (d.get("health") or {}).get("stall") or {}
+            stalled = sorted(app for app, v in stall.items() if v.get("stalled"))
+            needs_you = len(d.get("needsYou") or [])
+            main = d.get("main") or {}
+            sab = d.get("sab") or {}
+            value = {
+                "overall": "crit" if stalled else "warn" if needs_you else "good",
+                "stalled": stalled,
+                "needsYou": needs_you,
+                "movies": {"atTarget": main.get("meetCutoff"), "total": main.get("titles"), "eta": main.get("eta")},
+                "imported24h": main.get("imported24h"),
+                "sabPaused": (sab.get("byStatus") or {}).get("Paused", 0),
+                "generated": d.get("generated"),
+            }
+            _media_cache.update(at=time.time(), value=value)
+            return value
 
 
     def backup_summary():
@@ -123,6 +161,12 @@ data:
                     self.send(200, json.dumps(backup_summary()).encode("utf-8"), "application/json")
                 except Exception as exc:  # noqa: BLE001
                     self.send(500, json.dumps({"error": str(exc)}).encode("utf-8"), "application/json")
+                return
+            if path == "/api/media":
+                try:
+                    self.send(200, json.dumps(media_summary()).encode("utf-8"), "application/json")
+                except Exception as exc:  # noqa: BLE001
+                    self.send(502, json.dumps({"error": str(exc)[:300]}).encode("utf-8"), "application/json")
                 return
             if path in STATIC:
                 name, content_type = STATIC[path]
@@ -200,7 +244,7 @@ data:
         <a class="card" href="https://movie-status.i3sec.com.au/" target="_blank" rel="noopener">
           <h2>Media <span>→</span></h2>
           <p>Radarr and Sonarr backfills, downloads, stalls and the scheduled jobs behind them.</p>
-          <div class="status"><span class="muted">Hosted with the arr-stack at movie-status.i3sec.com.au</span></div>
+          <div class="status" id="media-status"><span class="pill">Checking</span></div>
         </a>
       </div>
       <footer>Each report reads its data fresh when you open it.</footer>
@@ -228,6 +272,18 @@ data:
         ["", bad.length ? bad.join(", ") + " behind" : `Next run ${b.nextRun} at ${t}`],
       ]);
     }).catch(() => setStatus("backups-status", [["pill crit", "Unavailable"], ["", "Couldn't read /mnt/backup"]]));
+
+    fetch("/api/media", { cache: "no-store" }).then(r => r.json()).then(m => {
+      if (m.error) throw new Error(m.error);
+      const pill = m.stalled.length ? ["pill crit", m.stalled.join(", ") + " stalled"]
+        : m.needsYou ? ["pill warn", `${m.needsYou} need you`] : ["pill good", "Flowing"];
+      const parts = [pill];
+      if (m.stalled.length && m.needsYou) parts.push(["pill warn", `${m.needsYou} need you`]);
+      if (m.movies.total) parts.push(["", `${m.movies.atTarget}/${m.movies.total} movies at 1080p`]);
+      if (m.imported24h != null) parts.push(["", `${m.imported24h} imported today`]);
+      if (m.sabPaused) parts.push(["pill warn", `${m.sabPaused} paused in SABnzbd`]);
+      setStatus("media-status", parts);
+    }).catch(() => setStatus("media-status", [["pill", "No status"], ["", "movie-status didn't answer"]]));
 
     fetch("/subscriptions/subscriptions.json", { cache: "no-store" }).then(r => r.json()).then(d => {
       const fx = d.fx || { AUD: 1 };
