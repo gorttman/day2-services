@@ -937,7 +937,7 @@ data:
           "via": "Card",
           "next": null,
           "status": "review",
-          "note": "Prepaid top-ups on gorttman@ (30 Aug, plus two mid-Aug) on top of Claude Pro via Apple on brett@. Check both accounts are needed.",
+          "note": "Three top-ups in Aug 2026 (16, 17, 30), A$230 total. Billed direct by Anthropic, receipts to gorttman@.",
           "match": [
             "Anthropic, PBC"
           ]
@@ -1073,8 +1073,8 @@ data:
         {
           "id": "anthropic-two-accounts",
           "order": 1,
-          "title": "Paying for two Claude setups",
-          "body": "Claude Pro is billed through Apple on brett@, and prepaid extra usage was bought directly from Anthropic on gorttman@ (30 Aug, plus two in mid-August). Check both accounts are needed.",
+          "title": "Claude extra-usage top-ups",
+          "body": "Three prepaid extra-usage top-ups of A$76.73 (16, 17 and 30 Aug, A$230 total) on gorttman@, on top of Claude Pro through Apple. Probably the same account; claude.ai → Settings → Billing will confirm.",
           "subIds": [
             "claude-pro",
             "anthropic-extra"
@@ -1082,7 +1082,7 @@ data:
           "resolveSubs": [
             "anthropic-extra"
           ],
-          "resolveNote": "Stopped buying extra usage on gorttman@",
+          "resolveNote": "Stopped buying extra usage",
           "state": "open"
         },
         {
