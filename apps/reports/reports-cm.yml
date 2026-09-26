@@ -401,7 +401,7 @@ data:
         <section>
           <details>
             <summary><div class="sechead"><h2>Cancelled or ending</h2><span class="eyebrow">${view.cancelled.length} · no further charges expected</span></div></summary>
-            <div class="panel tablewrap" style="margin-top:12px"><table>
+            <div class="panel tablewrap" style=${{ marginTop: "12px" }}><table>
               <thead><tr><th>Service</th><th>Paid via</th><th>Term</th><th class="r">Was</th><th>Date</th><th>Status</th></tr></thead>
               <tbody>${view.cancelled.map(s => html`<tr key=${s.id}>
                 <td><div class="name">${s.name}</div><div class="sub">${s.note}</div>${lastSeen(s)}</td>
