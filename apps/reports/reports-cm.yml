@@ -60,10 +60,11 @@ data:
         "/index.html": ("index.html", "text/html; charset=utf-8"),
         "/subscriptions/": ("subscriptions.html", "text/html; charset=utf-8"),
         "/subscriptions/subscriptions.json": ("subscriptions.json", "application/json"),
+        "/icloud-migration/": ("icloud-migration.html", "text/html; charset=utf-8"),
     }
     # The subscriptions page fetches subscriptions.json relative to itself, so
     # it must be served from a trailing-slash URL.
-    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/"}
+    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/", "/icloud-migration": "/icloud-migration/"}
 
     ORDER = {"good": 0, "warn": 1, "crit": 2}
 
@@ -245,6 +246,11 @@ data:
           <h2>Media <span>→</span></h2>
           <p>Radarr and Sonarr backfills, downloads, stalls and the scheduled jobs behind them.</p>
           <div class="status" id="media-status"><span class="pill">Checking</span></div>
+        </a>
+        <a class="card" href="/icloud-migration/" target="_blank" rel="noopener">
+          <h2>iCloud Migration <span>→</span></h2>
+          <p>Progress moving off iCloud Drive: what's landed in Paperless/Immich, what's blocked, what's not started.</p>
+          <div class="status"><span class="pill">Snapshot</span><span>Live numbers on the Grafana dashboard</span></div>
         </a>
       </div>
       <footer>Each report reads its data fresh when you open it.</footer>
@@ -1181,3 +1187,116 @@ data:
         }
       ]
     }
+  icloud-migration.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>iCloud Migration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+    <style>
+    :root{--bg:#f3f5f4;--surface:#fff;--ink:#16201d;--muted:#5b6b66;--faint:#8a9994;--line:#d7dfdc;--accent:#1c6b56;
+      --good:#1f7a4d;--good-soft:#dcefe3;--warn:#a35f00;--warn-soft:#fbead0;--crit:#b3372b;--crit-soft:#f7dcd8;
+      --info:#2f5597;--info-soft:#dfe7f5;color-scheme:light}
+    @media (prefers-color-scheme:dark){:root{--bg:#0f1513;--surface:#171f1c;--ink:#e4ece9;--muted:#9cafa8;--faint:#6f817b;--line:#2a3632;--accent:#5cc4a3;
+      --good:#5cc48c;--good-soft:#1c3527;--warn:#e5a54b;--warn-soft:#3a2c16;--crit:#ef8579;--crit-soft:#3d1f1b;
+      --info:#8fb0ec;--info-soft:#1e2a40;color-scheme:dark}}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;padding-inline:16px;padding-block:40px 48px}
+    main{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+    .eyebrow{font:500 11px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    h1{font:700 clamp(28px,4vw,40px)/1.1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.02em;margin:6px 0 0}
+    p.lede{color:var(--muted);margin:0;max-width:70ch}
+    .cta{display:inline-flex;align-items:center;gap:6px;font:600 14px "IBM Plex Sans",sans-serif;color:var(--accent);text-decoration:none;padding:10px 16px;border:1px solid var(--accent);border-radius:8px;width:fit-content}
+    .cta:hover{background:var(--accent);color:var(--surface)}
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+    table{width:100%;border-collapse:collapse}
+    th{font:500 11px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);text-align:left;padding:12px 14px;border-bottom:1px solid var(--line)}
+    td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+    tr:last-child td{border-bottom:0}
+    td.r,th.r{text-align:right}
+    .name{font-weight:600}
+    .sub{font-size:12.5px;color:var(--muted)}
+    .num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .chip{display:inline-block;font:500 11px/1 "IBM Plex Mono",monospace;padding:5px 8px;border-radius:5px;background:var(--line);color:var(--muted);white-space:nowrap}
+    .chip.good{background:var(--good-soft);color:var(--good)}
+    .chip.warn{background:var(--warn-soft);color:var(--warn)}
+    .chip.crit{background:var(--crit-soft);color:var(--crit)}
+    .chip.info{background:var(--info-soft);color:var(--info)}
+    .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;width:100px}
+    .bar i{display:block;height:100%;background:var(--accent)}
+    footer{font-size:12.5px;color:var(--faint);max-width:70ch}
+    </style>
+    </head>
+    <body>
+    <main>
+      <header style="display:flex;flex-direction:column;gap:10px">
+        <div class="eyebrow">i3sec homelab · reports</div>
+        <h1>iCloud Migration</h1>
+        <p class="lede">Moving everything off iCloud Drive that isn't the personal photo library (that stays put, handled by PhotoSync) - coursework into Paperless, the manual photo archive into Immich, and the rest of what's left.</p>
+        <a class="cta" href="https://grafana.i3sec.com.au/d/icloud-migration/icloud-migration" target="_blank" rel="noopener">Live dashboard in Grafana →</a>
+      </header>
+
+      <div class="panel">
+        <table>
+          <thead><tr><th>Category</th><th>Destination</th><th>Status</th><th class="r">Size</th><th>Progress</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><div class="name">Photo archive</div><div class="sub">Manual year/Lightroom archive, not the Photos.app library</div></td>
+              <td>Immich</td>
+              <td><span class="chip info">Landed, unverified</span></td>
+              <td class="r num">46 GB</td>
+              <td><div class="bar"><i style="width:100%"></i></div></td>
+            </tr>
+            <tr>
+              <td><div class="name">SCU coursework</div><div class="sub">Reconciled &amp; deduplicated, 1,355 files</div></td>
+              <td>Paperless</td>
+              <td><span class="chip warn">In progress</span></td>
+              <td class="r num">907 MB</td>
+              <td><div class="bar"><i style="width:76%"></i></div></td>
+            </tr>
+            <tr>
+              <td><div class="name">Greenlaw records</div><div class="sub">Property docs + damage-report photos</div></td>
+              <td>Paperless + Immich</td>
+              <td><span class="chip crit">Blocked</span></td>
+              <td class="r num">2.8 GB</td>
+              <td><div class="bar"><i style="width:0%"></i></div></td>
+            </tr>
+            <tr>
+              <td><div class="name">Downloads (misc)</div><div class="sub">ISOs, DMGs, zips - no route defined yet</div></td>
+              <td class="sub">Unassigned</td>
+              <td><span class="chip">Not started</span></td>
+              <td class="r num">4.0 GB</td>
+              <td><div class="bar"><i style="width:0%"></i></div></td>
+            </tr>
+            <tr>
+              <td><div class="name">Desktop</div><div class="sub">Mostly a 1Password 7 app backup, 12k tiny files</div></td>
+              <td class="sub">Unassigned</td>
+              <td><span class="chip">Not started</span></td>
+              <td class="r num">800 MB</td>
+              <td><div class="bar"><i style="width:0%"></i></div></td>
+            </tr>
+            <tr>
+              <td><div class="name">Obsidian vault</div><div class="sub">Every file is cloud-only on the Mac - needs a force-download pass first</div></td>
+              <td class="sub">QNAP vault</td>
+              <td><span class="chip crit">Blocked</span></td>
+              <td class="r num">92 MB</td>
+              <td><div class="bar"><i style="width:0%"></i></div></td>
+            </tr>
+            <tr>
+              <td><div class="name">Lightroom catalog</div><div class="sub">Edit history, not the previews (those are regenerable, skipped)</div></td>
+              <td class="sub">Undecided</td>
+              <td><span class="chip">Undecided</span></td>
+              <td class="r num">235 MB</td>
+              <td><div class="bar"><i style="width:0%"></i></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <footer>This table is a hand-maintained snapshot, updated as each category actually moves - same pattern as the Subscriptions report's list. For the one category with a live signal (SCU coursework's Paperless consume queue) and for history over time, see the <a href="https://grafana.i3sec.com.au/d/icloud-migration/icloud-migration" target="_blank" rel="noopener">Grafana dashboard</a>, which also has an alert if a queue stops draining. <a href="/">All reports</a>.</footer>
+    </main>
+    </body>
+    </html>

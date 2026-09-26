@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: icloud-migration-status-script
+  namespace: monitoring
+data:
+  icloud_migration_status.py: |
+    #!/usr/bin/env python3
+    """
+    Pushes current iCloud-migration status to InfluxDB (bucket
+    icloud_migration, org pilab) for the Grafana dashboard.
+
+    scu_coursework is the one category with a cheap, automatable progress
+    signal: the number of files still sitting in the Paperless consume
+    queue (mounted read-only here) directly tells us how many of the 1355
+    reconciled files haven't been absorbed yet, no Paperless API/exec
+    needed. Every other category's progress is manual state, updated by
+    hand below as work actually happens - there's no live signal to poll
+    for "has someone migrated the Greenlaw docs yet."
+    """
+    import os
+    import time
+    import urllib.request
+
+    INFLUX_URL = os.environ["INFLUX_URL"]
+    INFLUX_ORG = os.environ["INFLUX_ORG"]
+    INFLUX_TOKEN = os.environ["INFLUX_TOKEN"]
+    INFLUX_BUCKET = "icloud_migration"
+
+    CONSUME_DIR = "/mnt/paperless"
+    SCU_TOTAL_FILES = 1355
+    SCU_TOTAL_BYTES = 907_000_000
+
+    # Static/manual state for everything without a cheap live signal.
+    # Update these fields by hand as each category actually progresses -
+    # see the conversation history / project memory for how each number
+    # was derived.
+    MANUAL_CATEGORIES = [
+        {
+            "category": "photo_archive", "destination": "immich", "status": "landed_unverified",
+            "total_bytes": 46_000_000_000, "migrated_bytes": 46_000_000_000,
+            "total_files": 1774, "migrated_files": 1774, "percent_complete": 100.0, "verified": 0,
+        },
+        {
+            "category": "greenlaw", "destination": "paperless_immich", "status": "blocked",
+            "total_bytes": 2_840_000_000, "migrated_bytes": 0,
+            "total_files": 707, "migrated_files": 0, "percent_complete": 0.0, "verified": 0,
+        },
+        {
+            "category": "downloads_misc", "destination": "unassigned", "status": "not_started",
+            "total_bytes": 4_000_000_000, "migrated_bytes": 0,
+            "total_files": 574, "migrated_files": 0, "percent_complete": 0.0, "verified": 0,
+        },
+        {
+            "category": "desktop_1password", "destination": "unassigned", "status": "not_started",
+            "total_bytes": 800_000_000, "migrated_bytes": 0,
+            "total_files": 12348, "migrated_files": 0, "percent_complete": 0.0, "verified": 0,
+        },
+        {
+            "category": "obsidian_vault", "destination": "qnap_vault", "status": "blocked",
+            "total_bytes": 92_000_000, "migrated_bytes": 0,
+            "total_files": 556, "migrated_files": 0, "percent_complete": 0.0, "verified": 0,
+        },
+        {
+            "category": "lightroom_catalog", "destination": "undecided", "status": "undecided",
+            "total_bytes": 235_000_000, "migrated_bytes": 0,
+            "total_files": 1, "migrated_files": 0, "percent_complete": 0.0, "verified": 0,
+        },
+    ]
+
+
+    def scu_coursework_point():
+        try:
+            remaining = len(os.listdir(CONSUME_DIR))
+        except OSError as e:
+            print(f"WARN: couldn't read {CONSUME_DIR}: {e} - reporting remaining=unknown as 0")
+            remaining = 0
+        remaining = min(remaining, SCU_TOTAL_FILES)
+        migrated = SCU_TOTAL_FILES - remaining
+        percent = round(migrated / SCU_TOTAL_FILES * 100, 1)
+        status = "complete" if remaining == 0 else "in_progress"
+        migrated_bytes = round(SCU_TOTAL_BYTES * migrated / SCU_TOTAL_FILES)
+        return {
+            "category": "scu_coursework", "destination": "paperless", "status": status,
+            "total_bytes": SCU_TOTAL_BYTES, "migrated_bytes": migrated_bytes,
+            "total_files": SCU_TOTAL_FILES, "migrated_files": migrated,
+            "percent_complete": percent, "verified": 0,
+        }
+
+
+    def line_protocol(points):
+        lines = []
+        for p in points:
+            tags = f"category={p['category']},destination={p['destination']},status={p['status']}"
+            fields = (
+                f"total_bytes={p['total_bytes']},migrated_bytes={p['migrated_bytes']},"
+                f"total_files={p['total_files']}i,migrated_files={p['migrated_files']}i,"
+                f"percent_complete={p['percent_complete']},verified={p['verified']}i"
+            )
+            lines.append(f"migration_status,{tags} {fields}")
+        return "\n".join(lines)
+
+
+    def main():
+        points = [scu_coursework_point()] + MANUAL_CATEGORIES
+        body = line_protocol(points).encode()
+        url = f"{INFLUX_URL}/api/v2/write?org={INFLUX_ORG}&bucket={INFLUX_BUCKET}&precision=s"
+        req = urllib.request.Request(url, data=body, method="POST", headers={
+            "Authorization": f"Token {INFLUX_TOKEN}",
+            "Content-Type": "text/plain; charset=utf-8",
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            print(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] wrote {len(points)} points, status {resp.status}")
+
+
+    if __name__ == "__main__":
+        main()

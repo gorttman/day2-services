@@ -1,0 +1,64 @@
+# Runs in the monitoring namespace (not its own) specifically to reuse
+# the existing grafana-influxdb secret (org/token) already sealed there
+# for Grafana's provisioned datasource, rather than sealing a second
+# copy of the same InfluxDB credentials in a new namespace. Writes into
+# its own bucket (icloud_migration), not the secret's default bucket
+# field, which is telegraf's - same pattern the Subscriptions dashboard
+# already uses (one shared org+token, per-topic buckets).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: icloud-migration-status
+  namespace: monitoring
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: icloud-migration-status
+              image: python:3.12-slim
+              command: ["python3", "/app/icloud_migration_status.py"]
+              env:
+                - name: INFLUX_URL
+                  value: "http://influxdb.monitoring.svc:8086"
+                - name: INFLUX_ORG
+                  valueFrom:
+                    secretKeyRef:
+                      name: grafana-influxdb
+                      key: INFLUXDB_ORG
+                - name: INFLUX_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: grafana-influxdb
+                      key: INFLUXDB_TOKEN
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                - name: paperless
+                  mountPath: /mnt/paperless
+                  subPath: consume
+                  readOnly: true
+              resources:
+                requests:
+                  memory: 64Mi
+                  cpu: 50m
+                limits:
+                  memory: 128Mi
+                  cpu: 200m
+          volumes:
+            - name: script
+              configMap:
+                name: icloud-migration-status-script
+                defaultMode: 0555
+            - name: paperless
+              nfs:
+                server: qnap
+                path: /paperless
