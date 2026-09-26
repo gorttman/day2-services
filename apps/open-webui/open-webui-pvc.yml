@@ -1,0 +1,19 @@
+# Open WebUI's data dir (uploads, its local vector store, cache). The chat
+# database itself is on the shared Postgres, not here. The vector store is
+# SQLite-based, so this must be block storage (Longhorn), never NFS.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-webui-data
+  namespace: open-webui
+  labels:
+    app: open-webui
+    app.kubernetes.io/name: open-webui
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi

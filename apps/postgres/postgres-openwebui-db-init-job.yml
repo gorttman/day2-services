@@ -1,0 +1,45 @@
+# Same pattern as postgres-immich-db-init-job.yml. Jobs are immutable once
+# created: delete (`kubectl delete job postgres-openwebui-db-init -n postgres`)
+# and let Argo CD recreate it to force a re-run - the script is idempotent.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-openwebui-db-init
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: init-openwebui-db
+          image: postgres:16.9-alpine
+          command: ["/bin/sh", "/scripts/init-openwebui-db.sh"]
+          env:
+            - name: PGHOST
+              value: postgres.postgres.svc.cluster.local
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-superuser
+                  key: POSTGRES_PASSWORD
+            - name: OPENWEBUI_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-superuser
+                  key: OPENWEBUI_DB_PASSWORD
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: postgres-openwebui-db-init
+            defaultMode: 0555

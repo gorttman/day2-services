@@ -1,0 +1,38 @@
+# Idempotent - safe to leave in place and re-run (delete the completed Job
+# to force a re-check). Same pattern as postgres-immich-db-init-configmap.yml.
+#
+# Only creates the role and database. Open WebUI runs its own migrations as
+# the 'openwebui' role on startup and owns everything it creates. The
+# password is `openssl rand -hex 24` (hex only), so direct interpolation into
+# the SQL string below is safe.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-openwebui-db-init
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    argocd.argoproj.io/managed-by: argocd
+data:
+  init-openwebui-db.sh: |
+    #!/bin/sh
+    set -eu
+
+    echo "[*] Ensuring role 'openwebui' exists"
+    psql -v ON_ERROR_STOP=1 -d postgres <<-SQL
+      DO \$\$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openwebui') THEN
+          CREATE ROLE openwebui LOGIN PASSWORD '${OPENWEBUI_DB_PASSWORD}';
+        END IF;
+      END
+      \$\$;
+    SQL
+
+    echo "[*] Ensuring database 'openwebui' exists"
+    if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'openwebui'" | grep -q 1; then
+      psql -v ON_ERROR_STOP=1 -d postgres -c "CREATE DATABASE openwebui OWNER openwebui;"
+    fi
+
+    echo "[*] Done - openwebui database ready, migrations run from Open WebUI itself"

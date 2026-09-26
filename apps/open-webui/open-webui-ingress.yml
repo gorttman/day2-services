@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: open-webui
+  namespace: open-webui
+  labels:
+    app: open-webui
+    app.kubernetes.io/name: open-webui
+    argocd.argoproj.io/managed-by: argocd
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  # LAN path only: split-horizon DNS (dns-conf) resolves the name to the Traefik
+  # VIP. Off-LAN, cloudflare-tf tunnels open-webui.i3sec.com.au straight to the
+  # Service, behind the zone-wide mTLS rule, bypassing this Ingress.
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - open-webui.i3sec.com.au
+      secretName: open-webui-tls
+  rules:
+    - host: open-webui.i3sec.com.au
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: open-webui
+                port:
+                  number: 80

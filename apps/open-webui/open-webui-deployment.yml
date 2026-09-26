@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+  namespace: open-webui
+  labels:
+    app: open-webui
+    app.kubernetes.io/name: open-webui
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  # Single replica on purpose: the session-memory sweep (build plan Stage 3)
+  # runs inside Open WebUI and would duplicate across replicas without a lock.
+  replicas: 1
+  # RWO volume: the old pod must release it before the new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open-webui
+  template:
+    metadata:
+      labels:
+        app: open-webui
+        app.kubernetes.io/name: open-webui
+    spec:
+      # Soft preference for the applications node; free to run on either.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: lane
+                    operator: In
+                    values: ["applications"]
+      # A Service named open-webui would otherwise inject OPEN_WEBUI_* env vars.
+      enableServiceLinks: false
+      containers:
+        - name: open-webui
+          # Pinned by digest (0.11.4-slim, multi-arch index). Re-test on every upgrade:
+          # plugin internals change between releases (see ADR-11).
+          image: ghcr.io/open-webui/open-webui:0.11.4-slim@sha256:0487ad4a5a4b986062dedace806c3ef1e88fec38c10d1e64d6a5501c66671e5e
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: WEBUI_URL
+              value: https://open-webui.i3sec.com.au
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: openwebui-app, key: DATABASE_URL}
+            - name: WEBUI_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {name: openwebui-app, key: WEBUI_SECRET_KEY}
+            # Headless first admin. Sign-up is then disabled automatically.
+            - name: WEBUI_ADMIN_EMAIL
+              value: gorttman@i3sec.com.au
+            - name: WEBUI_ADMIN_NAME
+              value: Admin
+            - name: WEBUI_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: openwebui-app, key: WEBUI_ADMIN_PASSWORD}
+            - name: ENABLE_SIGNUP
+              value: "False"
+            # Model access: Anthropic only, Haiku 4.5 only (spike cost control).
+            # Applied on first start only: Open WebUI stores these in its database
+            # afterwards (ENABLE_PERSISTENT_CONFIG), so later changes are made in
+            # the admin UI, or by resetting the database.
+            - name: ENABLE_OLLAMA_API
+              value: "False"
+            - name: ENABLE_OPENAI_API
+              value: "True"
+            - name: OPENAI_API_BASE_URLS
+              value: https://api.anthropic.com/v1
+            - name: OPENAI_API_KEYS
+              valueFrom:
+                secretKeyRef: {name: openwebui-anthropic, key: ANTHROPIC_API_KEY}
+            - name: OPENAI_API_CONFIGS
+              value: '{"0":{"enable":true,"model_ids":["claude-haiku-4-5-20251001"]}}'
+            # ADR-11: two competing knowledge systems is worse than one.
+            - name: ENABLE_MEMORIES
+              value: "False"
+            # No phone-home.
+            - name: ENABLE_VERSION_UPDATE_CHECK
+              value: "False"
+            - name: SCARF_NO_ANALYTICS
+              value: "true"
+            - name: DO_NOT_TRACK
+              value: "true"
+            - name: ANONYMIZED_TELEMETRY
+              value: "false"
+          volumeMounts:
+            - name: data
+              mountPath: /app/backend/data
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 100m
+            limits:
+              memory: 2Gi
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: open-webui-data

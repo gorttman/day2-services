@@ -47,3 +47,4 @@ resources:
   - icloud-migration-status/icloud-migration-status-app.yml
   # Landing page plus the backups and subscriptions reports.
   - reports/reports-app.yml
+  - open-webui/open-webui-app.yml
