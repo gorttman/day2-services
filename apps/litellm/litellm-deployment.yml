@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+  namespace: litellm
+  labels:
+    app: litellm
+    app.kubernetes.io/name: litellm
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: litellm
+  template:
+    metadata:
+      labels:
+        app: litellm
+        app.kubernetes.io/name: litellm
+    spec:
+      # Soft preference for the applications node; free to run on either.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: lane
+                    operator: In
+                    values: ["applications"]
+      enableServiceLinks: false
+      containers:
+        - name: litellm
+          # LiteLLM's load-tested "-stable" line, pinned by digest (multi-arch).
+          image: ghcr.io/berriai/litellm:v1.83.14-stable@sha256:c81eb79cd4333c6cfe374c0ec929110fd23f0ee5f7fd198855a6fbddc77b83ba
+          imagePullPolicy: IfNotPresent
+          args: ["--config", "/app/config/config.yaml", "--port", "4000"]
+          ports:
+            - name: http
+              containerPort: 4000
+          env:
+            - name: LITELLM_MASTER_KEY
+              valueFrom:
+                secretKeyRef: {name: litellm-app, key: LITELLM_MASTER_KEY}
+            # Encrypts provider credentials in the database. Set once, never change.
+            - name: LITELLM_SALT_KEY
+              valueFrom:
+                secretKeyRef: {name: litellm-app, key: LITELLM_SALT_KEY}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: litellm-app, key: DATABASE_URL}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: {name: litellm-anthropic, key: ANTHROPIC_API_KEY}
+            - name: LITELLM_LOG
+              value: INFO
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 100m
+            limits:
+              memory: 1536Mi
+          startupProbe:
+            httpGet: {path: /health/liveliness, port: http}
+            periodSeconds: 10
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: {path: /health/readiness, port: http}
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health/liveliness, port: http}
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 4
+      volumes:
+        - name: config
+          configMap:
+            name: litellm-config

@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: litellm
+
+resources:
+  - app-sealed-secret.yml
+  - anthropic-sealed-secret.yml
+  - litellm-deployment.yml
+  - litellm-service.yml
+  - litellm-keys-job.yml
+
+# Default name-hash suffix stays ON: editing config.yaml changes the ConfigMap
+# name, which changes the Deployment spec and rolls the pod. LiteLLM only reads
+# its config at start, so a stable name would silently keep serving the old one.
+configMapGenerator:
+  - name: litellm-config
+    files:
+      - config.yaml
+
+generatorOptions:
+  labels:
+    app: litellm
+    app.kubernetes.io/name: litellm

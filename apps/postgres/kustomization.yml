@@ -14,6 +14,8 @@ resources:
   - postgres-immich-db-init-job.yml
   - postgres-openwebui-db-init-configmap.yml
   - postgres-openwebui-db-init-job.yml
+  - postgres-litellm-db-init-configmap.yml
+  - postgres-litellm-db-init-job.yml
   - postgres-unifi-tf-db-init-configmap.yml
   - postgres-unifi-tf-db-init-job.yml
   - postgres-backup-script-cm.yml

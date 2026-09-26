@@ -1,0 +1,20 @@
+# Name, namespace and port are a contract with apps/telegraf (ai.conf scrapes
+# http://litellm.litellm.svc.cluster.local:4000/metrics) and with the AI Platform
+# dashboard. Change them together.
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm
+  namespace: litellm
+  labels:
+    app: litellm
+    app.kubernetes.io/name: litellm
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  selector:
+    app: litellm
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http

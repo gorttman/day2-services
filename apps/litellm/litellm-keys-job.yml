@@ -1,0 +1,82 @@
+# Creates or updates the virtual keys LiteLLM hands to its callers, so key
+# settings live in git instead of being clicked into the admin UI. A PostSync hook
+# re-runs after every sync and is idempotent: it updates a key that exists and
+# creates one that does not. The key VALUES are sealed secrets; only their policy
+# (allowed models, budget) is defined here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-keys
+  namespace: litellm
+  labels:
+    app: litellm
+    app.kubernetes.io/name: litellm
+    argocd.argoproj.io/managed-by: argocd
+data:
+  keys.sh: |
+    #!/bin/sh
+    set -eu
+    BASE=http://litellm.litellm.svc.cluster.local:4000
+    AUTH="Authorization: Bearer ${LITELLM_MASTER_KEY}"
+
+    echo "[*] waiting for LiteLLM to be ready"
+    i=0
+    until curl -sf -o /dev/null "$BASE/health/readiness"; do
+      i=$((i+1)); [ "$i" -gt 90 ] && { echo "LiteLLM never became ready" >&2; exit 1; }
+      sleep 5
+    done
+
+    # ensure_key <alias> <key value> <models json> <max budget USD> <budget duration>
+    ensure_key() {
+      alias="$1"; value="$2"; models="$3"; budget="$4"; duration="$5"
+      body=$(printf '{"key":"%s","key_alias":"%s","models":%s,"max_budget":%s,"budget_duration":"%s","metadata":{"managed_by":"apps/litellm/litellm-keys-job.yml"}}' "$value" "$alias" "$models" "$budget" "$duration")
+      code=$(curl -s -o /dev/null -w '%{http_code}' -H "$AUTH" "$BASE/key/info?key=${value}")
+      if [ "$code" = "200" ]; then
+        endpoint=/key/update; verb=updated
+      else
+        endpoint=/key/generate; verb=created
+      fi
+      out=$(curl -s -o /tmp/resp -w '%{http_code}' -X POST -H "$AUTH" -H 'Content-Type: application/json' -d "$body" "$BASE$endpoint")
+      if [ "$out" = "200" ]; then echo "[ok] key '$alias' $verb"; else echo "[FAIL] key '$alias' via $endpoint -> HTTP $out: $(head -c 300 /tmp/resp)" >&2; exit 1; fi
+    }
+
+    # Open WebUI: Haiku only, small monthly budget (cost control for the spike).
+    ensure_key open-webui "$OPEN_WEBUI_VIRTUAL_KEY" '["claude-haiku-4-5"]' 5 30d
+    echo "[*] done"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: litellm-keys
+  namespace: litellm
+  labels:
+    app: litellm
+    app.kubernetes.io/name: litellm
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 4
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: keys
+          image: curlimages/curl:8.11.1
+          command: ["/bin/sh", "/scripts/keys.sh"]
+          env:
+            - name: LITELLM_MASTER_KEY
+              valueFrom:
+                secretKeyRef: {name: litellm-app, key: LITELLM_MASTER_KEY}
+            - name: OPEN_WEBUI_VIRTUAL_KEY
+              valueFrom:
+                secretKeyRef: {name: litellm-app, key: OPEN_WEBUI_VIRTUAL_KEY}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: litellm-keys
+            defaultMode: 0555

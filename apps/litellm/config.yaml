@@ -1,0 +1,36 @@
+model_list:
+  # Anthropic direct: primary paid route (ADR-3). Prices are USD per token,
+  # taken from Anthropic's pricing page (per million tokens divided by 1e6), so
+  # spend tracking is right even for models LiteLLM's built-in price list lacks.
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000005
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: anthropic/claude-sonnet-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+  - model_name: claude-opus-5
+    litellm_params:
+      model: anthropic/claude-opus-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+
+litellm_settings:
+  callbacks: ["prometheus"]
+  # Telegraf scrapes /metrics with no key (ClusterIP only). See apps/telegraf/README.md.
+  require_auth_for_metrics_endpoint: false
+  drop_params: true
+  num_retries: 2
+  request_timeout: 120
+  telemetry: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # Models come from this file only, never from the admin UI.
+  store_model_in_db: false
