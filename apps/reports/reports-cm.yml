@@ -187,17 +187,17 @@ data:
         <h1>Reports</h1>
       </header>
       <div class="cards">
-        <a class="card" href="/backups/">
+        <a class="card" href="/backups/" target="_blank" rel="noopener">
           <h2>Backups <span>→</span></h2>
           <p>Postgres dumps, QNAP snapshots and sealed-secrets keys, checked for staleness on every load.</p>
           <div class="status" id="backups-status"><span class="pill">Checking</span></div>
         </a>
-        <a class="card" href="/subscriptions/">
+        <a class="card" href="/subscriptions/" target="_blank" rel="noopener">
           <h2>Subscriptions <span>→</span></h2>
           <p>What's being paid for each month, how it's billed, and what renews next.</p>
           <div class="status" id="subs-status"><span class="pill">Loading</span></div>
         </a>
-        <a class="card" href="https://movie-status.i3sec.com.au/">
+        <a class="card" href="https://movie-status.i3sec.com.au/" target="_blank" rel="noopener">
           <h2>Media <span>→</span></h2>
           <p>Radarr and Sonarr backfills, downloads, stalls and the scheduled jobs behind them.</p>
           <div class="status"><span class="muted">Hosted with the arr-stack at movie-status.i3sec.com.au</span></div>
