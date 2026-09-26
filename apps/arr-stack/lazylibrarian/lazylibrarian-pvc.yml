@@ -1,7 +1,5 @@
-# PLACEHOLDER STORAGE: local-path is node-local and non-durable - same
-# caveats and the same temporary k8smaster nodeSelector as apps/jellyfin
-# (see the arr-stack deployment). The internal SQLite DB lives here, so
-# it must never sit directly on NFS.
+# Config volume on Longhorn (2 replicas). The internal SQLite DB lives here, so it
+# must never sit directly on NFS.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

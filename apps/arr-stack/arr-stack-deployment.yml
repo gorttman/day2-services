@@ -38,25 +38,12 @@ spec:
         app.kubernetes.io/name: arr-stack
         app.kubernetes.io/component: media-automation
     spec:
-      # workload-affinity: when the arr stack gets a preferred home, wire
-      # in the patch template from components/workload-affinity/ and add
-      # arr-stack to day1-foundation/ansible/label-nodes.yml.
-      #
-      # Hard pin to k8smaster, tied to the local-path placeholder (same
-      # reasoning as apps/jellyfin). Half of the original reason is
-      # resolved: pinode-01's k3s agent dir is real persistent storage
-      # now (2026-08-16/17), not a 4G RAM tmpfs, so image-size eviction
-      # is no longer a concern. What's NOT resolved: every PVC here
-      # (sonarr/radarr/prowlarr/sabnzbd/lazylibrarian/etc.) is still
-      # storageClassName: local-path, which is node-local - swapping
-      # this to a soft workload-affinity preference would be unsafe, not
-      # just imprecise, since a reschedule onto the other node would
-      # silently create fresh empty volumes there instead of failing
-      # loudly. Stays hard-pinned until these PVCs move to NFS-backed
-      # storage (qnap-static/nfs-client, matching immich/paperless) -
-      # that's the actual "storage swap" this needs, still open.
-      nodeSelector:
-        kubernetes.io/hostname: k8smaster
+      # No node pin. Every config PVC is Longhorn (2 replicas, one per node), so
+      # the pod can run on either node. gluetun needs the tun module, which
+      # day0-infra-build prep_prerequisites (sysctl.yml) persists on all k3s nodes.
+      # To give the stack a preferred home instead, wire in
+      # components/workload-affinity/ and add arr-stack to
+      # day1-foundation/ansible/label-nodes.yml.
       enableServiceLinks: false  # SONARR_PORT etc. would collide with app config
       # arr-stack-rbac.yml - narrow (delete pods, this namespace only),
       # needed by the config-seed sidecars to self-restart the pod after
