@@ -44,3 +44,5 @@ resources:
   # - n8n/n8n-app.yml
   - inbox-router/inbox-router-app.yml
   - books-pipeline/books-pipeline-app.yml
+  # One switcher page for all the reports (media, backups, subscriptions).
+  - reports/reports-app.yml

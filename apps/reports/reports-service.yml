@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: reports
+  namespace: reports
+  labels: {app: reports, app.kubernetes.io/name: reports, argocd.argoproj.io/managed-by: argocd}
+spec:
+  selector:
+    app: reports
+  ports:
+    - {name: http, port: 80, targetPort: http}

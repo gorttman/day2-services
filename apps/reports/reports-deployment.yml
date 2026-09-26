@@ -1,0 +1,55 @@
+# One switcher page for every homelab report, plus the subscriptions
+# report itself. Plain nginx over a ConfigMap: nothing here is computed
+# server-side, so there is no Python server like movie-status or
+# backup-dashboard - those stay where they are and the hub frames them.
+#
+# ConfigMap keys cannot contain "/", so items maps them onto the paths the
+# pages expect (/subscriptions/ and its subscriptions.json).
+#
+# No reload handling: ConfigMap volume updates reach the pod within about a
+# minute and nginx serves files straight off disk, so an edit to
+# reports-cm.yml goes live without a restart.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reports
+  namespace: reports
+  labels:
+    app: reports
+    app.kubernetes.io/name: reports
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reports
+  template:
+    metadata:
+      labels:
+        app: reports
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - {name: http, containerPort: 80}
+          volumeMounts:
+            - {name: pages, mountPath: /usr/share/nginx/html, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 2
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests: {memory: "16Mi", cpu: "5m"}
+            limits: {memory: "64Mi", cpu: "200m"}
+      volumes:
+        - name: pages
+          configMap:
+            name: reports
+            items:
+              - {key: index.html, path: index.html}
+              - {key: subscriptions.html, path: subscriptions/index.html}
+              - {key: subscriptions.json, path: subscriptions/subscriptions.json}

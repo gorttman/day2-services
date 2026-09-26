@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: reports
+  labels:
+    app.kubernetes.io/name: reports
+    app.kubernetes.io/part-of: day2-services
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"

@@ -1,0 +1,27 @@
+# Internal-only, like movie-status and backup-dashboard: no Cloudflare
+# Tunnel annotation, DNS lives in dns-conf.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reports
+  namespace: reports
+  labels: {app: reports, app.kubernetes.io/name: reports, argocd.argoproj.io/managed-by: argocd}
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - reports.i3sec.com.au
+    secretName: reports-tls
+  rules:
+  - host: reports.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: reports
+            port:
+              number: 80

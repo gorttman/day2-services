@@ -1,0 +1,457 @@
+# Pages for the reports hub. Static files only - the hub frames the
+# other self-hosted reports (movie-status, backup-dashboard), and the
+# subscriptions page reads subscriptions.json next to it.
+#
+# subscriptions.json is edited by hand (or by Claude). The live copy of the
+# same page, with the Gmail receipt check, is the claude.ai artifact linked
+# from the page itself.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reports
+  namespace: reports
+  labels:
+    app: reports
+    app.kubernetes.io/name: reports
+    argocd.argoproj.io/managed-by: argocd
+data:
+  index.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Homelab Reports</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap">
+    <style>
+    :root{--bg:#f3f5f4;--surface:#fff;--ink:#16201d;--muted:#5b6b66;--line:#d7dfdc;--accent:#1c6b56;--accent-soft:#d7ece5;color-scheme:light}
+    @media (prefers-color-scheme:dark){:root{--bg:#0f1513;--surface:#171f1c;--ink:#e4ece9;--muted:#9cafa8;--line:#2a3632;--accent:#5cc4a3;--accent-soft:#1d3a31;color-scheme:dark}}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{background:var(--bg);color:var(--ink);font:14px/1.4 "IBM Plex Sans",system-ui,sans-serif;display:flex;flex-direction:column}
+    nav{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+    .brand{font:700 18px/1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.01em;margin-right:8px}
+    .tabs{display:flex;gap:4px;flex-wrap:wrap}
+    .tabs a{font:500 13px "IBM Plex Sans",system-ui,sans-serif;color:var(--muted);text-decoration:none;padding:7px 12px;border-radius:7px}
+    .tabs a:hover{color:var(--ink);background:var(--bg)}
+    .tabs a[aria-current="page"]{color:var(--accent);background:var(--accent-soft)}
+    .tabs a:focus-visible,.out:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .out{margin-left:auto;font:500 11px "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-decoration:none}
+    iframe{flex:1;width:100%;border:0;background:var(--bg)}
+    </style>
+    </head>
+    <body>
+    <nav>
+      <span class="brand">Reports</span>
+      <div class="tabs" id="tabs"></div>
+      <a class="out" id="out" target="_blank" rel="noopener">Open on its own ↗</a>
+    </nav>
+    <iframe id="frame" title="Report"></iframe>
+    <script>
+    // Add a report here and it appears in the switcher. Keys are the #hash
+    // that deep-links to it, e.g. reports.i3sec.com.au/#media.
+    const REPORTS = [
+      { key: "media",         label: "Media",         url: "https://movie-status.i3sec.com.au/" },
+      { key: "backups",       label: "Backups",       url: "https://backup-status.i3sec.com.au/" },
+      { key: "subscriptions", label: "Subscriptions", url: "/subscriptions/" },
+    ];
+    const tabs = document.getElementById("tabs"), frame = document.getElementById("frame"), out = document.getElementById("out");
+    for (const r of REPORTS) {
+      const a = document.createElement("a");
+      a.href = "#" + r.key; a.textContent = r.label; a.dataset.key = r.key;
+      tabs.appendChild(a);
+    }
+    function show() {
+      const r = REPORTS.find(x => "#" + x.key === location.hash) || REPORTS[0];
+      if (frame.getAttribute("src") !== r.url) frame.src = r.url;
+      out.href = r.url;
+      document.title = r.label + " · Reports";
+      for (const a of tabs.children) {
+        if (a.dataset.key === r.key) a.setAttribute("aria-current", "page");
+        else a.removeAttribute("aria-current");
+      }
+    }
+    addEventListener("hashchange", show);
+    show();
+    </script>
+    </body>
+    </html>
+  subscriptions.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body>
+    <title>Recurring Ledger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+    <style>
+    :root{
+      --bg:#f3f5f4; --surface:#ffffff; --sunk:#e9eeec; --ink:#16201d; --muted:#5b6b66; --faint:#8a9994;
+      --line:#d7dfdc; --accent:#1c6b56; --accent-soft:#d7ece5;
+      --ok:#1f7a4d; --warn:#a35f00; --warn-soft:#fbead0; --bad:#b3372b; --bad-soft:#f7dcd8; --info-soft:#dfe7f5; --info:#2f5597;
+      --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+      --body:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+      --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    }
+    @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+      color-scheme:dark;
+      --bg:#0f1513; --surface:#171f1c; --sunk:#1d2723; --ink:#e4ece9; --muted:#9cafa8; --faint:#6f817b;
+      --line:#2a3632; --accent:#5cc4a3; --accent-soft:#1d3a31;
+      --ok:#5cc48c; --warn:#e5a54b; --warn-soft:#3a2c16; --bad:#ef8579; --bad-soft:#3d1f1b; --info-soft:#1e2a40; --info:#8fb0ec;
+    }}
+    :root[data-theme="dark"]{
+      color-scheme:dark;
+      --bg:#0f1513; --surface:#171f1c; --sunk:#1d2723; --ink:#e4ece9; --muted:#9cafa8; --faint:#6f817b;
+      --line:#2a3632; --accent:#5cc4a3; --accent-soft:#1d3a31;
+      --ok:#5cc48c; --warn:#e5a54b; --warn-soft:#3a2c16; --bad:#ef8579; --bad-soft:#3d1f1b; --info-soft:#1e2a40; --info:#8fb0ec;
+    }
+    *{box-sizing:border-box}
+    body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);padding-inline:16px;padding-block:24px 48px}
+    .wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+    h1,h2{font-family:var(--display);text-wrap:balance;margin:0}
+    h1{font-size:clamp(28px,4vw,40px);font-weight:700;letter-spacing:-.02em}
+    h2{font-size:19px;font-weight:700}
+    .eyebrow{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+    .muted{color:var(--muted)}
+    header{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:end}
+    @media (max-width:720px){header{grid-template-columns:1fr}}
+    .totals{display:flex;gap:28px;flex-wrap:wrap}
+    .total b{display:block;font:700 34px/1.1 var(--display);letter-spacing:-.02em}
+    .total span{font-size:12px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:24px;align-items:start}
+    @media (max-width:880px){.grid{grid-template-columns:1fr}}
+    section{display:flex;flex-direction:column;gap:12px}
+    .sechead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+    .tablewrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse}
+    th{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+    td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+    tr:last-child td{border-bottom:0}
+    td.r,th.r{text-align:right}
+    .name{font-weight:600}
+    .sub{font-size:12.5px;color:var(--muted)}
+    .chip{display:inline-block;font:500 11px/1 var(--mono);padding:5px 7px;border-radius:5px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+    .chip.apple{background:var(--info-soft);color:var(--info)}
+    .chip.soon{background:var(--warn-soft);color:var(--warn)}
+    .chip.review{background:var(--warn-soft);color:var(--warn)}
+    .chip.cancelled{background:var(--bad-soft);color:var(--bad)}
+    .chip.ok{background:var(--accent-soft);color:var(--accent)}
+    select{font:500 12px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+    select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .upcoming{display:flex;flex-direction:column}
+    .up{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+    .up:last-child{border-bottom:0}
+    .leaf{border:1px solid var(--line);border-radius:6px;text-align:center;overflow:hidden;background:var(--surface)}
+    .leaf i{display:block;font:500 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;background:var(--accent);color:var(--surface);padding:4px 0}
+    .leaf b{display:block;font:700 20px/1.3 var(--display)}
+    .flags{display:flex;flex-direction:column;gap:10px}
+    .flag{padding:12px 14px;border-left:3px solid var(--warn);background:var(--surface);border-radius:0 8px 8px 0;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+    .flag strong{display:block;margin-bottom:2px}
+    button{font:500 13px var(--body);background:var(--accent);color:var(--surface);border:0;border-radius:7px;padding:8px 12px;cursor:pointer}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+    button:disabled{opacity:.55;cursor:default}
+    .feed{display:flex;flex-direction:column}
+    .fi{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:10px 14px;border-bottom:1px solid var(--line)}
+    .fi:last-child{border-bottom:0}
+    .fi .d{font:500 12px/1.6 var(--mono);color:var(--faint);white-space:nowrap}
+    .fi .s{font-weight:500;overflow-wrap:anywhere}
+    .fi .x{grid-column:2;font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+    .note{padding:14px;font-size:13.5px;color:var(--muted)}
+    details summary{cursor:pointer;list-style:none}
+    details summary::-webkit-details-marker{display:none}
+    details summary h2::after{content:" +";color:var(--faint);font-weight:500}
+    details[open] summary h2::after{content:" –"}
+    footer{font-size:12.5px;color:var(--faint);max-width:70ch}
+    @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+    </style>
+
+    <div id="root"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+    <script>
+    const { useState, useEffect, useMemo } = React;
+    const html = htm.bind(React.createElement);
+
+    // Approximate conversion so everything sums in AUD.
+    const FX = { AUD: 1, USD: 1.52, EUR: 1.65 };
+    const SYM = { AUD: "A$", USD: "US$", EUR: "€" };
+    const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const DAY = 86400000;
+    const HOSTED = typeof window.claude?.use === "function";
+    const LIVE_URL = "https://claude.ai/artifact/9HZSSJVTgNp4o93y4zcqfr";
+
+    const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+    const parse = s => { if (!s) return null; const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+    const fmtDate = d => d ? `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}` : "—";
+    const money = (v, c) => v == null ? "—" : `${SYM[c] || ""}${v.toFixed(2)}`;
+    const aud = s => (s.price || 0) * (FX[s.currency] || 1);
+
+    // Roll a stored renewal date forward by its cycle until it is today or later.
+    function nextDate(s) {
+      let d = parse(s.next);
+      if (!d || !s.cycleMonths) return d;
+      const t = today();
+      let guard = 0;
+      while (d < t && guard++ < 120) d = new Date(d.getFullYear(), d.getMonth() + s.cycleMonths, d.getDate());
+      return d;
+    }
+    const cycleLabel = m => m === 1 ? "Monthly" : m === 12 ? "Yearly" : m ? `${m / 12} years` : "One-off";
+
+    function matchSub(subs, text) {
+      const t = text.toLowerCase();
+      return subs.find(s => (s.match || []).some(k => t.includes(k.toLowerCase())));
+    }
+
+    const FEED_QUERY = 'newer_than:35d (subject:(receipt OR invoice OR subscription OR renew OR renewal OR trial OR "payment") OR from:(paypal OR email.apple.com))';
+
+    function App() {
+      const [subs, setSubs] = useState(null);
+      const [dbState, setDbState] = useState("loading");
+      const [db, setDb] = useState(null);
+      const [canEdit, setCanEdit] = useState(false);
+      const [feed, setFeed] = useState({ state: "loading", threads: [], at: null, error: null });
+
+      useEffect(() => {
+        let unsub = () => {};
+        // Self-hosted copy (reports.i3sec.com.au): no claude.ai runtime, so read
+        // the list from the JSON file served next to the page instead.
+        if (!HOSTED) {
+          fetch("subscriptions.json", { cache: "no-store" }).then(r => r.json())
+            .then(d => { setSubs(d.subs); setDbState("ready"); })
+            .catch(() => setDbState("unavailable"));
+          return;
+        }
+        claude.use("db").then(d => {
+          if (!d) { setDbState("unavailable"); return; }
+          setDb(d);
+          unsub = d.collection("subs").onSnapshot(
+            snap => { setSubs(snap.docs.map(x => ({ id: x.id, ...x.data() }))); setDbState("ready"); },
+            () => setDbState("unavailable"));
+        });
+        claude.use("user").then(u => {
+          if (!u) return;
+          const w = u.can("data.write");
+          setCanEdit(w == null ? u.isOwner() : w);
+        });
+        return () => unsub();
+      }, []);
+
+      useEffect(() => {
+        let stop = () => {};
+        if (!HOSTED) { setFeed(f => ({ ...f, state: "unavailable" })); return; }
+        claude.use("mcp").then(mcp => {
+          if (!mcp) { setFeed(f => ({ ...f, state: "unavailable" })); return; }
+          stop = mcp.watchTool("Gmail", "search_threads", { query: FEED_QUERY, pageSize: 40 }, ev => {
+            if (ev.type === "data") {
+              const p = ev.result.payload || {};
+              setFeed({ state: "ready", threads: p.threads || [], at: ev.result.cache?.storedAt || Date.now(), error: null });
+            } else {
+              const code = ev.error.code;
+              const retract = ["needs_reauth","server_not_connected","blocked_by_policy","approval_required","not_in_manifest","selection_required"].includes(code);
+              setFeed(f => ({ state: retract || !f.threads.length ? "error" : "stale", threads: retract ? [] : f.threads, at: f.at, error: ev.error }));
+            }
+          }, { cache: { staleTime: 120000, gcTime: 86400000 }, refetchInterval: 30 * 60000 });
+        });
+        return () => stop();
+      }, []);
+
+      async function setStatus(id, status) {
+        if (!db) return;
+        try { await db.doc("subs/" + id).update({ status }); }
+        catch (e) { setCanEdit(false); }
+      }
+
+      const view = useMemo(() => {
+        if (!subs) return null;
+        const withNext = subs.map(s => ({ ...s, due: nextDate(s) }));
+        const active = withNext.filter(s => s.status === "active");
+        const review = withNext.filter(s => s.status === "review");
+        const cancelled = withNext.filter(s => s.status === "cancelled");
+        const monthly = active.filter(s => s.cycleMonths === 1).sort((a,b) => aud(b) - aud(a));
+        const longer = active.filter(s => s.cycleMonths > 1).sort((a,b) => (a.due||0) - (b.due||0));
+        const runMonthly = monthly.reduce((t,s) => t + aud(s), 0);
+        const runAll = active.reduce((t,s) => t + (s.cycleMonths ? aud(s) / s.cycleMonths : 0), 0);
+        const t = today();
+        const upcoming = active.filter(s => s.due && s.due - t <= 45 * DAY).sort((a,b) => a.due - b.due);
+        return { active, review, cancelled, monthly, longer, runMonthly, runAll, upcoming };
+      }, [subs]);
+
+      // Latest email seen per subscription, and emails no subscription accounts for.
+      const inbox = useMemo(() => {
+        const last = {}; const rows = [];
+        if (!subs) return { last, rows };
+        for (const th of feed.threads) {
+          const m = (th.messages || [])[0] || {};
+          const text = `${m.sender || ""} ${m.subject || ""} ${m.snippet || ""}`;
+          const s = matchSub(subs, text);
+          const date = m.date ? new Date(m.date) : null;
+          if (s && date && (!last[s.id] || date > last[s.id])) last[s.id] = date;
+          rows.push({ id: th.id, date, sender: m.sender || "", subject: m.subject || "(no subject)", snippet: (m.snippet || "").replace(/&#39;/g,"'").replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/[͏‌­\s]+/g," ").slice(0,140), sub: s, url: th.viewUrl });
+        }
+        return { last, rows };
+      }, [feed.threads, subs]);
+
+      if (dbState === "loading") return html`<div class="wrap"><p class="muted">Loading your subscriptions…</p></div>`;
+      if (dbState === "unavailable" || !view) return html`<div class="wrap"><h1>Recurring Ledger</h1><p class="muted">The subscription list couldn't be loaded in this view. Open the page on claude.ai while signed in.</p></div>`;
+
+      const t = today();
+      const daysTo = d => Math.round((d - t) / DAY);
+
+      const statusCell = s => canEdit
+        ? html`<select id=${"st-" + s.id} aria-label=${"Status for " + s.name} value=${s.status} onChange=${e => setStatus(s.id, e.target.value)}>
+            <option value="active">Active</option><option value="review">Check</option><option value="cancelled">Cancelled</option></select>`
+        : html`<span class=${"chip " + (s.status === "active" ? "ok" : s.status)}>${s.status}</span>`;
+
+      const lastSeen = s => inbox.last[s.id] ? html`<div class="sub">Last email ${fmtDate(inbox.last[s.id])}</div>` : null;
+
+      const row = (s, showCycle) => html`<tr key=${s.id}>
+        <td><div class="name">${s.name}</div><div class="sub">${s.note || s.category}</div>${lastSeen(s)}</td>
+        <td><span class=${"chip" + (s.via === "Apple" ? " apple" : "")}>${s.via}</span></td>
+        ${showCycle ? html`<td class="sub">${cycleLabel(s.cycleMonths)}</td>` : null}
+        <td class="r num">${money(s.price, s.currency)}</td>
+        <td class="num">${s.due ? fmtDate(s.due) : "—"}${s.due && daysTo(s.due) <= 7 ? html` <span class="chip soon">${daysTo(s.due) === 0 ? "today" : daysTo(s.due) + "d"}</span>` : null}</td>
+        <td>${statusCell(s)}</td></tr>`;
+
+      const feedBody = () => {
+        if (feed.state === "unavailable") return HOSTED
+          ? html`<p class="note">Live inbox checks aren't available in this view.</p>`
+          : html`<p class="note">The live Gmail check runs on the claude.ai copy of this page. <a href=${LIVE_URL} target="_blank" rel="noopener">Open it on claude.ai</a>.</p>`;
+        if (feed.state === "loading") return html`<p class="note">Reading recent receipts from Gmail… The first time, claude.ai asks you to allow Gmail for this page.</p>`;
+        if (feed.state === "error") {
+          const c = feed.error?.code;
+          const msg = c === "needs_reauth" ? "Gmail needs reconnecting. Reconnect it in claude.ai Settings → Connectors, then reload."
+            : c === "server_not_connected" ? "Gmail isn't connected. Add it in claude.ai Settings → Connectors, then reload."
+            : c === "not_in_manifest" ? "Gmail access is turned off for this page. Allow it from the page's connector settings to see live receipts."
+            : c === "selection_required" ? "You have more than one Gmail connector. Choose one when claude.ai asks, then reload."
+            : `Couldn't read Gmail (${feed.error?.message || c}). The list above is unaffected.`;
+          return html`<p class="note">${msg}</p>`;
+        }
+        const rows = inbox.rows;
+        if (!rows.length) return html`<p class="note">No receipts or renewal notices in the last 35 days.</p>`;
+        return rows.map(r => html`<div class="fi" key=${r.id}>
+          <span class="d">${r.date ? `${r.date.getDate()} ${MON[r.date.getMonth()]}` : ""}</span>
+          <span class="s">${r.subject}</span>
+          <span class="x">${r.sub ? html`<span class=${"chip " + (r.sub.status === "cancelled" ? "cancelled" : "ok")}>${r.sub.name}</span> ` : html`<span class="chip review">Not tracked</span> `}${r.snippet}</span>
+        </div>`);
+      };
+
+      return html`<div class="wrap">
+        <header>
+          <div>
+            <div class="eyebrow">Brett's subscriptions · as of ${fmtDate(t)}</div>
+            <h1>Recurring Ledger</h1>
+          </div>
+          <div class="totals">
+            <div class="total"><b class="num">A$${view.runMonthly.toFixed(0)}</b><span>monthly plans, per month</span></div>
+            <div class="total"><b class="num">A$${view.runAll.toFixed(0)}</b><span>everything, averaged per month</span></div>
+            <div class="total"><b class="num">A$${(view.runAll * 12).toFixed(0)}</b><span>per year</span></div>
+          </div>
+        </header>
+
+        <div class="grid">
+          <section>
+            <div class="sechead"><h2>Monthly</h2><span class="eyebrow">${view.monthly.length} active</span></div>
+            <div class="panel tablewrap"><table>
+              <thead><tr><th>Service</th><th>Paid via</th><th class="r">Price</th><th>Next charge</th><th>Status</th></tr></thead>
+              <tbody>${view.monthly.map(s => row(s, false))}</tbody></table></div>
+          </section>
+
+          <section>
+            <div class="sechead"><h2>Next 45 days</h2><span class="eyebrow">${view.upcoming.length} charges</span></div>
+            <div class="panel upcoming">${view.upcoming.length ? view.upcoming.map(s => html`<div class="up" key=${s.id}>
+              <div class="leaf"><i>${MON[s.due.getMonth()]}</i><b class="num">${s.due.getDate()}</b></div>
+              <div><div class="name">${s.name}</div><div class="sub">${daysTo(s.due) === 0 ? "Today" : daysTo(s.due) === 1 ? "Tomorrow" : `In ${daysTo(s.due)} days`} · ${s.via}</div></div>
+              <div class="num">${money(s.price, s.currency)}</div></div>`) : html`<p class="note">Nothing due.</p>`}</div>
+          </section>
+        </div>
+
+        <section>
+          <div class="sechead"><h2>Yearly and multi-year</h2><span class="eyebrow">${view.longer.length} active</span></div>
+          <div class="panel tablewrap"><table>
+            <thead><tr><th>Service</th><th>Paid via</th><th>Term</th><th class="r">Price</th><th>Renews</th><th>Status</th></tr></thead>
+            <tbody>${view.longer.map(s => row(s, true))}</tbody></table></div>
+        </section>
+
+        <div class="grid">
+          <section>
+            <div class="sechead"><h2>From your inbox</h2>
+              <span class="eyebrow">${feed.at ? `Checked ${new Date(feed.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "Last 35 days"}${feed.state === "stale" ? " · refresh failed" : ""}</span></div>
+            <div class="panel feed">${feedBody()}</div>
+          </section>
+
+          <section>
+            <div class="sechead"><h2>Worth a look</h2></div>
+            <div class="flags">
+              ${view.review.map(s => html`<div class="flag" key=${s.id}><strong>${s.name}</strong><span class="sub">${s.note}</span></div>`)}
+              <div class="flag"><strong>Three AI subscriptions</strong><span class="sub">Claude Pro, SuperGrok and Venice.ai together cost about A$103 a month.</span></div>
+              <div class="flag"><strong>Confirm the Apple list</strong><span class="sub">System Settings → your name → Media & Purchases → Subscriptions is the definitive list for Apple billing.</span></div>
+            </div>
+          </section>
+        </div>
+
+        <section>
+          <details>
+            <summary><div class="sechead"><h2>Cancelled or ending</h2><span class="eyebrow">${view.cancelled.length} · no further charges expected</span></div></summary>
+            <div class="panel tablewrap" style="margin-top:12px"><table>
+              <thead><tr><th>Service</th><th>Paid via</th><th>Term</th><th class="r">Was</th><th>Date</th><th>Status</th></tr></thead>
+              <tbody>${view.cancelled.map(s => html`<tr key=${s.id}>
+                <td><div class="name">${s.name}</div><div class="sub">${s.note}</div>${lastSeen(s)}</td>
+                <td><span class=${"chip" + (s.via === "Apple" ? " apple" : "")}>${s.via}</span></td>
+                <td class="sub">${cycleLabel(s.cycleMonths)}</td>
+                <td class="r num">${money(s.price, s.currency)}</td>
+                <td class="num">${s.endDate ? fmtDate(parse(s.endDate)) : "—"}</td>
+                <td>${statusCell(s)}</td></tr>`)}</tbody></table></div>
+          </details>
+        </section>
+
+        <footer>Totals convert US$ at 1.52 and € at 1.65, so they're approximate. The inbox panel searches the Gmail account connected to claude.ai and flags receipts that don't match a tracked subscription. ${canEdit ? "Change a status and it saves for everyone who opens this page." : ""}</footer>
+      </div>`;
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);
+    </script>
+
+    </body>
+    </html>
+  subscriptions.json: |
+    {
+      "asOf": "2026-09-26",
+      "fx": {"AUD": 1, "USD": 1.52, "EUR": 1.65},
+      "subs": [
+        {"id": "claude-pro", "name": "Claude Pro", "category": "AI", "price": 30.00, "currency": "AUD", "cycleMonths": 1, "via": "Apple", "next": "2026-10-25", "status": "active", "note": "Apple Account brett@i3sec.com.au", "match": ["Claude Pro"]},
+        {"id": "icloud", "name": "iCloud+ 2 TB", "category": "Storage", "price": 14.99, "currency": "AUD", "cycleMonths": 1, "via": "Apple", "next": "2026-09-30", "status": "active", "match": ["iCloud+"]},
+        {"id": "apple-tv", "name": "Apple TV", "category": "Streaming", "price": 15.99, "currency": "AUD", "cycleMonths": 1, "via": "Apple", "next": "2026-09-29", "status": "active", "match": ["Apple TV Monthly"]},
+        {"id": "onepassword", "name": "1Password Family", "category": "Security", "price": 12.99, "currency": "AUD", "cycleMonths": 1, "via": "Apple", "next": "2026-10-10", "status": "active", "match": ["1Password"]},
+        {"id": "youtube", "name": "YouTube Premium", "category": "Streaming", "price": 16.99, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": "2026-09-28", "status": "active", "match": ["YouTube Red", "GOOGLE YOUTUBE"]},
+        {"id": "spotify", "name": "Spotify", "category": "Music", "price": 15.99, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": "2026-10-21", "status": "active", "match": ["Spotify"]},
+        {"id": "workspace", "name": "Google Workspace", "category": "Business (i3sec)", "price": 25.96, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": "2026-10-01", "status": "active", "note": "i3sec.com.au business account", "match": ["Google Workspace"]},
+        {"id": "grok", "name": "SuperGrok", "category": "AI", "price": 30.00, "currency": "USD", "cycleMonths": 1, "via": "Card", "next": "2026-10-25", "status": "active", "match": ["Grok"]},
+        {"id": "venice", "name": "Venice.ai", "category": "AI", "price": 18.00, "currency": "USD", "cycleMonths": 1, "via": "Card", "next": "2026-09-27", "status": "active", "match": ["Venice"]},
+        {"id": "usenet", "name": "UsenetNow / BlockNews", "category": "Usenet", "price": 5.99, "currency": "USD", "cycleMonths": 1, "via": "PayPal", "next": "2026-10-22", "status": "active", "note": "PayPal automatic payment", "match": ["UsenetNow", "BlockNews"]},
+        {"id": "paramount", "name": "Paramount+", "category": "Streaming", "price": 115.99, "currency": "AUD", "cycleMonths": 12, "via": "Direct", "next": "2026-10-22", "status": "active", "note": "Price change notice received 22 Sep", "match": ["Paramount"]},
+        {"id": "dyn", "name": "Oracle Dyn DNS", "category": "DNS", "price": 60.00, "currency": "USD", "cycleMonths": 12, "via": "PayPal", "next": "2027-09-08", "status": "active", "note": "flowmotion.com.au · autopay off, renew by hand", "match": ["Dyn", "Dynamic Network"]},
+        {"id": "obsidian", "name": "Obsidian", "category": "Notes", "price": 48.00, "currency": "USD", "cycleMonths": 12, "via": "Card", "next": "2027-07-18", "status": "active", "note": "Probably yearly Sync", "match": ["Obsidian"]},
+        {"id": "make", "name": "Make.com (My Lab)", "category": "Automation", "price": null, "currency": "USD", "cycleMonths": 12, "via": "Card", "next": "2027-07-23", "status": "active", "note": "Price not in email", "match": ["make.com"]},
+        {"id": "fastmail", "name": "Fastmail Duo", "category": "Email", "price": 273.60, "currency": "AUD", "cycleMonths": 24, "via": "Paddle", "next": "2028-08-03", "status": "active", "note": "Last paid A$246.24 with discount", "match": ["Fastmail"]},
+        {"id": "pia", "name": "PIA VPN", "category": "VPN", "price": 77.61, "currency": "AUD", "cycleMonths": 36, "via": "PayPal", "next": "2029-07-18", "status": "active", "note": "3-year plan", "match": ["Private Internet Access"]},
+        {"id": "nzbgeek", "name": "NZBgeek", "category": "Usenet", "price": 40.00, "currency": "USD", "cycleMonths": 60, "via": "PayPal", "next": "2031-07-23", "status": "active", "note": "5-year plan", "match": ["NZBgeek", "Geek Hub"]},
+        {"id": "anthropic-extra", "name": "Anthropic extra usage", "category": "AI", "price": 76.73, "currency": "AUD", "cycleMonths": 0, "via": "Card", "next": null, "status": "review", "note": "Prepaid top-ups on gorttman@ (30 Aug, plus two mid-Aug) on top of Claude Pro via Apple on brett@. Check both accounts are needed.", "match": ["Anthropic, PBC"]},
+        {"id": "airvpn", "name": "AirVPN", "category": "VPN", "price": 7.00, "currency": "EUR", "cycleMonths": 0, "via": "PayPal", "next": null, "status": "review", "note": "€7 on 27 Aug, alongside the PIA 3-year plan. Check it isn't recurring.", "match": ["AirVPN"]},
+        {"id": "evernote", "name": "Evernote", "category": "Notes", "price": 23.24, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": null, "endDate": "2026-09-26", "status": "cancelled", "note": "Payment failed 25 Sep, cancelled", "match": ["Evernote", "Bending Spoons"]},
+        {"id": "disney", "name": "Disney+", "category": "Streaming", "price": 17.99, "currency": "AUD", "cycleMonths": 1, "via": "PayPal", "next": null, "endDate": "2026-08-27", "status": "cancelled", "note": "Autopay cancelled; lapsing after failed payments", "match": ["Disney"]},
+        {"id": "norton", "name": "Norton", "category": "Security", "price": null, "currency": "AUD", "cycleMonths": 12, "via": "Direct", "next": null, "endDate": "2026-08-16", "status": "cancelled", "note": "Renewal cancelled, expired", "match": ["Norton"]},
+        {"id": "darkroom", "name": "Darkroom", "category": "Photo", "price": 49.99, "currency": "AUD", "cycleMonths": 12, "via": "Apple", "next": null, "endDate": "2026-08-28", "status": "cancelled", "note": "Cancelled during free trial", "match": ["Darkroom"]},
+        {"id": "procamera", "name": "ProCamera", "category": "Photo", "price": 29.99, "currency": "AUD", "cycleMonths": 12, "via": "Apple", "next": null, "status": "cancelled", "note": "Set to expire (notice 28 Aug)", "match": ["ProCamera"]},
+        {"id": "photosync", "name": "PhotoSync Premium", "category": "Photo", "price": 9.99, "currency": "AUD", "cycleMonths": 12, "via": "Apple", "next": null, "status": "cancelled", "note": "Replaced by lifetime purchase on 1 Sep", "match": ["PhotoSync"]},
+        {"id": "pdf-expert", "name": "PDF Expert Premium", "category": "Documents", "price": 78.99, "currency": "AUD", "cycleMonths": 12, "via": "Apple", "next": null, "status": "cancelled", "note": "Set to expire (notice 17 Aug)", "match": ["PDF Expert"]}
+      ]
+    }

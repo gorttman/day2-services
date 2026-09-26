@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - reports-namespace.yml
+  - reports-cm.yml
+  - reports-deployment.yml
+  - reports-service.yml
+  - reports-ingress.yml
