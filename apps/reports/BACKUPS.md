@@ -1,4 +1,9 @@
-# backup-dashboard - self-hosted, on-demand backup status
+# Backups report (formerly backup-dashboard)
+
+> Moved into the reports app on 2026-09-26: now served at
+> https://reports.i3sec.com.au/backups/ by server.py, with the scanner in
+> reports-backups-cm.yml. backup-status.i3sec.com.au redirects there. The
+> notes below predate the move.
 
 Replaces the claude.ai Artifact version of this dashboard (which could only
 be refreshed by asking Claude to pull fresh state and republish it) with a

@@ -36,7 +36,7 @@ resources:
   # 2026-07-22.
   - arr-stack/arr-stack-app.yml
   - homeassistant/homeassistant-app.yml
-  - backup-dashboard/backup-dashboard-app.yml
+  # backup-dashboard merged into reports/ on 2026-09-26 - see apps/reports/BACKUPS.md.
   # Commented out 2026-09-04: n8n has zero workflows and is not in
   # use. Manifests are kept in apps/n8n/ - uncomment this line to
   # bring it back. The postgres n8n database is deliberately left
@@ -44,5 +44,5 @@ resources:
   # - n8n/n8n-app.yml
   - inbox-router/inbox-router-app.yml
   - books-pipeline/books-pipeline-app.yml
-  # One switcher page for all the reports (media, backups, subscriptions).
+  # Landing page plus the backups and subscriptions reports.
   - reports/reports-app.yml

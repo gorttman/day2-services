@@ -1,5 +1,7 @@
-# Internal-only, like movie-status and backup-dashboard: no Cloudflare
-# Tunnel annotation, DNS lives in dns-conf.
+# Internal-only: no Cloudflare Tunnel annotation, DNS lives in dns-conf.
+#
+# backup-status.i3sec.com.au is kept only so old bookmarks work - server.py
+# answers any request for that host with a redirect to /backups/.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -14,8 +16,21 @@ spec:
   - hosts:
     - reports.i3sec.com.au
     secretName: reports-tls
+  - hosts:
+    - backup-status.i3sec.com.au
+    secretName: backup-status-tls
   rules:
   - host: reports.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: reports
+            port:
+              number: 80
+  - host: backup-status.i3sec.com.au
     http:
       paths:
       - path: /

@@ -1,11 +1,14 @@
+# The backup report scanner, moved unchanged from the old backup-dashboard
+# app on 2026-09-26. server.py imports it and calls generate() for /backups/;
+# its own main() and handler are no longer used. History: BACKUPS.md.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: backup-dashboard-generator
-  namespace: backup-dashboard
+  name: reports-backups
+  namespace: reports
   labels:
-    app: backup-dashboard
-    app.kubernetes.io/name: backup-dashboard
+    app: reports
+    app.kubernetes.io/name: reports
     argocd.argoproj.io/managed-by: argocd
 data:
   generate_dashboard.py: |
