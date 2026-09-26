@@ -1074,7 +1074,7 @@ data:
           "id": "anthropic-two-accounts",
           "order": 1,
           "title": "Claude extra-usage top-ups",
-          "body": "Three prepaid extra-usage top-ups of A$76.73 (16, 17 and 30 Aug, A$230 total) on gorttman@, on top of Claude Pro through Apple. Probably the same account; claude.ai → Settings → Billing will confirm.",
+          "body": "One Claude account, two payment methods: Pro through Apple (A$30/month) and extra usage bought direct on the Visa. Three top-ups of A$76.73 in August (16, 17, 30), A$230 total.",
           "subIds": [
             "claude-pro",
             "anthropic-extra"
