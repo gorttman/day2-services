@@ -424,13 +424,35 @@ data:
                 continue
             body["cutoff"] = cutoff_id
 
-            body["formatItems"] = []
+            # formatItems must list EVERY custom format that exists in this
+            # app - no more, no fewer. Radarr validates that exactly, and
+            # rejects a short list with HTTP 400 "All Custom Formats and no
+            # extra ones need to be present inside your Profile!".
+            #
+            # So this cannot be built from the declared formatScores alone.
+            # It did exactly that until 2026-09-26, which worked only while
+            # "Bulk oversized reject" was the single custom format in
+            # existence; adding a second one ("Foreign dub (MULTi/FRENCH)")
+            # made every profile PUT here fail 400, taking the import-list
+            # and score reconciles down with it in the same try block.
+            #
+            # Start from all known formats at score 0, then overlay the
+            # declared per-profile scores, then any app-wide
+            # customFormatScores - so a format nobody has scored is still
+            # PRESENT, just neutral.
+            declared = {fs["format"]: fs["score"] for fs in p_cfg.get("formatScores", [])}
+            app_wide = desired.get("radarr", {}).get("customFormatScores") or {}
             for fs in p_cfg.get("formatScores", []):
-                cf_id = customformat_ids.get(fs["format"])
-                if cf_id is None:
+                if fs["format"] not in customformat_ids:
                     log("CRIT", f"radarr: custom format {fs['format']!r} not found - skipping formatScore in {p_cfg['name']!r}")
-                    continue
-                body["formatItems"].append({"format": cf_id, "name": fs["format"], "score": fs["score"]})
+            body["formatItems"] = [
+                {
+                    "format": cf_id,
+                    "name": cf_name,
+                    "score": declared.get(cf_name, app_wide.get(cf_name, 0)),
+                }
+                for cf_name, cf_id in customformat_ids.items()
+            ]
             body["minFormatScore"] = p_cfg.get("minFormatScore", 0)
 
             match = next((e for e in existing if e.get("name") == p_cfg["name"]), None)
