@@ -30,10 +30,38 @@ spec:
       # backoffLimit was 0 (zero retries) until 2026-08-14 - same
       # reasoning as books-pipeline-cronjob.yml (shares the same
       # Postgres connection, same class of transient-blip exposure).
-      # 3 retries with Kubernetes' default backoff is trivial against
-      # the 15-minute deadline below, and this only runs weekly.
-      backoffLimit: 3
-      activeDeadlineSeconds: 900
+      #
+      # Cut 3 -> 1 on 2026-09-27. The comment this replaces said 3
+      # retries were "trivial against the 15-minute deadline", which is
+      # the wrong model: activeDeadlineSeconds is scoped to the whole
+      # JOB, not per pod attempt, so every retry spends the SAME budget
+      # the first attempt already ate. Once the walk alone approaches
+      # the deadline, retries cannot succeed - they just guarantee the
+      # job dies as DeadlineExceeded instead of surfacing the real
+      # error. One retry still absorbs a transient Postgres blip, which
+      # is all the original reasoning actually needed.
+      backoffLimit: 1
+      # 900 -> 3600 on 2026-09-27. This job had failed three Sundays
+      # running (29820540, 29830620, 29840700), each killed at exactly
+      # 15:00 - the deadline, not the QNAP incidents of 2026-09-12 and
+      # 09-18/21 that it looked like at first.
+      #
+      # It is NFS-bound, not compute-bound. Measured live on a manual
+      # run: PID 1 sat in D state (uninterruptible sleep on I/O) at
+      # 1-4 millicores against a 500m limit and 10Mi of RAM, still
+      # inside os.walk() past 14 minutes with no output. config.yaml
+      # points library_dir at /mnt/books, the share ROOT, which holds
+      # 5,253 book directories plus per-book metadata.opf/cover.jpg -
+      # order 15,000+ entries stat-ed over NFSv4 at 32KB rsize from a
+      # Pi. Historic good runs were 4m39s, 9m12s, then 9m49s; at 9m49s
+      # it was already at 65% of the old ceiling, so ordinary library
+      # growth was always going to cross it.
+      #
+      # 3600 buys headroom to observe the true runtime rather than a
+      # number clipped by the limit. It treats the symptom: the walk
+      # itself is what needs scoping, and raising this again instead of
+      # doing that would be the wrong call.
+      activeDeadlineSeconds: 3600
       template:
         spec:
           restartPolicy: Never
