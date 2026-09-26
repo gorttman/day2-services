@@ -35,8 +35,9 @@ straight to Anthropic (Haiku 4.5 only). In build-plan Stage 1 it moves behind Li
 Rotate a key by re-sealing it (kubeseal flags in `day0-infra-build/scripts/seal_secret.sh`).
 
 ## Stage 0 spike findings (verified live on 0.11.4, 2026-09-27)
-A throwaway Event function `event_spike` logs every event to
-`/app/backend/data/event_spike.jsonl`. Delete it (Admin > Functions) when the spike ends.
+A throwaway Event function `event_spike` logged every event during the spike and has
+been deleted. The log of 34 lines is kept at `/app/backend/data/event_spike.jsonl`
+on the data volume for reference.
 
 **Event function contract (differs from the docs).** The docs show
 `async def event(self, body)`. The dispatcher (`open_webui/events.py`,
@@ -56,32 +57,42 @@ positional argument". Use `async def event(self, event=None, __event_name__=None
 `chat.folder_updated`, `chat.cloned`, `chat.compacted`, `message.created`,
 `message.updated`, `message.deleted`, `function.*`.
 
-**The four ADR-11 questions.**
-1. `chat.finished` fires for a completion that carries a `chat_id`, including one
-   sent straight to `/api/chat/completions` (`source: api`). It does NOT fire for a
-   bare completion with no `chat_id`. Its `data` has `chat_id`, `message_id`,
-   `model_id`, `title`, `url`, `user_id`, `message` (the final reply text).
-   An API completion with a `chat_id` returns `{status, task_ids, chat_id}` at once
-   and runs as a background task.
-2. `chat.updated_at` is bumped by: creating the chat, any write of the chat object
-   (`POST /api/v1/chats/{id}`, so rename and regenerate), a completion against the
-   chat, pin and unpin. It is NOT bumped by adding a tag, nor by the title-generation
-   task call. Whether the UI's follow-up write of a generated title bumps it needs the
-   browser test (that write is an ordinary chat update, so expect yes).
+**The four ADR-11 questions (API tests plus real browser clicks, 2026-09-27).**
+1. `chat.finished` fires for every completed reply, whether from the browser or a
+   direct call to `/api/chat/completions`, as long as it carries a `chat_id`. It does
+   NOT fire for a bare completion with no `chat_id`. Both report `source: api` (the
+   browser uses the same API). `data`: `chat_id`, `message_id`, `model_id`, `title`,
+   `url`, `user_id`, `message` (the final reply text). It also fires on every
+   regeneration, with the new `message_id`.
+2. `chat.updated_at` moves on: chat creation, a reply finishing, pin and unpin, and any
+   write through `POST /api/v1/chats/{id}`. It does NOT move on: adding a tag, the
+   title-task call, or the **UI's rename** (a rename clicked in the browser fired
+   `chat.updated` with the new title but left `updated_at` unchanged). Do not use
+   `updated_at` to detect renames or to detect inactivity: use
+   `max(chat_message.created_at)` (as ADR-11 already says) and the events. The
+   auto-generated title arrives in `chat.finished.data.title`, with no `chat.updated`.
 3. Units: `chat.created_at`, `chat.updated_at`, `chat_message.created_at`,
    `chat_message.updated_at` and the event `created_at` are all bigint seconds
    (10 digits), not nanoseconds.
-4. `chat.current_message_id` exists as a column and equals the chat JSON's
-   `history.currentId`. `chat_message.id` is `<chat_id>_<message_id>` and `parent_id`
-   links the tree. Walking `current_message_id` back through `parent_id` gave the
-   expected branch after an API-emulated regeneration. Confirming that a real UI
-   regeneration behaves the same is the manual browser check.
+4. Tree: `chat.current_message_id` is a column and matches the chat JSON's
+   `history.currentId`. `chat_message.id` is `<chat_id>-<message_id>`, `parent_id` links
+   the tree. A real "Try Again" on the FIRST reply created a sibling assistant message
+   under the same user message and switched `current_message_id` to it; the later
+   exchange stayed in the table on a side branch. Walking `current_message_id` back
+   through `parent_id` reproduced the visible branch exactly.
 
-**Caveat for the Stage 3 distiller.** After an API completion against a chat, the
-assistant `chat_message` row stayed `content: ""`, `done: false`; the reply text
-was only in the `chat.finished` event. The UI writes message content itself, so
-UI chats should be fine (to confirm), but do not assume `chat_message.content` is
-filled for API-driven chats: use `chat.finished.data.message` or the chat JSON.
+**Regeneration event sequence.** A regenerate re-emits `message.created` for the
+EXISTING user message (same id as before), then `message.created` for the new
+assistant message, then `chat.finished`. Consumers must de-duplicate `message.created`
+by message id.
+
+**Stage 3 distiller notes.**
+- Chats driven from the browser store the full reply in `chat_message.content` with
+  `done: true`. A chat driven only through the API (a completion sent with a `chat_id`
+  but not saved by a client) can leave the assistant row `content: ""`, `done: false`,
+  with the reply only in the `chat.finished` event. Prefer `chat.finished.data.message`
+  for the latest reply if the row is empty.
+- Only the current branch matters for the transcript; other branches stay in the table.
 
 ## Notes
 - The model list also shows Open WebUI's built-in "arena-model" placeholder. It only
