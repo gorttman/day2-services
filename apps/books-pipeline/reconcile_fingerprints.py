@@ -96,7 +96,21 @@ def load_config(path):
 CALIBRE_SIDECAR_NAMES = {"metadata.opf", "cover.jpg", "metadata.db"}
 
 
-def walk_library_paths(library_dir):
+def walk_library_paths(library_dir, exclude_dirs=()):
+    """Collect every book file under library_dir, pruning exclude_dirs.
+
+    exclude_dirs are absolute paths, taken from config (import_dir and
+    quarantine_dir), NOT hardcoded names. library_dir is the share root,
+    so import/ and quarantine/ sit inside it - and they are not the
+    library. Measured 2026-09-27 on the live share, they are most of the
+    walk's cost: import/ is 5,253 dirs holding ~55k nested directories
+    and no files at all (empty trees) at ~13 min, and quarantine/ is one
+    flat directory of 132,225 entries that takes 159s just to list. The
+    actual Calibre library is ~4,365 author dirs / ~23.6k files, ~4 min.
+    Walking them also made every quarantined file report as an untracked
+    "book", which drowned the real signal.
+    """
+    excluded = {os.path.normpath(d) for d in exclude_dirs}
     paths = set()
     if not os.path.isdir(library_dir):
         log("WARN", f"library dir does not exist, skipping: {library_dir}")
@@ -107,7 +121,8 @@ def walk_library_paths(library_dir):
     # all until it finished - so a run killed mid-walk was invisible.
     dirs_seen = 0
     for root, dirnames, files in os.walk(library_dir):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")
+                       and os.path.normpath(os.path.join(root, d)) not in excluded]
         dirs_seen += 1
         if dirs_seen % PROGRESS_EVERY == 0:
             log("INFO", f"walk progress: {dirs_seen} dirs, {len(paths)} files, "
@@ -129,7 +144,9 @@ def main():
     _record_state["phase"] = "walking"
     log("INFO", f"reconcile starting at {_STARTED_WALL}, library_dir={library_dir}")
 
-    actual_paths = walk_library_paths(library_dir)
+    exclude = [config[k] for k in ("import_dir", "quarantine_dir") if config.get(k)]
+    log("INFO", f"excluding from walk: {exclude}")
+    actual_paths = walk_library_paths(library_dir, exclude)
     walk_seconds = time.monotonic() - _STARTED
     _record_state.update(phase="querying-db", files_found=len(actual_paths),
                          walk_seconds=round(walk_seconds, 1))
@@ -154,10 +171,18 @@ def main():
     # commit never happened).
     untracked = sorted(actual_paths - db_paths)
 
-    for p in stale:
-        log("WARN", f"stale row (no file): {p}")
-    for p in untracked:
-        log("WARN", f"untracked file (no row): {p}")
+    # Capped: the previous run emitted 66,142 WARN lines, which buries the
+    # summary and makes the log useless to read. Counts are always exact;
+    # DRIFT_LOG_LIMIT=0 restores the full listing for a manual audit.
+    limit = int(os.environ.get("DRIFT_LOG_LIMIT", "50"))
+    for label, items in (("stale row (no file)", stale),
+                         ("untracked file (no row)", untracked)):
+        shown = items if limit == 0 else items[:limit]
+        for p in shown:
+            log("WARN", f"{label}: {p}")
+        if len(shown) < len(items):
+            log("WARN", f"{label}: ... and {len(items) - len(shown)} more "
+                        f"(DRIFT_LOG_LIMIT={limit}; 0 = list all)")
 
     log("INFO", f"reconcile summary: stale={len(stale)} untracked={len(untracked)}")
     _record_state.update(phase="done", stale=len(stale), untracked=len(untracked))
