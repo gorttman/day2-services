@@ -1,0 +1,128 @@
+# Keeps the /movies-bulk catalogue on-genre. See bulk_genre_filter.py's
+# module docstring for why this exists and what it does and does not touch.
+#
+# Mounted as a whole directory (not subPath), same as upgrade-search's
+# script - an edit here reaches the next run without touching the
+# CronJob, since every run is a fresh process reading this file fresh.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bulk-genre-filter-script
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: bulk-genre-filter
+    argocd.argoproj.io/managed-by: argocd
+data:
+  bulk_genre_filter.py: |
+    #!/usr/bin/env python3
+    """Keeps the /movies-bulk catalogue drama/thriller-led, romance-light.
+
+    Three Radarr import lists feed /movies-bulk on a 12-hour refresh: the
+    TMDb "Hallmark Media" and "Lifetime" company catalogues, and a Trakt
+    list literally named "hallmark-all". None of Radarr's list-import
+    types support a genre filter of their own, so left alone they add
+    every title those sources carry - which is why the catalogue grew
+    from ~1,300 to ~1,900 titles over a month with no code change behind
+    it (confirmed 2026-09-27: steady 5-15 adds/day since late August, not
+    a spike).
+
+    This is deliberately a separate lever from tier_of() in
+    movie_status.py / bulk_backfill.py, which only orders which MISSING
+    titles get *searched* first (drama/thriller first, romance demoted).
+    That lever never filtered what gets *added*. This one does, using
+    the same genre split so "Drama/Thriller" and "Romance" mean the same
+    sets of titles in both places.
+
+    What it removes: titles under ROOT_FOLDER with no file yet, genre
+    Romance, and neither Drama nor Thriller. Removed with
+    addImportExclusion=true, so the same TMDb/Trakt id is never re-added
+    by the next list sync - without this the job would just refight the
+    same titles every 12 hours forever.
+
+    What it never touches, deliberately: anything that already has a
+    file. A title already downloaded is done - this only gates the
+    catalogue, not the library. (2026-09-27: of 392 romance-only titles
+    live at deploy time, 138 already had files and were left alone; 254
+    were catalogue-only and removed.)
+    """
+    import json
+    import os
+    import sys
+    import urllib.error
+    import urllib.request
+    import xml.etree.ElementTree as ET
+
+    CONFIG_XML = os.environ.get("RADARR_CONFIG", "/app-config/radarr/config.xml")
+    BASE_URL = os.environ.get("RADARR_URL", "http://radarr.arr-stack.svc.cluster.local:7878")
+    ROOT_FOLDER = os.environ.get("ROOT_FOLDER", "/movies-bulk")
+    # Kept identical to movie_status.py's CORE_GENRES / tier_of() on
+    # purpose - "Drama/Thriller" must mean the same titles wherever the
+    # pipeline talks about genre.
+    CORE_GENRES = {"Drama", "Thriller"}
+    EXCLUDE_GENRE = os.environ.get("EXCLUDE_GENRE", "Romance")
+    DRY_RUN = os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
+
+
+    def log(msg):
+        print(msg, flush=True)
+
+
+    def api_key():
+        # Read live from Radarr's own config, never a Secret - same rule
+        # every other script here follows, since the key is auto-generated
+        # and would drift.
+        key = ET.parse(CONFIG_XML).getroot().findtext("ApiKey")
+        if not key:
+            sys.exit("no <ApiKey> in %s" % CONFIG_XML)
+        return key
+
+
+    KEY = None
+
+
+    def api(path, method="GET"):
+        req = urllib.request.Request(
+            "%s/api/v3/%s" % (BASE_URL, path), method=method,
+            headers={"X-Api-Key": KEY, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                raw = r.read().decode()
+        except urllib.error.HTTPError as e:
+            sys.exit("%s %s -> HTTP %s: %s" % (method, path, e.code, e.read().decode()[:400]))
+        return json.loads(raw) if raw.strip() else {}
+
+
+    def excluded(m):
+        genres = set(m.get("genres") or [])
+        return EXCLUDE_GENRE in genres and not (CORE_GENRES & genres)
+
+
+    def main():
+        global KEY
+        KEY = api_key()
+
+        movies = api("movie")
+        mine = [m for m in movies if m.get("rootFolderPath") == ROOT_FOLDER]
+        candidates = [m for m in mine if not m.get("hasFile") and excluded(m)]
+
+        if not candidates:
+            log("nothing to do - no %s-only, file-less titles under %s"
+                % (EXCLUDE_GENRE, ROOT_FOLDER))
+            return
+
+        log("%d %s-only title(s) with no file under %s%s"
+            % (len(candidates), EXCLUDE_GENRE, ROOT_FOLDER,
+               " (dry run, removing none)" if DRY_RUN else ""))
+        for m in candidates:
+            log("  %s (%s) - %s" % (m["title"], m.get("year"), ", ".join(m.get("genres") or [])))
+            if not DRY_RUN:
+                api("movie/%s?deleteFiles=false&addImportExclusion=true" % m["id"], "DELETE")
+
+        if not DRY_RUN:
+            log("removed %d title(s), each with an import exclusion so the same "
+                "TMDb/Trakt id will not be re-added" % len(candidates))
+
+
+    if __name__ == "__main__":
+        main()

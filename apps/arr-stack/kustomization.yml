@@ -26,6 +26,7 @@ resources:
   - wiring
   - vpn-healer
   - upgrade-search
+  - bulk-genre-filter
   - movie-status
   - stall-watch
   - queue-clear
