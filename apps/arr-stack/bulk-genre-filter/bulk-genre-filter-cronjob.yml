@@ -1,0 +1,85 @@
+# Runs bulk_genre_filter.py against /movies-bulk. See that script's
+# docstring for the full reasoning.
+#
+# Same PVC-mount pattern as radarr-upgrade-search: reads the API key
+# live from radarr-config, so podAffinity to arr-stack's own node is
+# load-bearing, not a preference - Longhorn's RWO claim only attaches
+# alongside the running stack on the SAME node. Scheduled elsewhere this
+# pod sits in Multi-Attach and the run is silently lost.
+#
+# Every 6 hours, offset from the other jobs here (queue-clear/
+# download-stall-watch run on the half-hour, jellyfin-notify every 10
+# minutes) so none of them line up and compete for the arr-stack node at
+# once. The three import lists this is downstream of refresh on a
+# 12-hour cycle, so this catches a fresh sync within 6 hours either way.
+#
+# Unlike radarr-upgrade-search this does not retire itself - the three
+# import lists it is cleaning up after are ongoing house style, not a
+# one-off backlog, so the gate needs to keep running for as long as they
+# do.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bulk-genre-filter
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    app.kubernetes.io/name: bulk-genre-filter
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  schedule: "15 */6 * * *"
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app: arr-stack
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: bulk-genre-filter
+              # Borrowed for its python3, same as every other stdlib
+              # script in this stack - no third-party image to build or
+              # patch for ~80 lines.
+              image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/app/bulk_genre_filter.py"]
+              securityContext:
+                runAsUser: 1000
+                runAsGroup: 1000
+              env:
+                - {name: ROOT_FOLDER, value: "/movies-bulk"}
+                - {name: EXCLUDE_GENRE, value: "Romance"}
+                - {name: DRY_RUN, value: "false"}
+                - {name: TZ, value: Australia/Sydney}
+              volumeMounts:
+                - name: script
+                  mountPath: /app
+                  readOnly: true
+                # Read-only, and only ever read: the API key comes from
+                # config.xml. Deletes go through Radarr's own API, not
+                # this mount.
+                - name: radarr-config
+                  mountPath: /app-config/radarr
+                  readOnly: true
+              resources:
+                requests: {memory: "32Mi", cpu: "10m"}
+                limits: {memory: "128Mi", cpu: "200m"}
+          volumes:
+            - name: script
+              configMap:
+                name: bulk-genre-filter-script
+            - name: radarr-config
+              persistentVolumeClaim:
+                claimName: radarr-config
+                readOnly: true
