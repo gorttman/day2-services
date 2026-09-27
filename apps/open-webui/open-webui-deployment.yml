@@ -63,21 +63,24 @@ spec:
                 secretKeyRef: {name: openwebui-app, key: WEBUI_ADMIN_PASSWORD}
             - name: ENABLE_SIGNUP
               value: "False"
-            # Model access: Anthropic only, Haiku 4.5 only (spike cost control).
-            # Applied on first start only: Open WebUI stores these in its database
-            # afterwards (ENABLE_PERSISTENT_CONFIG), so later changes are made in
-            # the admin UI, or by resetting the database.
+            # Config is code: with persistence off, these values come from git on every
+            # start and anything changed in the admin UI is discarded at the next restart.
+            - name: ENABLE_PERSISTENT_CONFIG
+              value: "False"
+            # Model access goes through LiteLLM (ADR-3), never straight to a provider.
+            # The key is a LiteLLM virtual key limited to Haiku with a small monthly
+            # budget; its policy is defined in apps/litellm/litellm-keys-job.yml.
             - name: ENABLE_OLLAMA_API
               value: "False"
             - name: ENABLE_OPENAI_API
               value: "True"
             - name: OPENAI_API_BASE_URLS
-              value: https://api.anthropic.com/v1
+              value: http://litellm.litellm.svc.cluster.local:4000/v1
             - name: OPENAI_API_KEYS
               valueFrom:
-                secretKeyRef: {name: openwebui-anthropic, key: ANTHROPIC_API_KEY}
+                secretKeyRef: {name: openwebui-litellm, key: LITELLM_API_KEY}
             - name: OPENAI_API_CONFIGS
-              value: '{"0":{"enable":true,"model_ids":["claude-haiku-4-5-20251001"]}}'
+              value: '{"0":{"enable":true,"model_ids":["claude-haiku-4-5"]}}'
             # ADR-11: two competing knowledge systems is worse than one.
             - name: ENABLE_MEMORIES
               value: "False"

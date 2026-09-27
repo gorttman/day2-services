@@ -4,7 +4,7 @@ kind: Kustomization
 namespace: open-webui
 
 resources:
-  - anthropic-sealed-secret.yml
+  - litellm-sealed-secret.yml
   - app-sealed-secret.yml
   - open-webui-pvc.yml
   - open-webui-deployment.yml

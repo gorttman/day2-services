@@ -4,8 +4,9 @@
 ArgoCD app `open-webui` (auto-sync). Image `0.11.4-slim` pinned by digest.
 
 ## What it does
-Chat front end for the AI platform: the daily-driver hub in ADR-2. For now it talks
-straight to Anthropic (Haiku 4.5 only). In build-plan Stage 1 it moves behind LiteLLM.
+Chat front end for the AI platform: the daily-driver hub in ADR-2. It talks to LiteLLM
+(`apps/litellm`, ADR-3) with its own virtual key: Haiku 4.5 only, $5 per 30 days.
+The model list, budget and allowed models are set in git (`apps/litellm`).
 
 ## How it runs
 - Single replica (the Stage 3 session-memory sweep runs inside it and would
@@ -16,9 +17,9 @@ straight to Anthropic (Haiku 4.5 only). In build-plan Stage 1 it moves behind Li
   Never NFS: the vector store is SQLite.
 - Sign-up is off. The admin (`gorttman@i3sec.com.au`) is created headlessly on first
   start from `WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD`. Native memory is off (ADR-11).
-- Model access is set by env on first start only. Open WebUI keeps the values in its
-  database afterwards (`ENABLE_PERSISTENT_CONFIG`), so later changes are made in
-  Admin Settings, or by resetting the database.
+- Config is code: `ENABLE_PERSISTENT_CONFIG=False`, so the Deployment's environment
+  is applied on every start and settings changed in the admin UI are discarded at the
+  next restart. Change settings in git.
 
 ## Access
 - LAN: https://open-webui.i3sec.com.au (Traefik ingress, Let's Encrypt cert; Pi-hole
@@ -28,8 +29,8 @@ straight to Anthropic (Haiku 4.5 only). In build-plan Stage 1 it moves behind Li
   without an allow-listed device certificate Cloudflare answers 403 (verified 2026-09-27).
 
 ## Secrets (SealedSecrets)
-- `openwebui-anthropic`: `ANTHROPIC_API_KEY`. Anthropic API is billed separately from
-  a Claude subscription. Use a key dedicated to this app with a small spend limit.
+- `openwebui-litellm`: `LITELLM_API_KEY`, the LiteLLM virtual key for this app. The
+  Anthropic key now lives only in the `litellm` namespace.
 - `openwebui-app`: `DATABASE_URL`, `WEBUI_SECRET_KEY`, `WEBUI_ADMIN_PASSWORD`.
 - `postgres/postgres-superuser` key `OPENWEBUI_DB_PASSWORD` (used by the init Job).
 Rotate a key by re-sealing it (kubeseal flags in `day0-infra-build/scripts/seal_secret.sh`).
