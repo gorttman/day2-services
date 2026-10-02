@@ -16,6 +16,18 @@ data:
   configuration.yaml: |
     default_config:
 
+    # Core identity/location. Set here (not the onboarding UI) so it is
+    # git-owned; HA shows these fields read-only in Settings > General.
+    homeassistant:
+      name: Home
+      latitude: -38.0217952
+      longitude: 145.32984
+      elevation: 47
+      unit_system: metric
+      time_zone: Australia/Melbourne
+      currency: AUD
+      country: AU
+
     # HA rejects reverse-proxied requests unless the proxy is trusted;
     # 10.42.0.0/16 is the pod network (traefik).
     http:

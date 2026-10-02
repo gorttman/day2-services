@@ -89,7 +89,7 @@ spec:
               name: homeassistant-recorder
               key: HA_RECORDER_DB_URL
         - name: TZ
-          value: Australia/Sydney
+          value: Australia/Melbourne
         volumeMounts:
         - name: config
           mountPath: /config
