@@ -47,7 +47,7 @@ DNS in dns-conf).
 
 ## Notes
 
-- HA version is pinned (`2026.6.4`). When bumping, check the release
+- HA version is pinned (`2026.9.4`). When bumping, check the release
   notes for recorder schema migrations before jumping to a fresh
   `.0`/`.1` — Postgres migrations get less soak time than SQLite.
 - Zigbee2MQTT is intentionally not installed: no coordinator hardware
