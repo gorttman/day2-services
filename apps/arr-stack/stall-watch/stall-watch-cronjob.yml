@@ -30,7 +30,11 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
 spec:
   schedule: "*/30 * * * *"
-  suspend: false
+  # Suspended 2026-10-03: see jellyfin-notify-cronjob.yml's identical
+  # comment - one of three confirmed feeders of the k8smaster NFS-
+  # client wedge, and the vault is under active reorganization in a
+  # separate session right now. Re-enable once both are resolved.
+  suspend: true
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

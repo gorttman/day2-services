@@ -78,9 +78,6 @@ spec:
             # the button and running the script by hand cannot disagree
             # about what has already been searched.
             - {name: bulk-state, mountPath: /state/bulk_backfill_state.json}
-            # Read-only: the board reports the stall watcher's verdict
-            # rather than recomputing it, so the two can never disagree.
-            - {name: vault, mountPath: /vault, subPath: obsidian, readOnly: true}
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             initialDelaySeconds: 2
@@ -103,10 +100,16 @@ spec:
           persistentVolumeClaim: {claimName: whisparr-config, readOnly: true}
         - name: sabnzbd-config
           persistentVolumeClaim: {claimName: sabnzbd-config, readOnly: true}
-        - name: vault
-          nfs:
-            server: qnap
-            path: /vault
+        # vault volume removed 2026-10-03: it only fed health()'s
+        # STALL_STATE read (movie-status-cm.yml), which already
+        # try/excepts a missing file to {stall: {}, checkedAt: None} -
+        # confirmed safe to drop, no code change needed. This pod's
+        # established mount was not itself part of the NFS-wedge pile-
+        # up (6 days stable), but the vault is under active
+        # reorganization in a separate session right now, so dropping
+        # the dependency entirely avoids that work disturbing this
+        # pod too. Re-add once stall-watch (the only writer of
+        # STALL_STATE) is re-enabled and vault work is done.
         # bulk_backfill.py is a host script with a host state file, and
         # rewrites it in place (open "w", same inode), so a File
         # hostPath stays valid across runs. Scoped to the one file
