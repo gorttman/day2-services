@@ -1,0 +1,19 @@
+# Music Assistant's /data: settings.json (provider logins, player config) and
+# its SQLite library DB. Longhorn is replicated block storage, so SQLite is
+# fine here (NOT NFS - same rule as pihole/jellyfin).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: music-assistant-data
+  namespace: music-assistant
+  labels:
+    app: music-assistant
+    app.kubernetes.io/name: music-assistant
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi

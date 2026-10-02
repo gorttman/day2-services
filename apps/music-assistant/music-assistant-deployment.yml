@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: music-assistant
+  namespace: music-assistant
+  labels:
+    app: music-assistant
+    app.kubernetes.io/name: music-assistant
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  replicas: 1
+  # Single-writer /data (SQLite) and a fixed host network identity: the old
+  # pod must be gone before the new one binds the host ports.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: music-assistant
+  template:
+    metadata:
+      labels:
+        app: music-assistant
+        app.kubernetes.io/name: music-assistant
+    spec:
+      # hostNetwork is not optional for Music Assistant: players are found by
+      # mDNS and then pull audio from MA's stream port (8097) on a random-ish
+      # set of ports, so MA must sit directly on a LAN. The upstream docs say
+      # the same (host networking required).
+      #
+      # Pinned to k8smaster because that is the node whose end0 is on Trusted
+      # (192.168.20.10) - the stream URLs handed to the Cast speakers use this
+      # node's address. The speakers are on the main LAN (192.168.2.x), so
+      # discovery needs the UDM mDNS reflector enabled for BOTH networks
+      # (unifi-tf: mdns site setting) - without it MA sees zero Cast players.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: k8smaster
+      enableServiceLinks: false
+      containers:
+      - name: music-assistant
+        # Pinned stable (2026-10-03). 2.11 is dev/beta - do not float.
+        image: ghcr.io/music-assistant/server:2.10.5
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8095
+          protocol: TCP
+        - name: stream
+          containerPort: 8097
+          protocol: TCP
+        env:
+        - name: TZ
+          value: Australia/Melbourne
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            # k8smaster sits around 68% memory; cap MA so a leak cannot start
+            # evicting neighbours.
+            memory: "1Gi"
+            cpu: "2000m"
+        startupProbe:
+          tcpSocket:
+            port: 8095
+          periodSeconds: 10
+          failureThreshold: 30
+        livenessProbe:
+          tcpSocket:
+            port: 8095
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+      # YouTube Music needs a Proof-of-Origin token to resolve stream URLs
+      # (Google, since March 2025). MA's YT Music provider looks for this
+      # server at http://127.0.0.1:4416 by default, so a sidecar on the host
+      # network needs no provider URL change. MA only supports 1.2.1.
+      - name: pot-provider
+        image: brainicism/bgutil-ytdlp-pot-provider:1.2.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: pot
+          containerPort: 4416
+          protocol: TCP
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "10m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: music-assistant-data
