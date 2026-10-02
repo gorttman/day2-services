@@ -39,8 +39,18 @@ metadata:
     reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
+  # RollingUpdate with no unavailability (2026-10-03): Reloader restarts both
+  # Pi-holes at once on any shared ConfigMap change, and with Recreate that
+  # took both VIPs down together (~1 min). Now each keeps its old pod serving
+  # until the new one passes readiness. Safe to overlap: the live SQLite DBs
+  # (gravity.db, pihole-FTL.db) are on a per-pod tmpfs, not the shared PVC,
+  # and anti-affinity keeps the surge pod on the same node, so the RWO
+  # volume attaches fine.
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: pihole-b
