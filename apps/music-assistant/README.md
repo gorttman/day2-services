@@ -14,8 +14,9 @@ radio and YouTube Music to the Google Cast speakers and groups them.
   Default and Trusted in `enabled_for_network_ids`. If MA shows zero Cast
   players, check that first.
 - **`/data` is a Longhorn PVC** (settings.json + SQLite library). Not NFS.
-- **`pot-provider` sidecar** (`bgutil-ytdlp-pot-provider` 1.2.1, the only
-  version MA supports) serves the Proof-of-Origin token YouTube Music
+- **`pot-provider` sidecar** (`bgutil-ytdlp-pot-provider`, version pinned to
+  match the plugin bundled in the MA image - 2.0.1 for MA 2.10.5; the MA
+  docs' "only 1.2.1" is stale) serves the Proof-of-Origin token YouTube Music
   needs. MA's YT Music provider finds it at `http://127.0.0.1:4416` by
   default, so there is nothing to configure.
 - Web UI goes through Traefik. Speakers never use that hostname - they
