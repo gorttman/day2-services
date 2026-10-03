@@ -1,0 +1,21 @@
+{
+  "providers": {
+    "chromecast": {
+      "type": "player",
+      "domain": "chromecast",
+      "instance_id": "chromecast",
+      "enabled": true,
+      "name": "Chromecast",
+      "values": {
+        "manual_discovery_ip_addresses": [
+          "192.168.2.69",
+          "192.168.2.197",
+          "192.168.2.40",
+          "192.168.2.188",
+          "192.168.2.196",
+          "192.168.2.167"
+        ]
+      }
+    }
+  }
+}
