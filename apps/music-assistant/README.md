@@ -71,3 +71,23 @@ listed by address (all reserved in unifi-tf `clients.tf`):
 - Player groups: use MA's own sync groups, not Google's "Home group".
 - Lounge speaker stays standalone (different listener taste) - groups are
   separate.
+
+## OPEN ITEM - do before removing Google Home / the Google "Home group"
+
+The Bose Smart Soundbar 900 (192.168.2.167, main-LAN Wi-Fi) **drops every
+packet from outside its own subnet** (all ports and ICMP time out from the
+cluster, while the Google speakers answer). So MA cannot reach it directly.
+Today it only plays because it is a member of Google's "Home group", which
+lives in Google Home. Remove Google Home / that group and the Bose is
+unreachable from MA.
+
+Fix to apply BEFORE that day (untested - the Bose may or may not answer on
+the same subnet): create a small Wi-Fi network bound to Trusted (VLAN 20) in
+unifi-tf `wlan.tf`, re-join the Bose to it with Bose's app, then add its new
+192.168.20.x address to `desired-config.json` and reserve it in `clients.tf`.
+Rejected alternatives: bringing k8smaster's `wlan0` up on the main LAN (risk
+to the node that runs everything), or moving MA off the cluster.
+
+The same dependency applies to any grouping done in Google Home. MA-native
+sync groups for Cast need the experimental "Sendspin over Cast" opt-in per
+speaker (not enabled; not tested).
