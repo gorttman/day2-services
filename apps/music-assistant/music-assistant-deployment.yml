@@ -37,6 +37,29 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: k8smaster
       enableServiceLinks: false
+      # Declarative config: merges desired-config.json (git) into MA's own
+      # settings.json before MA starts. Only keys named in that file are
+      # enforced - everything else stays as MA/the UI wrote it. Because the
+      # ConfigMap name carries a content hash, editing desired-config.json
+      # changes this pod template and rolls the pod automatically.
+      initContainers:
+      - name: apply-desired-config
+        image: ghcr.io/music-assistant/server:2.10.5
+        imagePullPolicy: IfNotPresent
+        command: ["python3", "/desired/apply-desired-config.py"]
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: desired
+          mountPath: /desired
+          readOnly: true
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
       containers:
       - name: music-assistant
         # Pinned stable (2026-10-03). 2.11 is dev/beta - do not float.
@@ -97,3 +120,6 @@ spec:
       - name: data
         persistentVolumeClaim:
           claimName: music-assistant-data
+      - name: desired
+        configMap:
+          name: music-assistant-desired

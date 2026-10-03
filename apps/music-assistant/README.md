@@ -40,6 +40,33 @@ Workflow: try things in the UI first, then record what worked in the
   `/browse` request, `Cookie` header, must contain `__Secure-3PAPISID`).
   Free accounts are not supported - Premium only.
 
-## Working configuration
+## Declarative config (`desired-config.json`)
 
-(To fill in as things are proven in the UI.)
+MA has no config file to hand-write, so desired state is merged into its own
+`/data/settings.json` by an init container (`apply-desired-config.py`) before
+MA starts. Only keys named in `desired-config.json` are enforced; dicts merge,
+lists replace. Provider logins and everything else are left alone.
+
+- Change a value in `desired-config.json`, push: the ConfigMap name carries a
+  content hash, so the pod rolls and the new value is applied. MA restarts, so
+  anything playing stops for ~30s.
+- **Git wins for declared keys.** A UI edit to a declared key is overwritten
+  at the next restart. Workflow: try it in the UI, then move the result here.
+- Never put secrets in `desired-config.json` (YouTube cookie etc.) - MA keeps
+  those encrypted in its own file.
+
+Currently declared: the Chromecast **manual discovery IPs**. Cast speakers sit
+on the main LAN, MA on Trusted, and mDNS does not cross - so each speaker is
+listed by address (all reserved in unifi-tf `clients.tf`):
+
+- 192.168.2.69 lounge, .197 bar, .40 shed, .188 clock, .196 pergola Chromecast
+- 192.168.2.167 Bose Smart Soundbar 900 - NOT reserved in UniFi yet and its
+  Cast/AirPlay ports did not answer when tested (probably standby). Harmless
+  if it never connects; remove it from the list if it never works.
+
+## Working configuration (UI state, not declarative)
+
+- Radio Browser provider enabled (free, no login).
+- Player groups: use MA's own sync groups, not Google's "Home group".
+- Lounge speaker stays standalone (different listener taste) - groups are
+  separate.
