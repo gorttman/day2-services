@@ -60,6 +60,44 @@ spec:
           limits:
             memory: "128Mi"
             cpu: "200m"
+      # YouTube Music needs a Proof-of-Origin token to resolve stream URLs
+      # (Google, since March 2025). MA's YT Music provider looks for this
+      # server at http://127.0.0.1:4416 by default, so a sidecar on the host
+      # network needs no provider URL change.
+      #
+      # Native sidecar (init container with restartPolicy: Always, k8s >=1.29):
+      # it starts BEFORE the main container, and the main container is held
+      # until the startupProbe passes. This matters - MA checks the token
+      # server once at provider load, and as a plain second container it lost
+      # that race by ~0.7s, leaving the provider on "needs attention".
+      #
+      # VERSION MUST MATCH the bgutil plugin bundled inside the MA image (MA
+      # 2.10.5 ships bgutil-ytdlp-pot-provider 2.0.1). The MA docs still say
+      # "only 1.2.1" - stale; with a 1.2.1 server the plugin logs "major
+      # versions mismatched ... update both to proceed" and the provider shows
+      # Running while streaming fails. When bumping MA, check the plugin
+      # version: `pip list | grep bgutil` inside the MA container.
+      - name: pot-provider
+        image: brainicism/bgutil-ytdlp-pot-provider:2.0.1
+        imagePullPolicy: IfNotPresent
+        restartPolicy: Always
+        ports:
+        - name: pot
+          containerPort: 4416
+          protocol: TCP
+        startupProbe:
+          httpGet:
+            path: /ping
+            port: 4416
+          periodSeconds: 1
+          failureThreshold: 60
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "10m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
       containers:
       - name: music-assistant
         # Pinned stable (2026-10-03). 2.11 is dev/beta - do not float.
@@ -98,31 +136,6 @@ spec:
           periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
-      # YouTube Music needs a Proof-of-Origin token to resolve stream URLs
-      # (Google, since March 2025). MA's YT Music provider looks for this
-      # server at http://127.0.0.1:4416 by default, so a sidecar on the host
-      # network needs no provider URL change.
-      #
-      # VERSION MUST MATCH the bgutil plugin bundled inside the MA image (MA
-      # 2.10.5 ships bgutil-ytdlp-pot-provider 2.0.1). The MA docs still say
-      # "only 1.2.1" - stale; with a 1.2.1 server the plugin logs "major
-      # versions mismatched ... update both to proceed" and the provider shows
-      # Running while streaming fails. When bumping MA, check the plugin
-      # version: `pip list | grep bgutil` inside the MA container.
-      - name: pot-provider
-        image: brainicism/bgutil-ytdlp-pot-provider:2.0.1
-        imagePullPolicy: IfNotPresent
-        ports:
-        - name: pot
-          containerPort: 4416
-          protocol: TCP
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "10m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
       volumes:
       - name: data
         persistentVolumeClaim:
