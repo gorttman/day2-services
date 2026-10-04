@@ -229,7 +229,18 @@ data:
     .panel { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 10px;
       margin-bottom: 20px; box-shadow: var(--shadow); overflow: hidden; }
     .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 16px;
-      padding: 16px 20px; border-bottom: 1px solid var(--border); border-left: 3px solid transparent; }
+      padding: 16px 20px; border-left: 3px solid transparent; }
+    details.panel > summary { list-style: none; cursor: pointer; }
+    details.panel > summary::-webkit-details-marker { display: none; }
+    details.panel[open] > summary { border-bottom: 1px solid var(--border); }
+    details.panel > summary { border-bottom: 1px solid transparent; }
+    details.panel > summary:hover { background: var(--bg-sunken); }
+    details.panel > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .head-right { display: flex; align-items: center; gap: 12px; flex: none; }
+    .rollup { font-size: 12.5px; color: var(--ink-muted); text-align: right; }
+    .chev { width: 8px; height: 8px; border-right: 2px solid var(--ink-faint); border-bottom: 2px solid var(--ink-faint);
+      transform: rotate(-45deg); transition: transform .15s; flex: none; margin: 0 4px 0 2px; }
+    details.panel[open] .chev { transform: rotate(45deg); }
     .panel[data-status="good"] .panel-head { border-left-color: var(--good); }
     .panel[data-status="warn"] .panel-head { border-left-color: var(--warn); }
     .panel[data-status="crit"] .panel-head { border-left-color: var(--crit); }
@@ -268,7 +279,7 @@ data:
     .note code { font-family: var(--mono); background: var(--bg-sunken); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
     footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12.5px;
       color: var(--ink-faint); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-    @media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, 1fr); } .page { padding: 28px 16px 60px; } }
+    @media (max-width: 640px) { .rollup { display: none; } .panel-sub { display: none; } .tiles { grid-template-columns: repeat(2, 1fr); } .page { padding: 28px 16px 60px; } }
     """
     
     
@@ -298,6 +309,22 @@ data:
             qnap_status = max((status_for_days(r["stale_days"]) for r in qnap_rows), key=lambda s: order[s])
     
         secrets_status = status_for_days(secrets["stale_days"]) if secrets else "crit"
+    
+        def rollup(rows, noun):
+            if not rows:
+                return "nothing found"
+            bad = sum(1 for r in rows if status_for_days(r["stale_days"]) != "good")
+            return f"{len(rows)} {noun} &middot; " + ("all current" if not bad else f"{bad} need attention")
+    
+        pg_rollup = rollup(postgres_rows, "databases")
+        qnap_rollup = rollup(qnap_rows, "sources")
+        secrets_rollup = (f"{secrets['count']} key files &middot; latest {secrets['stale_days']}d ago"
+                          if secrets else "none found")
+        # Healthy panels start rolled up; anything degraded starts open so a
+        # problem is never hidden behind a click.
+        pg_open = "" if pg_status == "good" else " open"
+        qnap_open = "" if qnap_status == "good" else " open"
+        secrets_open = "" if secrets_status == "good" else " open"
     
         alerts = sum(1 for s in (pg_status, qnap_status, secrets_status) if s != "good")
     
@@ -360,35 +387,35 @@ data:
           <div class="tile-value" style="color:{'var(--crit)' if alerts else 'inherit'}">{alerts}</div></div>
       </div>
     
-      <section class="panel" data-status="{pg_status}">
-        <div class="panel-head">
+      <details class="panel" data-status="{pg_status}"{pg_open}>
+        <summary class="panel-head">
           <div class="panel-title-group"><span class="panel-title">Database Backups</span>
             <span class="panel-sub">postgres &middot; per-database pg_dump, staged locally then synced to QNAP</span></div>
-          <span class="chip {pg_status}">{'Healthy' if pg_status=='good' else ('Degraded' if pg_status=='warn' else 'Critical')}</span>
-        </div>
+          <span class="head-right"><span class="rollup">{pg_rollup}</span><span class="chip {pg_status}">{'Healthy' if pg_status=='good' else ('Degraded' if pg_status=='warn' else 'Critical')}</span><span class="chev"></span></span>
+        </summary>
         <div class="panel-body">
           <div class="table-wrap"><table>
             <thead><tr><th>Database</th><th>Latest dump</th><th>Size</th><th>Generations</th><th>Age</th></tr></thead>
             <tbody>{pg_rows_html or '<tr><td colspan="5">No dumps found</td></tr>'}</tbody>
           </table></div>
         </div>
-      </section>
+      </details>
     
-      <section class="panel" data-status="good">
-        <div class="panel-head">
+      <details class="panel" data-status="{secrets_status}"{secrets_open}>
+        <summary class="panel-head">
           <div class="panel-title-group"><span class="panel-title">Secrets &amp; Credentials</span>
             <span class="panel-sub">sealed-secrets key backups</span></div>
-          <span class="chip {secrets_status}">{'Healthy' if secrets_status=='good' else ('Degraded' if secrets_status=='warn' else 'Critical')}</span>
-        </div>
+          <span class="head-right"><span class="rollup">{secrets_rollup}</span><span class="chip {secrets_status}">{'Healthy' if secrets_status=='good' else ('Degraded' if secrets_status=='warn' else 'Critical')}</span><span class="chev"></span></span>
+        </summary>
         <div class="panel-body">{secrets_html}</div>
-      </section>
+      </details>
     
-      <section class="panel" data-status="{qnap_status}">
-        <div class="panel-head">
+      <details class="panel" data-status="{qnap_status}"{qnap_open}>
+        <summary class="panel-head">
           <div class="panel-title-group"><span class="panel-title">QNAP Data Snapshot</span>
             <span class="panel-sub">hardlink-generational, {len(qnap_dates)} daily generations kept</span></div>
-          <span class="chip {qnap_status}">{'Healthy' if qnap_status=='good' else ('Degraded' if qnap_status=='warn' else 'Critical')}</span>
-        </div>
+          <span class="head-right"><span class="rollup">{qnap_rollup}</span><span class="chip {qnap_status}">{'Healthy' if qnap_status=='good' else ('Degraded' if qnap_status=='warn' else 'Critical')}</span><span class="chev"></span></span>
+        </summary>
         <div class="panel-body">
           <div class="table-wrap"><table>
             <thead><tr><th>Source</th><th>Latest generation</th><th>Age</th></tr></thead>
@@ -396,7 +423,7 @@ data:
           </table></div>
           <p class="note">Generations older than {STALE_WARN_DAYS} days are flagged warn, {STALE_CRIT_DAYS}+ days critical &mdash; matches each job's own roughly-daily schedule.</p>
         </div>
-      </section>
+      </details>
     
       <footer>
         <span>Self-hosted, generated fresh on every request &mdash; not a claude.ai artifact.</span>
