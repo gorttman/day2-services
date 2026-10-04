@@ -126,9 +126,14 @@ Not applied yet. Each step is separate and can be done in order.
    Do it after step 1, because it adds more photos.
 8. Playback progress writes fail with `FOREIGN KEY constraint failed`
    (76 errors in two days). Investigate.
-9. The *Ladyhawke* DVD folder has wrong metadata. Jellyfin lists only 5 of its
-   VOB files and a runtime of about 22 minutes. The replacement download
-   makes this less urgent.
+9. The *Ladyhawke* DVD folder plays badly. Jellyfin builds its file list from
+   only 5 of the 7 VOB files (it skips `VTS_01_3` and `VTS_01_6` and includes
+   the extras title `VTS_02_1`). Every resume at 22:00 got a playlist of about
+   18 seconds. Correction: an earlier draft said Jellyfin recorded a 22-minute
+   runtime. That was wrong. Jellyfin records 95 minutes for this item. The
+   cause of the 22:00 stall point is the concat file list, not the runtime.
+   Replaced on 2026-10-04 with a 1.2 GB x264/AAC `.mp4`. The old DVD folder
+   is still in the library and still plays badly.
 10. The `jellyfin-notify` and `download-stall-watch` CronJobs are suspended.
     Decide whether to bring them back.
 
@@ -143,3 +148,31 @@ Not applied yet. Each step is separate and can be done in order.
 Jellyfin runs as one pod with a single-node volume. A node loss or any restart
 still means downtime. The steps above make the common failures much less likely
 and make the remaining ones fast to recover from. They do not remove them.
+
+## 9. Outcome of the 2026-10-04 follow-up work
+
+- Config volume grown to 20 GiB (14 GB free). Jellyfin is running again.
+- Transcode throttling and segment deletion are on (`encoding.xml`, backed up
+  as `encoding.xml.bak-20261004`). This setting is live config on the volume,
+  not in git.
+- The 6 GB Main HD size cap is now in git: the "Main oversized reject" custom
+  format and a `profileOverrides` entry in the arr-stack wiring config, with a
+  matching reconciler change. See `apps/arr-stack/wiring/`.
+- *The Wedding Planner*: 25 GB remux replaced by a 1.73 GB x265/AAC file.
+- *Ladyhawke*: 22.7 GB release failed repair; the next release (11.5 GB) was
+  replaced by a 1.2 GB x264/AAC file.
+- The replaced remux and the 11.5 GB file are in Radarr's recycle bin until
+  the 7-day cleanup.
+
+### Lessons from doing the replacement
+
+- Radarr's recycle bin is on a different NFS mount from the movies folder, so
+  deleting a large movie in Radarr copies the file over NFS. A 25 GB delete ran
+  at about 12-20 MB/s and pushed the QNAP load from about 5 to 8. Move large
+  files into `/share/CACHEDEV1_DATA/media/downloads/.recycle_bin/` on the QNAP
+  itself (instant, same filesystem), then rescan in Radarr.
+- A release in an old usenet post (3 or more years) often fails repair by a few
+  blocks. Expect a retry.
+- qBittorrent had no forwarded port (gluetun reports port 0) and small swarms
+  were slow. A new torrent also queues behind several hundred others. Force-start
+  it, and keep a usenet fallback ready.
