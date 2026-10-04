@@ -169,6 +169,25 @@ data:
         # occupying a slot at all, so a dead magnet cannot wedge the queue.
         "dont_count_slow_torrents": True,
         "queueing_enabled": True,
+        # Minimal seeding, added 2026-10-05. Only about a tenth of what
+        # arrives comes by torrent (557 GB of 4.8 TB imported in Radarr,
+        # 8 of 323 imports in Sonarr), and the point of this client is to
+        # fetch, not to serve. A torrent is PAUSED the moment it completes
+        # (ratio 0 / seed time 0, action 0 = pause), not removed: Radarr
+        # still sees a finished download and imports it, and then removes
+        # it itself (removeCompletedDownloads is on).
+        "max_ratio_enabled": True,
+        "max_ratio": 0.0,
+        "max_seeding_time_enabled": True,
+        "max_seeding_time": 0,
+        "max_ratio_act": 0,
+        # Fewer peers and almost no upload. Not zero: a tiny upload allowance
+        # keeps tit-for-tat from throttling the download side as well.
+        "max_uploads": 4,
+        "max_uploads_per_torrent": 1,
+        "up_limit": 51200,          # bytes/s, 50 KiB/s
+        "max_connec": 150,
+        "max_connec_per_torrent": 30,
     }
 
 
