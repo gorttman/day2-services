@@ -30,4 +30,3 @@ resources:
   - movie-status
   - stall-watch
   - queue-clear
-  - jellyfin-notify

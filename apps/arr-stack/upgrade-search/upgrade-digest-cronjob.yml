@@ -30,12 +30,14 @@ spec:
   # reason as the search job - it suspends itself once the backfill is
   # done, and selfHeal would otherwise resurrect it.
   #
-  # Suspended here too as of 2026-10-03: see jellyfin-notify-
-  # cronjob.yml's identical comment - one of three confirmed feeders
-  # of the k8smaster NFS-client wedge, and the vault is under active
-  # reorganization in a separate session right now. Weekly schedule
-  # means this one was not actively feeding the pile-up today, but
-  # suspending it anyway for consistency while vault work is ongoing.
+  # Suspended as of 2026-10-03: one of three confirmed feeders of the
+  # k8smaster NFS-client wedge (the other two were stall-watch and
+  # jellyfin-notify), and the vault is under active reorganization in a
+  # separate session. Weekly schedule means this one was not actively
+  # feeding the pile-up, but it was suspended anyway for consistency.
+  # 2026-10-05: the NFS wedge is resolved, the vault reorganization is
+  # not finished, so this stays suspended until it is. jellyfin-notify
+  # was removed entirely (see the jellyfin-notify skill).
   suspend: true
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
