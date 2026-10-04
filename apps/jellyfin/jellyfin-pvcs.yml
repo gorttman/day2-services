@@ -33,11 +33,15 @@ spec:
   storageClassName: longhorn
   resources:
     requests:
-      # 8Gi, not 2Gi, since 2026-09-03: the real config directory is 3.0G
-      # (37,031 files - metadata, images and the transcode DB). local-path
-      # never enforced the 2Gi request, Longhorn does, and the first restore
-      # silently truncated because busybox cp discarded its own ENOSPC.
-      storage: 8Gi
+      # 20Gi since 2026-10-04 (was 8Gi, and 2Gi before 2026-09-03). The config
+      # directory grew from 3.0G to 6.0G in a month (posters, backdrops and
+      # actor photos). Jellyfin refuses to START with under 2GiB free on this
+      # volume, so at 6.0G of 8Gi a restart failed and took Jellyfin down;
+      # see POSTMORTEM-2026-10-04.md. Keep usage under about 60% (alert at
+      # 70%). Longhorn enforces the request, local-path never did, and the
+      # first restore silently truncated because busybox cp discarded its own
+      # ENOSPC. Growing is online and one-way - a PVC cannot shrink.
+      storage: 20Gi
 # jellyfin-cache PVC removed 2026-09-03 - /cache is an emptyDir now. See the
 # comment on the cache volume in jellyfin-deployment.yml for the measurements
 # and reasoning. jellyfin-config stays on Longhorn: it holds jellyfin.db, and
