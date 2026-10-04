@@ -167,6 +167,67 @@ data:
         return current_ip not in wg_ips_seen
 
 
+    # Confirmation window for the list-based staleness signal, added 2026-10-05.
+    #
+    # The 2026-08-24 fix above assumed a pool of 4 servers behind the "aus"
+    # region, so 5 samples would miss a healthy peer about 0.1% of the time.
+    # Measured 2026-10-05: the pool is at least 7 servers, PIA returns 3 per
+    # call, and a given healthy server shows up in only about 40% of samples.
+    # Five samples miss it roughly 6-10% of the time, and at 96 runs a day that
+    # is 5-9 false "stale" reads a day. It matched the real history exactly:
+    # 26 rotations in 5 days, cycling through only 7 distinct servers (the
+    # same ones over and over), each one a full arr-stack pod delete that
+    # aborted any download, unpack or import in flight.
+    #
+    # No sample count fixes this, because the signal itself is a random
+    # subset. What does: require the peer to be missing from EVERY sample on
+    # every run for STALE_GRACE_SECONDS. A healthy peer is missing from a run
+    # ~10% of the time, so it stays missing for 12 runs (3h) in a row with
+    # probability ~1e-12. A genuinely retired server is missing every time and
+    # is still rotated, just 3h later. A genuinely dead tunnel does not wait at
+    # all: gluetun_is_restart_looping() below is unchanged and rotates
+    # immediately, so a real outage is as fast as it ever was.
+    #
+    # The marker is an annotation on the live gluetun-config ConfigMap (this
+    # ServiceAccount already has get/patch on exactly that object). It is not
+    # in git and ArgoCD does not treat a live-only annotation as drift.
+    ABSENT_ANNOTATION = "vpn-healer-peer-absent-since"
+    STALE_GRACE_SECONDS = int(os.environ.get("STALE_GRACE_SECONDS", "10800"))
+
+
+    def read_absent_since():
+        raw = kubectl("get", "configmap", CONFIGMAP_NAME, "-o", "json", check=False)
+        try:
+            value = (json.loads(raw).get("metadata", {}).get("annotations") or {}).get(ABSENT_ANNOTATION)
+            return float(value) if value else None
+        except (ValueError, TypeError):
+            return None
+
+
+    def set_absent_since(value):
+        # value=None removes the annotation (JSON merge patch null).
+        kubectl("patch", "configmap", CONFIGMAP_NAME, "--type", "merge", "-p",
+                json.dumps({"metadata": {"annotations": {
+                    ABSENT_ANNOTATION: None if value is None else str(int(value))}}}))
+
+
+    def confirm_staleness(listed_stale, absent_since, now, grace=STALE_GRACE_SECONDS):
+        """Pure decision. Returns (confirmed_stale, new_marker, note).
+
+        listed_stale: the peer was missing from this run's union of samples.
+        absent_since: epoch seconds the marker was first set, or None.
+        new_marker: what the marker should be afterwards (None = clear it).
+        """
+        if not listed_stale:
+            return False, None, "peer is in PIA's list"
+        if absent_since is None:
+            return False, now, "peer missing from PIA's list - starting confirmation window"
+        waited = now - absent_since
+        if waited >= grace:
+            return True, absent_since, f"peer missing from every run for {int(waited)}s (grace {grace}s)"
+        return False, absent_since, f"peer still missing, {int(waited)}s of {grace}s"
+
+
     def get_arr_stack_pod_name():
         # Deliberately NOT `{.items[0].metadata.name}`. During a restart there
         # are briefly TWO pods matching this selector - the old one still
@@ -466,7 +527,13 @@ data:
         wg_ips_seen, server_list = collect_region_wg_ips(PIA_REGION)
         wg_servers = find_region_wg_servers(server_list, PIA_REGION)
 
-        stale = is_endpoint_stale(current_ip, wg_ips_seen)
+        listed_stale = is_endpoint_stale(current_ip, wg_ips_seen)
+        prior_marker = read_absent_since()
+        stale, new_marker, stale_note = confirm_staleness(listed_stale, prior_marker, time.time())
+        if new_marker != prior_marker:
+            set_absent_since(new_marker)
+        if listed_stale:
+            print(f"Staleness check: {stale_note}.")
         looping = gluetun_is_restart_looping()
         # Diagnostic escape hatch only - never set on the CronJob itself, so
         # every normal scheduled run stays exactly as staleness-gated as
@@ -478,7 +545,8 @@ data:
         forced = os.environ.get("FORCE_ROTATE") == "1"
 
         if not stale and not looping and not forced:
-            print(f"OK: peer {current_ip} still listed in PIA's {PIA_REGION!r} region, "
+            listed = "still listed in" if not listed_stale else "missing from this sample of"
+            print(f"OK: peer {current_ip} {listed} PIA's {PIA_REGION!r} region, "
                   "no restart loop detected.")
             return 0
 
@@ -523,6 +591,8 @@ data:
         patch_configmap(new_fields)
         patch_sealed_secret(encrypted_private_key)
         restart_arr_stack(new_fields["WIREGUARD_ENDPOINT_IP"])
+        # New peer: forget any "old peer was missing" history.
+        set_absent_since(None)
 
         print(f"Done: rotated {current_ip} -> {server['ip']}, arr-stack restarted, "
               "git updated.")
