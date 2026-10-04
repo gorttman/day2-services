@@ -304,11 +304,36 @@ data:
           specifications:
             - implementation: ReleaseTitleSpecification
               value: '\b(MULTi|MULTI|FRENCH|TRUEFRENCH|VOSTFR|VFF|VFQ)\b'
+        # Added 2026-10-04 after the Jellyfin outage (see
+        # apps/jellyfin/POSTMORTEM-2026-10-04.md). Main HD had no size
+        # ceiling: Bluray-1080p and Remux are uncapped, so a 25 GB remux and
+        # a 22 GB BluRay both passed. Scored only on Main HD, see
+        # profileOverrides below - NOT in customFormatScores, which applies
+        # to every profile and would tighten the Bulk profile's 8 GB cap.
+        - name: Main oversized reject
+          specifications:
+            - implementation: SizeSpecification
+              min: 6      # GB - at or above this, hard-rejected on Main HD
+              max: 999
 
       # Applied to EVERY live quality profile, not just the ones declared
       # below - see reconcile_customformat_scores().
       customFormatScores:
         Foreign dub (MULTi/FRENCH): -500
+
+      # Per-profile settings for UI-made profiles the reconciler does not
+      # own. Matched by profile NAME. Only the keys listed are touched.
+      #
+      # cutoffFormatScore -1000 is deliberate: without it the -1000 score
+      # makes the ~230 existing Main HD files at or above 6 GB look like they
+      # need an upgrade, and Radarr would start replacing them with smaller
+      # releases. At -1000 they already meet the cutoff and are left alone.
+      # minFormatScore stays 0, so NEW grabs of 6 GB or more are rejected.
+      profileOverrides:
+        - profile: Main HD
+          customFormatScores:
+            Main oversized reject: -1000
+          cutoffFormatScore: -1000
 
       # Name kept as-is deliberately: the reconciler matches profiles by
       # name, and every movie already added carries this profile's id.

@@ -363,6 +363,50 @@ data:
             log("INFO", f"{app}: scored custom formats on profile {profile['name']!r}")
 
 
+    def reconcile_profile_overrides(app, desired, apikey, customformat_ids):
+        """Patch named settings on named, UI-made quality profiles.
+
+        reconcile_customformat_scores() scores EVERY profile, which is wrong
+        for a rule that belongs to one profile (the Main HD size cap, added
+        2026-10-04). This touches only the keys listed under
+        profileOverrides in wiring.yml - per-format scores and
+        cutoffFormatScore - and PUTs the profile back otherwise untouched.
+        A profile that does not exist is logged and skipped, never created.
+        """
+        overrides = desired.get(app, {}).get("profileOverrides") or []
+        if not overrides:
+            return
+        base = f"http://localhost:{APP_PORTS[app]}/api/v3"
+        profiles = http_json("GET", f"{base}/qualityprofile?apikey={apikey}") or []
+        for ov in overrides:
+            profile = next((p for p in profiles if p.get("name") == ov["profile"]), None)
+            if profile is None:
+                log("WARN", f"{app}: profileOverrides names {ov['profile']!r} but no such profile exists - skipped")
+                continue
+            changed = False
+            items = profile.get("formatItems") or []
+            for cf_name, score in (ov.get("customFormatScores") or {}).items():
+                cf_id = customformat_ids.get(cf_name)
+                if cf_id is None:
+                    log("WARN", f"{app}: profileOverrides on {ov['profile']!r} names unknown custom format {cf_name!r} - skipped")
+                    continue
+                entry = next((i for i in items if i.get("format") == cf_id), None)
+                if entry is None:
+                    items.append({"format": cf_id, "name": cf_name, "score": score})
+                    changed = True
+                elif entry.get("score") != score:
+                    entry["score"] = score
+                    changed = True
+            if "cutoffFormatScore" in ov and profile.get("cutoffFormatScore") != ov["cutoffFormatScore"]:
+                profile["cutoffFormatScore"] = ov["cutoffFormatScore"]
+                changed = True
+            if not changed:
+                continue
+            profile["formatItems"] = items
+            http_json("PUT", f"{base}/qualityprofile/{profile['id']}?apikey={apikey}", body=profile)
+            log("INFO", f"{app}: applied profile overrides on {profile['name']!r}")
+
+
     # ---------------------------------------------------------------------
     # Radarr quality profiles
     # ---------------------------------------------------------------------
@@ -975,6 +1019,12 @@ data:
                 reconcile_customformat_scores("radarr", desired, apikeys["radarr"], cf_ids)
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
                 log("CRIT", f"radarr custom format/quality profile reconcile failed: {e}")
+            # Own try block: a bad profileOverrides entry (KeyError) must not
+            # skip the import-list reconcile below.
+            try:
+                reconcile_profile_overrides("radarr", desired, apikeys["radarr"], cf_ids)
+            except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
+                log("CRIT", f"radarr profile override reconcile failed: {e}")
             # KeyError included deliberately: a malformed/incomplete entry
             # in wiring.yml must not abort the rest of this pass, which is
             # exactly what bit the prowlarr reconcile on 2026-08-25.
