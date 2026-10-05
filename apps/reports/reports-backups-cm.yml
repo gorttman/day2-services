@@ -251,6 +251,8 @@ data:
     h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
     .subline { color: var(--ink-muted); font-size: 14px; }
     .subline .ts { font-family: var(--mono); color: var(--ink); }
+    .related a { color: var(--accent); text-decoration: none; }
+    .related a:hover { text-decoration: underline; }
     .countdown { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 13px; color: var(--ink-muted); }
     .countdown .val { font-family: var(--mono); font-size: 15px; font-weight: 650; color: var(--accent);
       font-variant-numeric: tabular-nums; }
@@ -412,6 +414,7 @@ data:
         <h1>Backup Status</h1>
         <div class="subline">Regenerated <span class="ts">{now}</span> &mdash; generated fresh on every request, not on a schedule</div>
         <div class="countdown">Next backup run (<strong>{next_run_name}</strong>) in <span class="val" id="countdown-val" data-target="{next_run_iso}">&hellip;</span></div>
+        <div class="subline related">Related: <a href="https://grafana.i3sec.com.au/alerting/list" target="_blank" rel="noopener">Alerts</a> &middot; <a href="https://grafana.i3sec.com.au/d/cluster-overview/cluster-overview" target="_blank" rel="noopener">Cluster dashboard</a> &middot; <a href="/" rel="noopener">All reports</a></div>
       </header>
     
       <div class="tiles">
