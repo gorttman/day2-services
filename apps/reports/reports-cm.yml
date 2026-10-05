@@ -61,10 +61,12 @@ data:
         "/subscriptions/": ("subscriptions.html", "text/html; charset=utf-8"),
         "/subscriptions/subscriptions.json": ("subscriptions.json", "application/json"),
         "/icloud-migration/": ("icloud-migration.html", "text/html; charset=utf-8"),
+        "/consolidation/": ("consolidation.html", "text/html; charset=utf-8"),
+        "/consolidation/consolidation-register.json": ("consolidation-register.json", "application/json"),
     }
     # The subscriptions page fetches subscriptions.json relative to itself, so
     # it must be served from a trailing-slash URL.
-    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/", "/icloud-migration": "/icloud-migration/"}
+    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/", "/icloud-migration": "/icloud-migration/", "/consolidation": "/consolidation/"}
 
     ORDER = {"good": 0, "warn": 1, "crit": 2}
 
@@ -251,6 +253,11 @@ data:
           <h2>iCloud Migration <span>→</span></h2>
           <p>Progress moving off iCloud Drive: what's landed in Paperless/Immich, what's blocked, what's not started.</p>
           <div class="status"><span class="pill">Snapshot</span><span>Live numbers on the Grafana dashboard</span></div>
+        </a>
+        <a class="card" href="/consolidation/" target="_blank" rel="noopener">
+          <h2>Data Consolidation <span>→</span></h2>
+          <p>Every scattered source of your data (phones, drives, SD cards, cloud, old folders) and whether it has really been moved.</p>
+          <div class="status"><span class="pill">Register</span><span>Nothing counts as done until checked</span></div>
         </a>
         <a class="card" href="https://grafana.i3sec.com.au/alerting/list" target="_blank" rel="noopener">
           <h2>Alerts <span>→</span></h2>
@@ -1305,3 +1312,116 @@ data:
     </main>
     </body>
     </html>
+  consolidation.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Data Consolidation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+    <style>
+    :root{--bg:#f3f5f4;--surface:#fff;--ink:#16201d;--muted:#5b6b66;--faint:#8a9994;--line:#d7dfdc;--accent:#1c6b56;
+      --good:#1f7a4d;--good-soft:#dcefe3;--warn:#a35f00;--warn-soft:#fbead0;--crit:#b3372b;--crit-soft:#f7dcd8;
+      --info:#2f5597;--info-soft:#dfe7f5;color-scheme:light}
+    @media (prefers-color-scheme:dark){:root{--bg:#0f1513;--surface:#171f1c;--ink:#e4ece9;--muted:#9cafa8;--faint:#6f817b;--line:#2a3632;--accent:#5cc4a3;
+      --good:#5cc48c;--good-soft:#1c3527;--warn:#e5a54b;--warn-soft:#3a2c16;--crit:#ef8579;--crit-soft:#3d1f1b;
+      --info:#8fb0ec;--info-soft:#1e2a40;color-scheme:dark}}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;padding-inline:16px;padding-block:40px 48px}
+    main{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+    .eyebrow{font:500 11px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    h1{font:700 clamp(28px,4vw,40px)/1.1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.02em;margin:6px 0 0}
+    p.lede{color:var(--muted);margin:0;max-width:70ch}
+    .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+    .tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+    .tile b{display:block;font:700 26px/1.1 "Bricolage Grotesque",sans-serif}
+    .tile span{font:500 11px/1 "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+    details{border-bottom:1px solid var(--line)}
+    details:last-child{border-bottom:0}
+    summary{cursor:pointer;list-style:none;display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px}
+    summary::-webkit-details-marker{display:none}
+    .name{font-weight:600}
+    .sub{font-size:12.5px;color:var(--muted)}
+    .body{padding:0 14px 14px;display:grid;gap:8px;font-size:14px}
+    .body b{font:500 11px/1 "IBM Plex Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:2px}
+    .chip{display:inline-block;font:500 11px/1 "IBM Plex Mono",monospace;padding:5px 8px;border-radius:5px;background:var(--line);color:var(--muted);white-space:nowrap}
+    .chip.good{background:var(--good-soft);color:var(--good)}
+    .chip.warn{background:var(--warn-soft);color:var(--warn)}
+    .chip.crit{background:var(--crit-soft);color:var(--crit)}
+    .chip.info{background:var(--info-soft);color:var(--info)}
+    h2{font:600 14px "IBM Plex Sans",sans-serif;margin:0}
+    .bulk{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px}
+    .bulk:last-child{border-bottom:0}
+    .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;width:100px;margin-top:6px}
+    .bar i{display:block;height:100%;background:var(--accent)}
+    footer{font-size:12.5px;color:var(--faint);max-width:70ch}
+    </style>
+    </head>
+    <body>
+    <main>
+      <header style="display:flex;flex-direction:column;gap:10px">
+        <div class="eyebrow">i3sec homelab · reports</div>
+        <h1>Data Consolidation</h1>
+        <p class="lede">Every scattered copy of your data, and whether it has really been moved. Nothing is marked done until it has been checked against live data.</p>
+      </header>
+      <div class="tiles" id="tiles"></div>
+      <div class="panel" id="list"><div class="bulk">Loading</div></div>
+      <div class="panel" id="bulk"></div>
+      <footer id="foot">Heavy work only runs Monday to Wednesday, 08:00 to 18:00, while you are away and Jellyfin is idle. <a href="/">All reports</a>.</footer>
+    </main>
+    <script>
+    var LABEL={check:["Needs checking","warn"],needs_you:["Needs you","crit"],not_started:["Not started",""],in_progress:["In progress","info"],paused:["Paused","warn"],verified:["Verified","good"]};
+    function esc(s){var d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML}
+    fetch("consolidation-register.json",{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){
+      var n={};d.sources.forEach(function(s){n[s.status]=(n[s.status]||0)+1});
+      var t=[["verified","Verified"],["check","Needs checking"],["needs_you","Needs you"],["in_progress","In progress"],["not_started","Not started"]];
+      document.getElementById("tiles").innerHTML=t.map(function(x){return '<div class="tile"><b>'+(n[x[0]]||0)+'</b><span>'+x[1]+'</span></div>'}).join("");
+      var order={needs_you:0,check:1,in_progress:2,paused:3,not_started:4,verified:5};
+      var s=d.sources.slice().sort(function(a,b){return (order[a.status]||9)-(order[b.status]||9)});
+      document.getElementById("list").innerHTML=s.map(function(x){var l=LABEL[x.status]||[x.status,""];
+        return '<details><summary><div><div class="name">'+esc(x.name)+'</div><div class="sub">'+esc(x.kind)+'</div></div><span class="chip '+l[1]+'">'+l[0]+'</span></summary><div class="body">'
+        +'<div><b>Earlier notes said</b>'+esc(x.claimed)+'</div><div><b>Actually checked</b>'+esc(x.evidence)+'</div><div><b>Next</b>'+esc(x.next)+'</div></div></details>'}).join("");
+      document.getElementById("bulk").innerHTML=d.bulk_sources.map(function(b){var p=b.expected?Math.round(100*b.processed/b.expected):0;
+        return '<div class="bulk"><div><h2>'+esc(b.name)+'</h2><div class="sub">'+esc(b.note)+'</div></div><div style="text-align:right"><div class="name">'+b.processed+' of '+b.expected+'</div><div class="bar"><i style="width:'+p+'%"></i></div></div></div>'}).join("");
+      document.getElementById("foot").insertAdjacentHTML("beforeend"," Register updated "+esc(d.updated)+".");
+    }).catch(function(e){document.getElementById("list").innerHTML='<div class="bulk">Could not load the register.</div>'});
+    </script>
+    </body>
+    </html>
+  consolidation-register.json: |
+    {
+      "updated": "2026-10-06",
+      "rule": "Nothing counts as done until it has been checked against live data. 'Claimed' is what earlier notes said; 'Evidence' is what was actually checked.",
+      "sources": [
+        {"id":"immich_backlog","name":"Photo backlog (QNAP Public/Photo) into Immich","kind":"workstream","status":"check","claimed":"Copy finished 2026-09-21: 59,150 files ok, 0 failed, Public/Photo left untouched.",
+         "evidence":"2026-10-06: Immich holds 81,845 assets (76,818 images, 5,027 videos), up from 25,950, so the import clearly landed. The run's own error list shows about 40+ source files that exiftool calls invalid (JPG that is really text, bad CR2s) in 2003/2006/2009/2017/2019 folders. immich-server has restarted 56 times (OOMKilled, last 00:15 today).",
+         "next":"Decide whether the invalid files are corrupt originals or copy damage by comparing with Public/Photo; find out why immich-server keeps running out of memory; spot-check years in the timeline."},
+        {"id":"immich_review","name":"Review tags left to cull (variant groups, folder dates)","kind":"workstream","status":"not_started","claimed":"5,505 variant-group, 7,384 date-from-folder, 1,145 date-from-mtime assets tagged for hand review.",
+         "evidence":"Tags exist per the run summary. Nothing reviewed.","next":"Your call, at leisure; this is a hand job in Immich."},
+        {"id":"public_photo_original","name":"Public/Photo original (1.06 TB, the only safety net)","kind":"qnap_dir","status":"check","claimed":"Kept as safety net; delete by hand once Immich looks right.",
+         "evidence":"Still present. It sits outside the active_backup tree so it is not part of the nightly backup. Immich's copy is under /photos which IS backed up (mirror).","next":"Confirm the Immich copy is backed up end to end before anything is ever removed. Never delete by default."},
+        {"id":"icloud_me","name":"iCloud Drive (non-photo files)","kind":"cloud","status":"in_progress","claimed":"See the iCloud migration page: photo archive landed unverified; coursework in progress; Greenlaw and Obsidian blocked; Downloads, Desktop, Lightroom catalog unassigned.",
+         "evidence":"Public/icloud-raw holds 20 top-level entries now (older notes said empty). The status job is running every 15 min and writing points.","next":"Reconcile the icloud-raw contents against the table; unblock Greenlaw and the Obsidian force-download."},
+        {"id":"icloud_photos_me","name":"My iPhone / iCloud Photos","kind":"phone","status":"check","claimed":"Camera roll transfer may already be in via PhotoSync (memory: verify originals vs Optimize Storage).",
+         "evidence":"/photos/Brett's iPhone/Recents has 24,151 files, so some capture pipeline is live.","next":"Check whether those are full originals and how recent the newest is; compare with the phone's photo count."},
+        {"id":"iphone_marina","name":"Marina's iPhone (about 40k photos)","kind":"phone","status":"not_started","claimed":"Needs her own PhotoSync.","evidence":"Nothing on the QNAP for her.","next":"Set up PhotoSync on her phone, needs her phone in hand."},
+        {"id":"gdrive","name":"Google Drive","kind":"cloud","status":"check","claimed":"Offboarded 2026-08-23 via Takeout + inbox-router + photos_importer.",
+         "evidence":"Not yet re-verified. inbox/quarantine holds 25 items (files plus reasons), inbox/photos-staging holds 7, so the router has leftovers.","next":"Check Takeout contents against what is in Paperless/Immich/books; clear the quarantine."},
+        {"id":"inbox_leftovers","name":"Inbox router leftovers (quarantine 25, photos-staging 7)","kind":"qnap_dir","status":"needs_you","claimed":"Router is live and routing.",
+         "evidence":"Quarantine contains files like a plumber quote PDF and an HTML page, each with a quarantine-reason file. A test epub is in there too.","next":"Review each reason and decide keep, route or archive."},
+        {"id":"public_books","name":"QNAP Public/Books (5,189 entries)","kind":"qnap_dir","status":"check","claimed":"Unknown.","evidence":"Not compared with the main books library yet.","next":"Compare with /books; if it is a subset, mark as covered."},
+        {"id":"usb_legacy","name":"USB backup disk legacy folders (Data, Movies, Photo, TV, public_root)","kind":"qnap_dir","status":"check","claimed":"Outside active_backup.",
+         "evidence":"Present on the disk. Sizes and overlap with QNAP Public are being measured by a read-only job that waits for the media mirror to finish (QNAP load is 7 right now).","next":"Read the measurement, decide per folder."},
+        {"id":"qnap_public_other","name":"QNAP Public: Data, Movies, TV, public_root","kind":"qnap_dir","status":"check","claimed":"Unknown.","evidence":"Same measurement as above.","next":"Same."},
+        {"id":"august_weekly","name":"August weekly backup copies (W33/W34)","kind":"backup","status":"check","claimed":"Will prune naturally between about Oct 12 and Nov 1.",
+         "evidence":"Comparison against live folders is queued behind the mirror.","next":"Read the result before anything ages out; they are the only copy of anything not in live folders."},
+        {"id":"immich_internal","name":"/immicc folder (Immich backups, thumbs, encoded video)","kind":"qnap_dir","status":"check","claimed":"Not in earlier notes.","evidence":"Top-level QNAP folder; backups subfolder was written at 02:01 today so it is live, not stray.","next":"Confirm what it is and whether it is covered by backup."}
+      ],
+      "bulk_sources": [
+        {"id":"portable_drive","name":"Portable drives","expected":3,"processed":0,"note":"Not inventoried yet. Per drive: label, size, what is on it, ingested yes/no."},
+        {"id":"sd_card","name":"SD cards","expected":10,"processed":0,"note":"Not inventoried yet. Per card: label, camera, date range, ingested yes/no."}
+      ]
+    }
