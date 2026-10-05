@@ -280,7 +280,7 @@ data:
       border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 32px;
       box-shadow: var(--shadow); }
     .tile { background: var(--bg-raised); padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
-    .tile-label { font-size: 12px; color: var(--ink-muted); }
+    .tile-label { font-size: 12px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .tile-sub { font-size: 11.5px; color: var(--ink-faint); line-height: 1.35; }
     .tile-value { font-family: var(--mono); font-size: 22px; font-weight: 600;
       font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
@@ -469,9 +469,9 @@ data:
       <div class="tiles">
         <div class="tile"><div class="tile-label">Postgres databases</div>
           <div class="tile-value accent">{len(postgres_rows)}</div></div>
-        <div class="tile"><div class="tile-label">QNAP snapshot sources</div>
+        <div class="tile" title="Sources in the QNAP snapshot job: the seven small ones plus the photos and media mirrors."><div class="tile-label">Snapshot sources</div>
           <div class="tile-value accent">{len(qnap_rows)}</div></div>
-        <div class="tile" title="Dated nightly folders in the QNAP daily snapshot. Counts the small sources only; media and photos are mirrored as one copy and are not counted, and weekly, monthly, Postgres and key backups are separate."><div class="tile-label">Daily snapshots kept</div>
+        <div class="tile" title="Dated nightly folders in the QNAP daily snapshot. Counts the small sources only; media and photos are mirrored as one copy and are not counted, and weekly, monthly, Postgres and key backups are separate."><div class="tile-label">Snapshots kept</div>
           <div class="tile-value">{len(qnap_dates)}</div>
           <div class="tile-sub">nights of history; media and photos are mirrored, not counted</div></div>
         <div class="tile"><div class="tile-label">Backup disk free</div>
