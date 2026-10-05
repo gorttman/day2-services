@@ -45,6 +45,17 @@ data:
     BACKUP_ROOT = Path("/mnt/backup")
     POSTGRES_ROOT = BACKUP_ROOT / "active_backup" / "postgres"
     QNAP_DATA_ROOT = BACKUP_ROOT / "active_backup" / "qnap-data" / "daily"
+    MIRROR_ROOT = BACKUP_ROOT / "active_backup" / "qnap-data" / "mirror"
+    
+    # The sources the QNAP snapshot job is configured to back up (day0-infra-
+    # build, variables/play/qnap_snapshot.yml). Listed here so a source with NO
+    # generation shows up red instead of being silently absent from the table,
+    # which is how books went unnoticed in 2026-10. Mirror-mode sources have no
+    # daily generations by design; they are judged by the .last-run marker the
+    # mirror job touches (roles/qnap_snapshot/HISTORY.md #10). Keep this in
+    # step with that variables file.
+    EXPECTED_DAILY = ["books", "vault", "immich", "paperless", "inbox", "pihole", "calibre-web"]
+    EXPECTED_MIRROR = ["photos", "media"]
     CREDENTIALS_ROOT = BACKUP_ROOT / "k8smaster-credentials"
     
     NAME_DATE_RE = re.compile(r"^(?P<name>.+)-(?P<date>\d{4}-\d{2}-\d{2})\.(?P<ext>.+)$")
@@ -106,6 +117,9 @@ data:
             for src_dir in date_dir.iterdir():
                 if not src_dir.is_dir():
                     continue
+                if src_dir.name in EXPECTED_MIRROR:
+                    # Old generations from before it became a mirror source.
+                    continue
                 existing = sources.get(src_dir.name)
                 if existing is None or date_dir.name > existing["latest_date"]:
                     sources[src_dir.name] = {"latest_date": date_dir.name}
@@ -116,6 +130,21 @@ data:
                 "latest_date": info["latest_date"],
                 "stale_days": days_since(info["latest_date"]),
             })
+        have = {r["name"] for r in rows}
+        for name in EXPECTED_DAILY:
+            if name not in have:
+                rows.append({"name": name, "latest_date": "none", "stale_days": None})
+        for name in EXPECTED_MIRROR:
+            mdir = MIRROR_ROOT / name
+            if not mdir.is_dir():
+                rows.append({"name": name + " (mirror)", "latest_date": "none", "stale_days": None})
+                continue
+            # The newer of the marker and the directory itself, so a first run
+            # that is still copying (no marker yet) is not shown as stale.
+            ts = max(p.stat().st_mtime for p in (mdir / ".last-run", mdir) if p.exists())
+            d = datetime.fromtimestamp(ts, LOCAL_TZ).strftime("%Y-%m-%d")
+            rows.append({"name": name + " (mirror)", "latest_date": d, "stale_days": days_since(d)})
+        rows.sort(key=lambda r: r["name"])
         return rows, available_dates
     
     
@@ -329,6 +358,8 @@ data:
         alerts = sum(1 for s in (pg_status, qnap_status, secrets_status) if s != "good")
     
         def age_label(days):
+            if days is None:
+                return "no generation"
             return "today" if days == 0 else f"{days}d ago"
     
         pg_rows_html = "".join(
