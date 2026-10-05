@@ -5,7 +5,7 @@ protected, organised storage, and keeps that work going across sessions.
 
 - `BRIEF.md`   drop-in orientation for a fresh session. Read this first.
 - `LOG.md`     append-only record of what each session did.
-- the register `apps/reports/consolidation-register.json` is the single source
+- the register (key `consolidation-register.json` in `apps/reports/reports-cm.yml`) is the single source
   of truth for every source and its status. The report page
   https://reports.i3sec.com.au/consolidation/ renders it.
 - skill `data-consolidation` (agent-skills) holds the start-of-session and

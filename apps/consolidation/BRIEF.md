@@ -27,7 +27,7 @@ De-dupe starts READ-ONLY (report only). Findings go to Telegram for approval
 hardlink/archive, never delete.
 
 ## Where things are
-- Register (truth): apps/reports/consolidation-register.json
+- Register (truth): key consolidation-register.json in apps/reports/reports-cm.yml (edit it there; the page renders it)
 - Log: apps/consolidation/LOG.md  (append one entry per session)
 - Existing workstreams: ~/gm-dev/immich-migration/STATE.md (paused
   2026-09-21), ~/gm-dev/router-tooling-brief.md (inbox-router tooling),
@@ -37,8 +37,8 @@ hardlink/archive, never delete.
   outside_backup.txt.
 
 ## Build order and status
-1. memory + BRIEF + LOG + register ........ IN PROGRESS
-2. report page /consolidation/ ............ todo
+1. memory + BRIEF + LOG + register ........ done
+2. report page /consolidation/ ............ built, deploy pending
 3. work-window controller ................. todo
 4. Telegram approval bot .................. todo
 5. read-only de-dupe, then approved actions todo
@@ -48,3 +48,10 @@ hardlink/archive, never delete.
 ## Start of session
 Read this file, the last LOG entries, the register; tell the user the next
 step in two sentences. End of session: append LOG, update register + status.
+
+## Verification rule (user, 2026-10-06)
+Do NOT assume earlier "DONE" notes are true. Each register entry has
+"claimed" vs "evidence". Verify against live data before marking verified.
+Findings so far: Immich holds 81,845 assets but the run listed ~40 invalid
+source files and immich-server OOMs repeatedly; Public/Photo (1.06 TB) is
+still the only outside-backup copy; inbox quarantine has 25 items.
