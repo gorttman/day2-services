@@ -139,9 +139,16 @@ data:
             if not mdir.is_dir():
                 rows.append({"name": name + " (mirror)", "latest_date": "none", "stale_days": None})
                 continue
-            # The newer of the marker and the directory itself, so a first run
-            # that is still copying (no marker yet) is not shown as stale.
-            ts = max(p.stat().st_mtime for p in (mdir / ".last-run", mdir) if p.exists())
+            # The newer of the marker and the directory change time, so a run
+            # that is still copying (no marker yet) is not shown as stale. NOT
+            # the directory mtime: rsync -a copies the SOURCE directory mtime
+            # onto it (photos showed September), but ctime records when entries
+            # were really added. A mirror that never writes a marker therefore
+            # still goes stale on the page.
+            cands = [mdir.stat().st_ctime]
+            if (mdir / ".last-run").exists():
+                cands.append((mdir / ".last-run").stat().st_mtime)
+            ts = max(cands)
             d = datetime.fromtimestamp(ts, LOCAL_TZ).strftime("%Y-%m-%d")
             rows.append({"name": name + " (mirror)", "latest_date": d, "stale_days": days_since(d)})
         rows.sort(key=lambda r: r["name"])
