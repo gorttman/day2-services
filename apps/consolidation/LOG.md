@@ -18,3 +18,11 @@
 - Measurements (disk sizes, August vs live, outside backup) still waiting on
   the media mirror (QNAP load ~7). Do not start them again; scripts are in the
   old session scratchpad and may need re-creating.
+
+## 2026-10-06 backup disk measurement (finished 10:43)
+- Disk 20.4 TB, 75% used, 5.03 TB free. Used by: monthly 5.8 TB, W34 1.16 TB,
+  W33 1.06 TB, daily 0.63 TB, mirror/photos 0.71 TB, mirror/media 0.46 TB so far.
+- Live media is about 10 TB (movies 6.6, bulk 1.6, tv 1.8). A full media mirror
+  will NOT fit in 5 TB free unless it hardlinks against the media already in
+  monthly/weekly (link-dest reuse). Decision needed before the mirror runs on.
+- Other two measurements (august_compare, outside_backup) still pending.
