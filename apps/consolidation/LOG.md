@@ -26,3 +26,16 @@
   will NOT fit in 5 TB free unless it hardlinks against the media already in
   monthly/weekly (link-dest reuse). Decision needed before the mirror runs on.
 - Other two measurements (august_compare, outside_backup) still pending.
+
+## 2026-10-06 August (W33/W34) vs live comparison
+- Nothing missing for books, calibre-web, inbox, pihole. immich backups 14 old
+  files (0.28 GB), vault 3 inbox files.
+- UNRESOLVED, do not let W33/W34 prune until checked:
+  1) paperless: 1,436 files / 1.34 GB in August not live by name. Live has 996
+     documents in the DB and storage folders Contract/Invoice/Quote, so likely
+     renamed by a storage-path change, NOT proven.
+  2) media tv/The Closer: 349 files / 32.6 GB in August not live by name. Live
+     has 222 files and extra "Season 1/2/4/5/6/7" folders beside "Season 01..",
+     so likely Sonarr renamed/moved, NOT proven.
+- Next check: compare by size+checksum or by Paperless document count per file
+  type, not by name.
