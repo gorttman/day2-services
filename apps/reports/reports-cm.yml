@@ -252,6 +252,11 @@ data:
           <p>Progress moving off iCloud Drive: what's landed in Paperless/Immich, what's blocked, what's not started.</p>
           <div class="status"><span class="pill">Snapshot</span><span>Live numbers on the Grafana dashboard</span></div>
         </a>
+        <a class="card" href="https://grafana.i3sec.com.au/alerting/list" target="_blank" rel="noopener">
+          <h2>Alerts <span>→</span></h2>
+          <p>Volumes filling up, critical workloads that are down, node load, and stalled migrations. Red means look at it.</p>
+          <div class="status"><span class="pill">Grafana</span><span>Nothing is sent anywhere yet - check this page</span></div>
+        </a>
       </div>
       <footer>Each report reads its data fresh when you open it.</footer>
     </main>
