@@ -164,10 +164,30 @@ data:
         latest = max(keys, key=lambda p: p.stat().st_mtime)
         m = re.search(r"(\d{4}-\d{2}-\d{2})", latest.name)
         date_str = m.group(1) if m else None
+        key_rows = []
+        for k in sorted(keys, reverse=True):
+            km = re.search(r"(\d{4}-\d{2}-\d{2})", k.name)
+            kd = km.group(1) if km else None
+            key_rows.append({"name": k.name, "date": kd, "size": k.stat().st_size,
+                             "stale_days": days_since(kd) if kd else None})
+        # Other items kept beside the key backups. Shown by generic label
+        # only - never filenames or contents - because this page is
+        # reachable beyond the LAN. Static by design, so no stale status.
+        labels = {"git-pat": "Git access token", "ssh": "SSH keys",
+                  "qnap-admin-password.txt": "QNAP admin credential"}
+        others = []
+        for o in sorted(CREDENTIALS_ROOT.iterdir()):
+            if o.name.startswith("sealed-secrets-key-"):
+                continue
+            od = datetime.fromtimestamp(o.stat().st_mtime, timezone.utc).strftime("%Y-%m-%d")
+            others.append({"label": labels.get(o.name, "Credential item"), "date": od,
+                           "stale_days": days_since(od)})
         return {
             "filename": latest.name,
             "count": len(keys),
             "stale_days": days_since(date_str) if date_str else None,
+            "keys": key_rows,
+            "others": others,
         }
     
     
@@ -348,6 +368,11 @@ data:
     
         secrets_status = status_for_days(secrets["stale_days"]) if secrets else "crit"
     
+        def age_label(days):
+            if days is None:
+                return "no generation"
+            return "today" if days == 0 else f"{days}d ago"
+    
         def rollup(rows, noun):
             if not rows:
                 return "nothing found"
@@ -356,7 +381,8 @@ data:
     
         pg_rollup = rollup(postgres_rows, "databases")
         qnap_rollup = rollup(qnap_rows, "sources")
-        secrets_rollup = (f"{secrets['count']} key files &middot; latest {secrets['stale_days']}d ago"
+        secrets_rollup = (f"{secrets['count']} key backups &middot; latest {age_label(secrets['stale_days'])}"
+                          f" &middot; {len(secrets['others'])} other items"
                           if secrets else "none found")
         # Healthy panels start rolled up; anything degraded starts open so a
         # problem is never hidden behind a click.
@@ -365,11 +391,6 @@ data:
         secrets_open = "" if secrets_status == "good" else " open"
     
         alerts = sum(1 for s in (pg_status, qnap_status, secrets_status) if s != "good")
-    
-        def age_label(days):
-            if days is None:
-                return "no generation"
-            return "today" if days == 0 else f"{days}d ago"
     
         pg_rows_html = "".join(
             f'<tr><td class="name">{r["name"]}</td><td>{r["latest_date"]}</td>'
@@ -395,12 +416,30 @@ data:
     
         secrets_html = ""
         if secrets:
+            # Only the newest key backup is judged. The older ones are the
+            # retained history (one per night), so showing them amber or red
+            # for being old would be wrong.
+            key_html = "".join(
+                f'<tr><td class="name">Sealed-secrets key{" (latest)" if i == 0 else ""}</td>'
+                f'<td>{k["date"]}</td><td>{human_size(k["size"])}</td>'
+                + (
+                    f'<td><span class="status-dot {status_for_days(k["stale_days"])}">'
+                    f'{age_label(k["stale_days"])}</span></td></tr>'
+                    if i == 0 else f'<td>{age_label(k["stale_days"])}</td></tr>'
+                )
+                for i, k in enumerate(secrets["keys"])
+            )
+            other_html = "".join(
+                f'<tr><td class="name">{o["label"]}</td><td>{o["date"]}</td><td>&mdash;</td>'
+                f'<td>{age_label(o["stale_days"])}</td></tr>'
+                for o in secrets["others"]
+            )
             secrets_html = f"""
-          <div class="kv-row" style="margin-bottom:0;">
-            <div class="kv"><span class="kv-label">Files</span><span class="kv-value">{secrets['count']}</span></div>
-            <div class="kv"><span class="kv-label">Latest</span><span class="kv-value">{secrets['filename']}</span></div>
-            <div class="kv"><span class="kv-label">Age</span><span class="kv-value">{secrets['stale_days']}d</span></div>
-          </div>"""
+          <div class="table-wrap"><table>
+            <thead><tr><th>Item</th><th>Backed up</th><th>Size</th><th>Age</th></tr></thead>
+            <tbody>{key_html}{other_html}</tbody>
+          </table></div>
+          <p class="note">Key backups run nightly. The other items are static, so only the key backups are checked for staleness.</p>"""
         else:
             secrets_html = '<p class="note">No sealed-secrets key backups found.</p>'
     
