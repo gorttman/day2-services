@@ -1,0 +1,17 @@
+{
+  "updated": "2026-10-06",
+  "sources": [
+    {"id":"gdrive","name":"Google Drive","kind":"cloud","status":"done","note":"Offboarded 2026-08-23 via Takeout + inbox-router."},
+    {"id":"icloud_me","name":"iCloud (my account)","kind":"cloud","status":"in_progress","note":"See iCloud migration page. Raw copy under QNAP Public/icloud-raw."},
+    {"id":"iphone_me","name":"My iPhone","kind":"phone","status":"not_started","note":"Photos/videos not yet confirmed in Immich."},
+    {"id":"iphone_marina","name":"Marina's iPhone","kind":"phone","status":"not_started","note":"About 40k photos pending."},
+    {"id":"immich_migration","name":"Immich photo migration","kind":"workstream","status":"paused","note":"59,150 files copied then paused 2026-09-21. Resume: ~/gm-dev/immich-migration/STATE.md"},
+    {"id":"usb_legacy","name":"USB legacy folders (Data, Movies, Photo, TV, public_root)","kind":"qnap_dir","status":"not_started","note":"Outside active_backup. Possible single copy of originals."},
+    {"id":"qnap_public","name":"QNAP Public share (icloud-raw, Photo, Data, Books)","kind":"qnap_dir","status":"not_started","note":"Outside backup. Check overlap with USB legacy folders."},
+    {"id":"august_weekly","name":"August weekly copies W33/W34","kind":"backup","status":"not_started","note":"Check for anything not in live dirs before they prune (~Oct 12 - Nov 1)."}
+  ] ,
+  "bulk_sources": [
+    {"id":"portable_drive","name":"Portable drive","count":3,"done":0,"note":"Expected 3."},
+    {"id":"sd_card","name":"SD card","count":10,"done":0,"note":"Expected 10."}
+  ]
+}
