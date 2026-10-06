@@ -62,3 +62,10 @@
 - User: not going back to Lightroom. The Lightroom catalog (229 MB) and 27,344
   previews (3.9 GB) in icloud-raw need no migration. They are left in place,
   not deleted (hoarder default); they can age out with icloud-raw later.
+
+## 2026-10-06 copied the 50 unmatched icloud photos
+- Server-side cp on the QNAP (renice 19, load stayed ~1) to
+  /share/CACHEDEV1_DATA/photos/icloud-raw/<original subpath>, 50 files,
+  840 MB, sizes verified, perms 664/2775. Immich library scan (204) then showed
+  all 50 as assets. Source in Public/icloud-raw untouched.
+- Folder icloud-raw (not year folders) chosen to keep provenance; no year guessed.
