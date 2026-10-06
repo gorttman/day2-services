@@ -57,3 +57,8 @@
   111 MB TIFFs, 4 videos). List was in session scratchpad icloud_neither.txt.
 - Not yet compared: Shared 3.8 GB, Downloads 3.2 GB, _pulled_images 1.9 GB,
   inbox 1.2 GB, Desktop 0.8 GB, Drawings, drafting 2, media.
+
+## 2026-10-06 decision
+- User: not going back to Lightroom. The Lightroom catalog (229 MB) and 27,344
+  previews (3.9 GB) in icloud-raw need no migration. They are left in place,
+  not deleted (hoarder default); they can age out with icloud-raw later.
