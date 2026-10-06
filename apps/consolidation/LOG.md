@@ -79,3 +79,17 @@
 - Listings kept in session scratchpad (ls_ic_*.txt, ls_q_*.txt,
   ic_unmatched.tsv); regenerate if gone.
 - Nothing copied or changed. Next: user decisions per group, then checksums.
+
+## 2026-10-07 Greenlaw + Tax moved (user: "let's go")
+- 354 Greenlaw damage-photo files copied server-side to
+  photos/icloud-raw/Greenlaw/..., sizes verified; Immich scan: 352 assets
+  (rest = 1 pdf + 1 html).
+- 92 Greenlaw/Tax documents (pdf/docx/rtf/png/jpeg; no html, no zip, no damage
+  photos) copied to inbox/records as icloud_<path>; router moved all 92 to
+  paperless/consume. Paperless count was still 996 at the time: NEXT SESSION
+  CONFIRM they landed (consume had 413 queued; duplicates are rejected by
+  checksum, which is fine).
+- NOT done: CAD files (no home decided), installers/1Password backup
+  (archive-only, no action), Tax DNG (stays in icloud-raw).
+- Watch: immich-server restarts 56 -> 64 in ~12h, OOMKilled, last 00:16 daily
+  pattern. Separate investigation.
