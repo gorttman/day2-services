@@ -48,3 +48,12 @@
   5.9 TB, mostly DVD folders and older rips. Compare with live media by title.
 - Public/icloud-raw is 63 GB and outside the backup.
 - Register updated and redeployed.
+
+## 2026-10-06 icloud-raw check (read-only, renice 19, metadata only, load stayed ~1)
+- 63 GB total. Photo 52 GB: 27,344 .lrprev previews + Lightroom catalog
+  (229 MB lrcat, keep) + 1,762 real media (47 GB).
+- Name+size vs Immich library and Public/Photo: 1,712 match, 50 (0.86 GB)
+  match neither (Evelyn 30 HEIC, Dad 5, Berlin/Europe 2017 edits incl three
+  111 MB TIFFs, 4 videos). List was in session scratchpad icloud_neither.txt.
+- Not yet compared: Shared 3.8 GB, Downloads 3.2 GB, _pulled_images 1.9 GB,
+  inbox 1.2 GB, Desktop 0.8 GB, Drawings, drafting 2, media.
