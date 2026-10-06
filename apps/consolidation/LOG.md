@@ -69,3 +69,13 @@
   840 MB, sizes verified, perms 664/2775. Immich library scan (204) then showed
   all 50 as assets. Source in Public/icloud-raw untouched.
 - Folder icloud-raw (not year folders) chosen to keep provenance; no year guessed.
+
+## 2026-10-07 icloud-raw non-photo understanding pass (read-only, renice 19)
+- Greenlaw damage photos (~350 files, 1.48 GB) match nothing in Immich or
+  Paperless; same photos also as a 1.49 GB zip and 1,035 extracted copies in
+  _pulled_images. Tax-21 11 files 90 MB not in Paperless. Drawings/drafting 45
+  CAD files no home. Downloads: installers (Fedora ISO 1.83 GB, dmgs), notes.
+  Desktop: 1Password 7 app backup. Shared SCU mostly size-matched (weak).
+- Listings kept in session scratchpad (ls_ic_*.txt, ls_q_*.txt,
+  ic_unmatched.tsv); regenerate if gone.
+- Nothing copied or changed. Next: user decisions per group, then checksums.
