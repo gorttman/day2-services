@@ -39,3 +39,12 @@
      so likely Sonarr renamed/moved, NOT proven.
 - Next check: compare by size+checksum or by Paperless document count per file
   type, not by name.
+
+## 2026-10-06 outside-the-backup measurement
+- USB Photo = Public/Photo (1.06 TB each); only 5,176 files (master/2016) in
+  Public not on USB, 18 print files on USB not in Public. Data and public_root
+  are duplicates too.
+- USB Movies 5.15 TB and TV 633 GB are ONLY on the USB disk (not in Public):
+  5.9 TB, mostly DVD folders and older rips. Compare with live media by title.
+- Public/icloud-raw is 63 GB and outside the backup.
+- Register updated and redeployed.
