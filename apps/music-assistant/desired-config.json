@@ -17,5 +17,33 @@
         ]
       }
     }
+  },
+  "players": {
+    "spb_00f620b37b8a": {
+      "enabled": true
+    },
+    "spb_e4f0424ef300": {
+      "enabled": true
+    },
+    "spb_883d245b0a4e": {
+      "enabled": true
+    },
+    "syncgroup_home0001": {
+      "values": {
+        "group_members": [
+          "4bbaf09b-0edb-c4c5-d22d-0254a5955f22",
+          "8223adc5-57e6-895a-71e4-06a4133bcdf4",
+          "5000cce8-e5e8-cab1-8d42-301cc6f3b07c"
+        ],
+        "dynamic_members": false
+      },
+      "provider": "sync_group",
+      "player_id": "syncgroup_home0001",
+      "enabled": true,
+      "name": "Home (local)",
+      "default_name": "Home (local)",
+      "player_type": "group",
+      "setup_data": {}
+    }
   }
 }
