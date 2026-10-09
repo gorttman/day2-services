@@ -35,7 +35,9 @@
           "4bbaf09b-0edb-c4c5-d22d-0254a5955f22",
           "8223adc5-57e6-895a-71e4-06a4133bcdf4",
           "5000cce8-e5e8-cab1-8d42-301cc6f3b07c",
-          "up446664bb"
+          "up446664bb",
+          "bc5307cd-ddbd-9c9c-b883-3bc0d7c94804",
+          "upf1513b60"
         ],
         "dynamic_members": false
       },
@@ -49,6 +51,30 @@
     },
     "spb_409f38ffb05f": {
       "enabled": true
+    },
+    "spb_48d6d5db892e": {
+      "enabled": true
+    },
+    "0f8c2e9d-3a35-c07a-12ad-5d18ae15c5da": {
+      "values": {
+        "cached_arp_mac": "08:38:E6:35:8E:AA"
+      }
+    },
+    "spb_0838e6358eaa": {
+      "values": {
+        "cached_arp_mac": "08:38:E6:35:8E:AA",
+        "reported_mac": null,
+        "underlying_player_id": "0f8c2e9d-3a35-c07a-12ad-5d18ae15c5da",
+        "protocol_parent_id": "upf1513b60",
+        "protocol_experimental_note": "sendspin_cast_experimental"
+      },
+      "provider": "sendspin",
+      "player_id": "spb_0838e6358eaa",
+      "enabled": true,
+      "name": null,
+      "default_name": "Bedroom clock (Cast)",
+      "player_type": "protocol",
+      "setup_data": {}
     }
   }
 }
