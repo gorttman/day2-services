@@ -8,6 +8,7 @@ Internal only.
 | Backups | `/backups/` here - formerly the separate `backup-dashboard` app, see [BACKUPS.md](BACKUPS.md) |
 | Subscriptions | `/subscriptions/` here |
 | Media | `movie-status.i3sec.com.au`, stays in arr-stack (needs Radarr's RWO volume) |
+| Long-term TODO | `/todo/` here - not a task tracker, no deadlines, edit `todo-register.json` |
 
 One Python server (`server.py` in `reports-cm.yml`) serves everything, pinned
 to k8smaster for `/mnt/backup`. `backup-status.i3sec.com.au` still resolves

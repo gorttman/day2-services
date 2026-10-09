@@ -25,6 +25,8 @@ data:
       /backups/                backup report, rendered fresh per request by
                                generate_dashboard.py (formerly the separate
                                backup-dashboard app, moved here unchanged)
+      /todo/                   long-term watchlist/todo register, reads
+                               todo-register.json
       /api/backups             the backup report's overall verdict as JSON,
                                for the landing page's status line
       /api/media               the same for the media report, summarised from
@@ -63,10 +65,12 @@ data:
         "/icloud-migration/": ("icloud-migration.html", "text/html; charset=utf-8"),
         "/consolidation/": ("consolidation.html", "text/html; charset=utf-8"),
         "/consolidation/consolidation-register.json": ("consolidation-register.json", "application/json"),
+        "/todo/": ("todo.html", "text/html; charset=utf-8"),
+        "/todo/todo-register.json": ("todo-register.json", "application/json"),
     }
     # The subscriptions page fetches subscriptions.json relative to itself, so
     # it must be served from a trailing-slash URL.
-    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/", "/icloud-migration": "/icloud-migration/", "/consolidation": "/consolidation/"}
+    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/", "/icloud-migration": "/icloud-migration/", "/consolidation": "/consolidation/", "/todo": "/todo/"}
 
     ORDER = {"good": 0, "warn": 1, "crit": 2}
 
@@ -264,6 +268,11 @@ data:
           <p>Volumes filling up, critical workloads that are down, node load, and stalled migrations. Red means look at it.</p>
           <div class="status"><span class="pill">Grafana</span><span>Nothing is sent anywhere yet - check this page</span></div>
         </a>
+        <a class="card" href="/todo/" target="_blank" rel="noopener">
+          <h2>Long-term TODO <span>→</span></h2>
+          <p>Things worth revisiting later: tools to re-check once they mature, ideas parked on purpose, no deadline attached.</p>
+          <div class="status" id="todo-status"><span class="pill">Loading</span></div>
+        </a>
       </div>
       <footer>Each report reads its data fresh when you open it.</footer>
     </main>
@@ -320,6 +329,11 @@ data:
       if (review) parts.push(["pill warn", `${review} to check`]);
       setStatus("subs-status", parts);
     }).catch(() => setStatus("subs-status", [["pill crit", "Unavailable"]]));
+
+    fetch("/todo/todo-register.json", { cache: "no-store" }).then(r => r.json()).then(d => {
+      const open = d.items.filter(i => i.status === "open").length;
+      setStatus("todo-status", [["pill", open + " open"], ["", "No deadlines, just revisit later"]]);
+    }).catch(() => setStatus("todo-status", [["pill crit", "Unavailable"]]));
     </script>
     </body>
     </html>
@@ -1426,5 +1440,78 @@ data:
       "bulk_sources": [
         {"id":"portable_drive","name":"Portable drives","expected":3,"processed":0,"note":"Not inventoried yet. Per drive: label, size, what is on it, ingested yes/no."},
         {"id":"sd_card","name":"SD cards","expected":10,"processed":0,"note":"Not inventoried yet. Per card: label, camera, date range, ingested yes/no."}
+      ]
+    }
+  todo.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Long-term TODO</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+    <style>
+    :root{--bg:#f3f5f4;--surface:#fff;--ink:#16201d;--muted:#5b6b66;--faint:#8a9994;--line:#d7dfdc;--accent:#1c6b56;
+      --good:#1f7a4d;--good-soft:#dcefe3;--warn:#a35f00;--warn-soft:#fbead0;--crit:#b3372b;--crit-soft:#f7dcd8;
+      --info:#2f5597;--info-soft:#dfe7f5;color-scheme:light}
+    @media (prefers-color-scheme:dark){:root{--bg:#0f1513;--surface:#171f1c;--ink:#e4ece9;--muted:#9cafa8;--faint:#6f817b;--line:#2a3632;--accent:#5cc4a3;
+      --good:#5cc48c;--good-soft:#1c3527;--warn:#e5a54b;--warn-soft:#3a2c16;--crit:#ef8579;--crit-soft:#3d1f1b;
+      --info:#8fb0ec;--info-soft:#1e2a40;color-scheme:dark}}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;padding-inline:16px;padding-block:40px 48px}
+    main{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+    .eyebrow{font:500 11px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    h1{font:700 clamp(28px,4vw,40px)/1.1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.02em;margin:6px 0 0}
+    p.lede{color:var(--muted);margin:0;max-width:70ch}
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+    details{border-bottom:1px solid var(--line)}
+    details:last-child{border-bottom:0}
+    summary{cursor:pointer;list-style:none;display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px}
+    summary::-webkit-details-marker{display:none}
+    .name{font-weight:600}
+    .sub{font-size:12.5px;color:var(--muted)}
+    .body{padding:0 14px 14px;display:grid;gap:8px;font-size:14px}
+    .body b{font:500 11px/1 "IBM Plex Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:2px}
+    .chip{display:inline-block;font:500 11px/1 "IBM Plex Mono",monospace;padding:5px 8px;border-radius:5px;background:var(--line);color:var(--muted);white-space:nowrap}
+    .chip.good{background:var(--good-soft);color:var(--good)}
+    .chip.warn{background:var(--warn-soft);color:var(--warn)}
+    .chip.info{background:var(--info-soft);color:var(--info)}
+    footer{font-size:12.5px;color:var(--faint);max-width:70ch}
+    </style>
+    </head>
+    <body>
+    <main>
+      <header style="display:flex;flex-direction:column;gap:10px">
+        <div class="eyebrow">i3sec homelab · reports</div>
+        <h1>Long-term TODO</h1>
+        <p class="lede">Things worth keeping in mind but not acting on now: tools to revisit once they mature, ideas parked on purpose, ongoing threads with no deadline. Not a task tracker - nothing here is urgent by definition.</p>
+      </header>
+      <div class="panel" id="list"><div class="body">Loading</div></div>
+      <footer id="foot">Add items by editing <code>todo-register.json</code>. <a href="/">All reports</a>.</footer>
+    </main>
+    <script>
+    var LABEL={open:["Open","info"],parked:["Parked",""],done:["Done","good"]};
+    var CAT={watch:"Watch","idea":"Idea",task:"Task"};
+    function esc(s){var d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML}
+    fetch("todo-register.json",{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){
+      var order={open:0,parked:1,done:2};
+      var items=d.items.slice().sort(function(a,b){return (order[a.status]||9)-(order[b.status]||9) || (b.added||"").localeCompare(a.added||"")});
+      document.getElementById("list").innerHTML=items.map(function(x){var l=LABEL[x.status]||[x.status,""];
+        return '<details><summary><div><div class="name">'+esc(x.title)+'</div><div class="sub">'+esc(CAT[x.category]||x.category)+' &middot; added '+esc(x.added)+'</div></div><span class="chip '+l[1]+'">'+l[0]+'</span></summary><div class="body">'
+        +'<div>'+esc(x.note)+'</div>'+(x.link?'<div><a href="'+esc(x.link)+'" target="_blank" rel="noopener">'+esc(x.link)+'</a></div>':'')+'</div></details>'}).join("");
+      document.getElementById("foot").insertAdjacentHTML("beforeend"," Register updated "+esc(d.updated)+".");
+    }).catch(function(e){document.getElementById("list").innerHTML='<div class="body">Could not load the register.</div>'});
+    </script>
+    </body>
+    </html>
+  todo-register.json: |
+    {
+      "updated": "2026-10-09",
+      "rule": "Not a task tracker. These are things worth remembering with no deadline attached - revisit when it comes up again, not on a schedule.",
+      "items": [
+        {"id":"artcraft-lightcraft","title":"ArtCraft / LightCraft and the rest of the open-source Adobe clones","category":"watch","added":"2026-10-09","status":"open",
+         "note":"ArtCraft used Opus 5.5 to build clean-room, open-source clones of the whole Adobe suite in Rust (Photocraft/Photoshop, Filmcraft/Premiere, Effect/After Effects, Lightcraft/Lightroom, Designcraft/InDesign, Vectorcraft/Illustrator, PDF/Acrobat). Desktop-only, no iPad or web version, so it sits alongside rather than replaces the current iPad-based photo workflow (Affinity/Photomator/ProCamera). Early alpha (~0.2.x per third-party coverage, self-reported completeness claims not independently verified). Lightcraft specifically could fill a real gap once it matures. Revisit maturity before trying it for real work; if it ever becomes worth running, novnc is already deployed and could expose a desktop session to the iPad.",
+         "link":"https://getartcraft.com/apps"}
       ]
     }
