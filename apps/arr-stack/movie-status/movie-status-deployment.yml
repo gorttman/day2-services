@@ -8,8 +8,9 @@
 # podAffinity to arr-stack is load-bearing, not a preference: it reads
 # Radarr's API key from that pod's config PVC, and Longhorn's RWO only
 # permits the second mount on the node already holding the volume. It
-# also pins to k8smaster through that affinity, which is where the
-# bulk-backfill state file lives.
+# follows arr-stack to whichever node it is on. The bulk-backfill state
+# file is a Longhorn PVC (movie-status-state.yml), not a host file, so
+# the pod can run on either node.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,6 +52,14 @@ spec:
                 matchLabels:
                   app: arr-stack
               topologyKey: kubernetes.io/hostname
+      initContainers:
+        # Seed the state PVC once; never overwrite what the button wrote.
+        - name: seed-state
+          image: python:3.12-alpine
+          command: ["sh", "-c", "[ -s /state/bulk_backfill_state.json ] || cp /seed/bulk_backfill_state.json /state/bulk_backfill_state.json"]
+          volumeMounts:
+            - {name: bulk-state, mountPath: /state}
+            - {name: bulk-seed, mountPath: /seed}
       containers:
         - name: movie-status
           image: python:3.12-alpine
@@ -77,7 +86,7 @@ spec:
             # in the same state file bulk_backfill.py uses, so running
             # the button and running the script by hand cannot disagree
             # about what has already been searched.
-            - {name: bulk-state, mountPath: /state/bulk_backfill_state.json}
+            - {name: bulk-state, mountPath: /state}
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             initialDelaySeconds: 2
@@ -110,12 +119,8 @@ spec:
         # the dependency entirely avoids that work disturbing this
         # pod too. Re-add once stall-watch (the only writer of
         # STALL_STATE) is re-enabled and vault work is done.
-        # bulk_backfill.py is a host script with a host state file, and
-        # rewrites it in place (open "w", same inode), so a File
-        # hostPath stays valid across runs. Scoped to the one file
-        # rather than the directory - nothing else in ~/gm-dev is this
-        # pod's business.
         - name: bulk-state
-          hostPath:
-            path: /home/gorttman/gm-dev/bulk_backfill_state.json
-            type: File
+          persistentVolumeClaim: {claimName: movie-status-state}
+        - name: bulk-seed
+          configMap:
+            name: movie-status-state-seed
