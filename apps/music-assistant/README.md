@@ -97,3 +97,5 @@ speaker (not enabled; not tested).
 Home (local) holds all six: Bar, Shed, Outside TV, Outside speaker, Lounge speaker and Bedroom clock (Lenovo Smart Clock). The clock had no cached MAC (cross-subnet ARP), so no Sendspin bridge was ever created for it; its MAC (08:38:e6:35:8e:aa, from unifi-tf clients.tf) and bridge entry are seeded in desired-config.json. If the clock will not play in the group, it may not support Sendspin over Cast: fall back to leaving it out of the group.
 
 Note 2026-10-09: the Outside speaker (JBL) member id changed from up446664bb to up30492340 when its Sendspin link was first enabled; with the old id Music Assistant swapped in spb_409f38ffb05f and then removed it ("can not be grouped with Bar speaker"). Use the universal player id.
+
+Note 2026-10-09: Bedroom clock (Lenovo Smart Clock) is OUT of the group. Its Cast status showed idle (no Sendspin app running) while Bar and Lounge were running "Sendspin over Cast (MA 2.9)", and it stayed silent in the group. Volume was fine (0.62, not muted). Plain Cast to the clock alone still works.

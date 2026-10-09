@@ -36,7 +36,6 @@
           "8223adc5-57e6-895a-71e4-06a4133bcdf4",
           "5000cce8-e5e8-cab1-8d42-301cc6f3b07c",
           "bc5307cd-ddbd-9c9c-b883-3bc0d7c94804",
-          "upf1513b60",
           "up30492340"
         ],
         "dynamic_members": false
@@ -70,7 +69,7 @@
       },
       "provider": "sendspin",
       "player_id": "spb_0838e6358eaa",
-      "enabled": true,
+      "enabled": false,
       "name": null,
       "default_name": "Bedroom clock (Cast)",
       "player_type": "protocol",
