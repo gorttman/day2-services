@@ -68,7 +68,7 @@ listed by address (all reserved in unifi-tf `clients.tf`):
 ## Working configuration (UI state, not declarative)
 
 - Radio Browser provider enabled (free, no login).
-- Player groups: use MA's own sync groups, not Google's "Home group" (which stopped working 2026-10-09: Cast group host unreachable). A local sync group "Home (local)" is declared in desired-config.json (2026-10-09 trial: Bar, Shed, Outside TV) and needs Sendspin over Cast (experimental) enabled on each member; those `spb_*` players are enabled in the same file. Add Outside speaker and Bedroom clock after the trial works.
+- Player groups: use MA's own sync groups, not Google's "Home group" (which stopped working 2026-10-09: Cast group host unreachable). A local sync group "Home (local)" is declared in desired-config.json (2026-10-09: Bar, Shed, Outside TV, Outside speaker = JBL Link 10 at 192.168.2.109, added to manual discovery because mDNS found it on a stale port) and needs Sendspin over Cast (experimental) enabled on each member; those `spb_*` players are enabled in the same file. Add Outside speaker and Bedroom clock after the trial works.
 - Lounge speaker stays standalone (different listener taste) - groups are
   separate.
 

@@ -13,7 +13,8 @@
           "192.168.2.40",
           "192.168.2.188",
           "192.168.2.196",
-          "192.168.2.167"
+          "192.168.2.167",
+          "192.168.2.109"
         ]
       }
     }
@@ -33,7 +34,8 @@
         "group_members": [
           "4bbaf09b-0edb-c4c5-d22d-0254a5955f22",
           "8223adc5-57e6-895a-71e4-06a4133bcdf4",
-          "5000cce8-e5e8-cab1-8d42-301cc6f3b07c"
+          "5000cce8-e5e8-cab1-8d42-301cc6f3b07c",
+          "up446664bb"
         ],
         "dynamic_members": false
       },
@@ -44,6 +46,9 @@
       "default_name": "Home (local)",
       "player_type": "group",
       "setup_data": {}
+    },
+    "spb_409f38ffb05f": {
+      "enabled": true
     }
   }
 }
