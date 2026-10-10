@@ -15,3 +15,16 @@ resources:
   - mosquitto/mosquitto-pvc.yml
   - mosquitto/mosquitto-deployment.yml
   - mosquitto/mosquitto-service.yml
+
+# Switched OFF 2026-10-10 at the user's request, with Paperless, to take load
+# off pinode-01 while its heat/Longhorn faults are investigated. Music
+# Assistant is a separate app and stays on. Config and data volumes are
+# untouched. To turn it back on: delete this patch block and let ArgoCD sync.
+patches:
+  - target:
+      kind: Deployment
+      name: "homeassistant|mosquitto"
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
