@@ -54,6 +54,10 @@ spec:
   # last snapshot job (prune, 02:59) and before the credentials rsync
   # at 04:30 (roles/qnap_client).
   schedule: "30 3 * * *"
+  # Declared explicitly (2026-10-10): this CronJob was suspended by hand during the
+  # 10-08/09 outage and stayed off for a day and a half because git did not say
+  # either way, so ArgoCD saw no difference. A declared field is a diffable field.
+  suspend: false
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
