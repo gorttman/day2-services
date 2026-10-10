@@ -20,3 +20,13 @@ patches:
     target:
       kind: Deployment
       name: immich-machine-learning
+  # Switched off on purpose (2026-10-10, heat test: it OOMs the Pi). Git says
+  # 0 so ArgoCD reads this as "as intended", not as drift. To turn it back on,
+  # delete this patch (and decide the memory fix first - see the to-do page).
+  - target:
+      kind: Deployment
+      name: immich-server
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
