@@ -117,7 +117,7 @@ data:
         secrets = backups.scan_sealed_secrets()
         streams = {
             "postgres": worst([backups.status_for_days(r["stale_days"]) for r in postgres]),
-            "qnap-snapshot": worst([backups.status_for_days(r["stale_days"]) for r in qnap]),
+            "qnap-snapshot": worst([backups.row_status(r) for r in qnap]),
             "sealed-secrets": backups.status_for_days(secrets["stale_days"]) if secrets else "crit",
         }
         name, when = backups.next_run(datetime.now(timezone.utc))

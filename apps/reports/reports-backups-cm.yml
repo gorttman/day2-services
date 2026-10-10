@@ -56,6 +56,13 @@ data:
     # step with that variables file.
     EXPECTED_DAILY = ["books", "vault", "immich", "paperless", "inbox", "pihole", "calibre-web"]
     EXPECTED_MIRROR = ["photos", "media"]
+    # Sources copied only when the producer flags a change (books). Judged on a
+    # monthly floor, not nightly: the QNAP forces a full sync once a generation
+    # is 28+ days old (roles/qnap_snapshot/HISTORY.md #11), so 31 days without
+    # one means the nightly check itself has stopped.
+    CHANGED_ONLY = ["books"]
+    CHANGED_ONLY_WARN_DAYS = 31
+    CHANGED_ONLY_CRIT_DAYS = 35
     CREDENTIALS_ROOT = BACKUP_ROOT / "k8smaster-credentials"
     
     NAME_DATE_RE = re.compile(r"^(?P<name>.+)-(?P<date>\d{4}-\d{2}-\d{2})\.(?P<ext>.+)$")
@@ -127,17 +134,19 @@ data:
         for name, info in sorted(sources.items()):
             rows.append({
                 "name": name,
+                "type": "Changed-only + monthly" if name in CHANGED_ONLY else "Nightly",
                 "latest_date": info["latest_date"],
                 "stale_days": days_since(info["latest_date"]),
             })
         have = {r["name"] for r in rows}
         for name in EXPECTED_DAILY:
             if name not in have:
-                rows.append({"name": name, "latest_date": "none", "stale_days": None})
+                rows.append({"name": name, "type": "Changed-only + monthly" if name in CHANGED_ONLY else "Nightly",
+                             "latest_date": "none", "stale_days": None})
         for name in EXPECTED_MIRROR:
             mdir = MIRROR_ROOT / name
             if not mdir.is_dir():
-                rows.append({"name": name + " (mirror)", "latest_date": "none", "stale_days": None})
+                rows.append({"name": name + " (mirror)", "type": "Mirror", "latest_date": "none", "stale_days": None})
                 continue
             # The newer of the marker and the directory change time, so a run
             # that is still copying (no marker yet) is not shown as stale. NOT
@@ -150,7 +159,7 @@ data:
                 cands.append((mdir / ".last-run").stat().st_mtime)
             ts = max(cands)
             d = datetime.fromtimestamp(ts, LOCAL_TZ).strftime("%Y-%m-%d")
-            rows.append({"name": name + " (mirror)", "latest_date": d, "stale_days": days_since(d)})
+            rows.append({"name": name + " (mirror)", "type": "Mirror", "latest_date": d, "stale_days": days_since(d)})
         rows.sort(key=lambda r: r["name"])
         return rows, available_dates
     
@@ -228,6 +237,14 @@ data:
         return "good"
     
     
+    def row_status(r):
+        """Status for one QNAP source row; changed-only sources use the monthly floor."""
+        if r.get("type", "").startswith("Changed-only") and r["stale_days"] is not None:
+            d = r["stale_days"]
+            return "crit" if d >= CHANGED_ONLY_CRIT_DAYS else ("warn" if d >= CHANGED_ONLY_WARN_DAYS else "good")
+        return status_for_days(r["stale_days"])
+
+
     CSS = """
     :root {
       --bg: #F5F7F8; --bg-raised: #FFFFFF; --bg-sunken: #EBEEF1;
@@ -365,7 +382,7 @@ data:
     
         qnap_status = "crit"
         if qnap_rows:
-            qnap_status = max((status_for_days(r["stale_days"]) for r in qnap_rows), key=lambda s: order[s])
+            qnap_status = max((row_status(r) for r in qnap_rows), key=lambda s: order[s])
     
         secrets_status = status_for_days(secrets["stale_days"]) if secrets else "crit"
     
@@ -377,7 +394,7 @@ data:
         def rollup(rows, noun):
             if not rows:
                 return "nothing found"
-            bad = sum(1 for r in rows if status_for_days(r["stale_days"]) != "good")
+            bad = sum(1 for r in rows if (row_status(r) if "type" in r else status_for_days(r["stale_days"])) != "good")
             return f"{len(rows)} {noun} &middot; " + ("all current" if not bad else f"{bad} need attention")
     
         pg_rollup = rollup(postgres_rows, "databases")
@@ -411,8 +428,8 @@ data:
         )
     
         qnap_rows_html = "".join(
-            f'<tr><td class="name">{r["name"]}</td><td>{r["latest_date"]}</td>'
-            f'<td><span class="status-dot {status_for_days(r["stale_days"])}">'
+            f'<tr><td class="name">{r["name"]}</td><td>{r["type"]}</td><td>{r["latest_date"]}</td>'
+            f'<td><span class="status-dot {row_status(r)}">'
             f'{age_label(r["stale_days"])}</span></td></tr>'
             for r in qnap_rows
         )
@@ -512,10 +529,10 @@ data:
         </summary>
         <div class="panel-body">
           <div class="table-wrap"><table>
-            <thead><tr><th>Source</th><th>Latest generation</th><th>Age</th></tr></thead>
-            <tbody>{qnap_rows_html or '<tr><td colspan="3">No generations found</td></tr>'}</tbody>
+            <thead><tr><th>Source</th><th>Type</th><th>Latest generation</th><th>Age</th></tr></thead>
+            <tbody>{qnap_rows_html or '<tr><td colspan="4">No generations found</td></tr>'}</tbody>
           </table></div>
-          <p class="note">Generations older than {STALE_WARN_DAYS} days are flagged warn, {STALE_CRIT_DAYS}+ days critical &mdash; matches each job's own roughly-daily schedule.</p>
+          <p class="note">Nightly and mirror sources: older than {STALE_WARN_DAYS} days is warn, {STALE_CRIT_DAYS}+ days critical. Changed-only sources (books) are copied when something changes and at least once a month, so they are warn at {CHANGED_ONLY_WARN_DAYS} days and critical at {CHANGED_ONLY_CRIT_DAYS}.</p>
         </div>
       </details>
     
