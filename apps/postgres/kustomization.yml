@@ -21,3 +21,9 @@ resources:
   - postgres-backup-script-cm.yml
   - postgres-backup-cronjob.yml
   - postgres-clone-cleanup.yml
+
+patches:
+  - path: affinity-patch.yml
+    target:
+      kind: StatefulSet
+      name: postgres

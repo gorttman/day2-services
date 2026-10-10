@@ -1,0 +1,23 @@
+# Workload-affinity soft node placement for postgres - see
+# components/workload-affinity/README.md. Added 2026-10-10: postgres had no
+# preference and ended up on pinode-01 after the 10-08/09 outage, where
+# Longhorn replicas then failed under heat (see the pinode-01 heat test).
+# k8smaster is the cool node and has the headroom. Soft only: if it is
+# down the database must still schedule on the other node. The volume is
+# Longhorn with a copy on both nodes, so it follows the pod.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: unused-set-by-kustomize-target
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-affinity/postgres
+                    operator: In
+                    values: ["primary"]
