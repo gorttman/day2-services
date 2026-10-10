@@ -1,0 +1,163 @@
+# One-off tidy-up, scheduled so it is not forgotten (2026-10-10).
+#
+# pg-clone-fsck is a Longhorn clone of the postgres volume, made while
+# diagnosing the 2026-10-10 stale-mount fault (the data turned out intact,
+# the node's mount was stale; see the incident note in memory). It is a
+# safety copy, not part of the running system, and is NOT in git, so
+# nothing else will ever remove it. This job deletes it on 2026-10-17.
+#
+# Safe to leave in git: the schedule fires once a year, and every run
+# first checks that the PVC exists, still carries the
+# purpose=temporary-repair-attempt label, postgres-0 is Ready, and a
+# nightly postgres-backup succeeded in the last 36 hours. Otherwise it
+# does nothing and says why. Once the PVC is gone it is a harmless no-op,
+# so removing these manifests later is housekeeping, not a requirement.
+# RBAC is pinned to that one PVC name.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres-clone-cleanup
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres-clone-cleanup
+    argocd.argoproj.io/managed-by: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgres-clone-cleanup
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres-clone-cleanup
+    argocd.argoproj.io/managed-by: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    resourceNames: ["pg-clone-fsck"]
+    verbs: ["get", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgres-clone-cleanup
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres-clone-cleanup
+    argocd.argoproj.io/managed-by: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: postgres-clone-cleanup
+subjects:
+  - kind: ServiceAccount
+    name: postgres-clone-cleanup
+    namespace: postgres
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-clone-cleanup-script
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres-clone-cleanup
+    argocd.argoproj.io/managed-by: argocd
+data:
+  cleanup.py: |
+    import datetime, json, os, ssl, sys, urllib.request, urllib.error
+    SA = "/var/run/secrets/kubernetes.io/serviceaccount"
+    PVC = "pg-clone-fsck"
+    DRY = os.environ.get("DRY_RUN", "false") == "true"
+    token = open(SA + "/token").read().strip()
+    ns = open(SA + "/namespace").read().strip()
+    ctx = ssl.create_default_context(cafile=SA + "/ca.crt")
+
+    def api(method, path):
+        req = urllib.request.Request("https://kubernetes.default.svc" + path, method=method,
+                                     headers={"Authorization": "Bearer " + token})
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=20) as r:
+                return r.status, json.load(r)
+        except urllib.error.HTTPError as e:
+            return e.code, {}
+
+    def say(m):
+        print(datetime.datetime.now().isoformat(timespec="seconds"), m, flush=True)
+
+    code, pvc = api("GET", "/api/v1/namespaces/%s/persistentvolumeclaims/%s" % (ns, PVC))
+    if code == 404:
+        say("%s is already gone. Nothing to do." % PVC); sys.exit(0)
+    if code != 200:
+        say("could not read the PVC (HTTP %s); leaving it alone" % code); sys.exit(1)
+    if pvc["metadata"].get("labels", {}).get("purpose") != "temporary-repair-attempt":
+        say("PVC lacks the purpose=temporary-repair-attempt label; refusing to delete"); sys.exit(1)
+
+    code, pod = api("GET", "/api/v1/namespaces/%s/pods/postgres-0" % ns)
+    ready = code == 200 and any(c["type"] == "Ready" and c["status"] == "True"
+                                for c in pod["status"].get("conditions", []))
+    if not ready:
+        say("postgres-0 is not Ready; leaving the safety copy in place"); sys.exit(1)
+
+    code, jobs = api("GET", "/apis/batch/v1/namespaces/%s/jobs" % ns)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    ok = False
+    for j in jobs.get("items", []):
+        if j["metadata"]["name"].startswith("postgres-backup-") and j["status"].get("completionTime"):
+            t = datetime.datetime.fromisoformat(j["status"]["completionTime"].replace("Z", "+00:00"))
+            if (now - t).total_seconds() < 36 * 3600:
+                ok = True
+    if not ok:
+        say("no postgres-backup has succeeded in the last 36h; leaving the safety copy in place"); sys.exit(1)
+
+    if DRY:
+        say("DRY RUN: all checks passed; would delete PVC %s" % PVC); sys.exit(0)
+    code, _ = api("DELETE", "/api/v1/namespaces/%s/persistentvolumeclaims/%s" % (ns, PVC))
+    say("deleted PVC %s (HTTP %s)" % (PVC, code))
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-clone-cleanup
+  namespace: postgres
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres-clone-cleanup
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  # 11:00 on 17 October, then every 17 October (a no-op once the PVC is gone).
+  schedule: "0 11 17 10 *"
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: postgres-clone-cleanup
+          containers:
+            - name: cleanup
+              image: python:3.12-alpine
+              command: ["python3", "/scripts/cleanup.py"]
+              env:
+                - {name: DRY_RUN, value: "false"}
+              volumeMounts:
+                - {name: scripts, mountPath: /scripts}
+              resources:
+                requests: {memory: "32Mi", cpu: "10m"}
+                limits: {memory: "96Mi"}
+          volumes:
+            - name: scripts
+              configMap:
+                name: postgres-clone-cleanup-script

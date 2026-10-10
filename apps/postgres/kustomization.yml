@@ -20,3 +20,4 @@ resources:
   - postgres-unifi-tf-db-init-job.yml
   - postgres-backup-script-cm.yml
   - postgres-backup-cronjob.yml
+  - postgres-clone-cleanup.yml
