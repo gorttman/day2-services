@@ -34,14 +34,7 @@ patches:
       kind: Job
       name: paperless-config-seed
 
-# Switched OFF 2026-10-10 at the user's request ("not ingesting, not looking
-# for anything"). Documents already filed are safe (PVCs and the database are
-# untouched); files sent to inbox/records simply wait in the consume folder.
-# To turn it back on: delete this patch block and let ArgoCD sync.
-  - target:
-      kind: Deployment
-      name: "paperless|gotenberg|tika|paperless-redis"
-    patch: |-
-      - op: replace
-        path: /spec/replicas
-        value: 0
+# Was switched OFF 2026-10-10 (heat test), switched back ON 2026-10-11 to
+# ingest the backup-drive Documents through inbox/records. To switch it off
+# again, add a patch on Deployment "paperless|gotenberg|tika|paperless-redis"
+# replacing /spec/replicas with 0.
