@@ -13,3 +13,15 @@ patches:
     target:
       kind: Deployment
       name: jellyfin
+
+# JELLYFIN-OFF-BEGIN (2026-10-11, stopped while Paperless ingests the backup-drive
+# Documents). Put back automatically by ~/gm-dev/jellyfin_resume.sh (cron, every
+# 15 min): after 6 h once the consume folder is empty, or after 24 h regardless.
+  - target:
+      kind: Deployment
+      name: jellyfin
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
+# JELLYFIN-OFF-END
