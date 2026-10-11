@@ -44,7 +44,7 @@ spec:
       # changes this pod template and rolls the pod automatically.
       initContainers:
       - name: apply-desired-config
-        image: ghcr.io/music-assistant/server:2.10.5
+        image: ghcr.io/music-assistant/server:2.10.6
         imagePullPolicy: IfNotPresent
         command: ["python3", "/desired/apply-desired-config.py"]
         volumeMounts:
@@ -71,14 +71,20 @@ spec:
       # server once at provider load, and as a plain second container it lost
       # that race by ~0.7s, leaving the provider on "needs attention".
       #
-      # VERSION MUST MATCH the bgutil plugin bundled inside the MA image (MA
-      # 2.10.5 ships bgutil-ytdlp-pot-provider 2.0.1). The MA docs still say
-      # "only 1.2.1" - stale; with a 1.2.1 server the plugin logs "major
-      # versions mismatched ... update both to proceed" and the provider shows
-      # Running while streaming fails. When bumping MA, check the plugin
-      # version: `pip list | grep bgutil` inside the MA container.
+      # VERSION MUST MATCH the bgutil plugin that MA installs. It is NOT
+      # bundled in the image: the YT Music provider pip-installs
+      # `bgutil-ytdlp-pot-provider` UNPINNED at every container start, so the
+      # plugin is whatever is newest on PyPI at that moment (2.0.2 since
+      # 2026-10-07). The MA docs still say "only 1.2.1" - stale; with a 1.2.1
+      # server the plugin logs "major versions mismatched ... update both to
+      # proceed" and the provider shows Running while streaming fails. A patch
+      # skew (plugin 2.0.2 vs server 2.0.1) only logs "plugin and the HTTP
+      # server are on different versions". When PyPI publishes a newer plugin,
+      # bump this tag to match. Check the installed plugin with:
+      # kubectl -n music-assistant exec -i deploy/music-assistant -c music-assistant -- \
+      #   ls /app/venv/lib/python3.14/site-packages | grep bgutil
       - name: pot-provider
-        image: brainicism/bgutil-ytdlp-pot-provider:2.0.1
+        image: brainicism/bgutil-ytdlp-pot-provider:2.0.2
         imagePullPolicy: IfNotPresent
         restartPolicy: Always
         ports:
@@ -101,7 +107,7 @@ spec:
       containers:
       - name: music-assistant
         # Pinned stable (2026-10-03). 2.11 is dev/beta - do not float.
-        image: ghcr.io/music-assistant/server:2.10.5
+        image: ghcr.io/music-assistant/server:2.10.6
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
