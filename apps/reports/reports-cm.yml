@@ -1507,7 +1507,7 @@ data:
     </html>
   todo-register.json: |
     {
-      "updated": "2026-10-09",
+      "updated": "2026-10-12",
       "rule": "Not a task tracker. These are things worth remembering with no deadline attached - revisit when it comes up again, not on a schedule.",
       "items": [
         {"id":"artcraft-lightcraft","title":"ArtCraft / LightCraft and the rest of the open-source Adobe clones","category":"watch","added":"2026-10-09","status":"open",
@@ -1532,6 +1532,8 @@ data:
         {"id":"pg-clone-cleanup","title":"Safety copy of the postgres volume is deleted automatically on 17 Oct","category":"scheduled","added":"2026-10-10","status":"open",
          "note":"pg-clone-fsck (4 GB Longhorn clone made during the 10-10 postgres fault) is removed by the postgres-clone-cleanup CronJob at 11:00 on 2026-10-17. It only deletes if postgres is Ready and a nightly backup succeeded in the last 36 hours; otherwise it leaves the copy and logs why. Nothing for you to do. Check its last run: kubectl -n postgres get jobs."},
         {"id":"alert-fix-skill","title":"A skill that fixes most alerts","category":"build","added":"2026-10-10","status":"open",
-         "note":"STARTED 2026-10-10: skill alert-fix exists (status + idempotent ArgoCD sync, ~/gm-dev/agent-skills/skills/alert-fix). Still to do: the other alert types, and a button on a report page to run it (needs a small read/patch permission for the reports pod, to be approved first). Original idea: given a Telegram alert, the skill reads the rule's next step, checks live state, applies the safe known fix (or says what needs you) and verifies. Each fix must be idempotent: check first, do nothing if already fixed, never delete data. Start with ArgoCD app out of sync and volume over 85% full. Modelled on the media-queue-fix skill. The 13 alert rules are in day1-foundation/apps/grafana/grafana-alerting-cm.yml."}
+         "note":"STARTED 2026-10-10: skill alert-fix exists (status + idempotent ArgoCD sync, ~/gm-dev/agent-skills/skills/alert-fix). Still to do: the other alert types, and a button on a report page to run it (needs a small read/patch permission for the reports pod, to be approved first). Original idea: given a Telegram alert, the skill reads the rule's next step, checks live state, applies the safe known fix (or says what needs you) and verifies. Each fix must be idempotent: check first, do nothing if already fixed, never delete data. Start with ArgoCD app out of sync and volume over 85% full. Modelled on the media-queue-fix skill. The 13 alert rules are in day1-foundation/apps/grafana/grafana-alerting-cm.yml."},
+        {"id":"paperless-cleanup","title":"Clean up Paperless: remove the screenshots and other things that should not be in it","category":"build","added":"2026-10-12","status":"open",
+         "note":"Paperless should hold documents only. Images belong in Immich and books in the books library. Still in it: about 150 image documents added in September (mostly screenshots from the Study folders: SCU, MNG, ISY) and about 16 iCloud images from 6 Oct (Tax, Greenlaw, screenshots). Check whether the originals exist elsewhere, copy any that do not to Immich (photos/year/Documents scans/...), then delete them from Paperless. Also review the Imported: tags the 2026-10-12 backup-drive ingest created, and the duplicate Moroccan Meatballs recipe (documents 25 and 2176). Already done 2026-10-12: 44 image and book documents removed (Europe trip, aviation, Postfix); they sit in Paperless trash for a while."}
       ]
     }
