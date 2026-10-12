@@ -31,5 +31,27 @@
       "players/up715fc41a",
       "player_dsp/4bbaf09b-0edb-c4c5-d22d-0254a5955f22"
     ]
+  },
+  "players": {
+    "27e6dd53-af1c-4698-b61b-7749d81d1e07": {
+      "enabled": false
+    },
+    "syncgroup_hey5frar": {
+      "values": {
+        "group_members": [
+          "updbd7ef6d",
+          "4bbaf09b-0edb-c4c5-d22d-0254a5955f22"
+        ],
+        "dynamic_members": false,
+        "allowed_members": []
+      },
+      "provider": "sync_group",
+      "player_id": "syncgroup_hey5frar",
+      "enabled": true,
+      "name": "Home Group",
+      "default_name": "Home Group",
+      "player_type": "group",
+      "setup_data": {}
+    }
   }
 }
