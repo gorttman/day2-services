@@ -53,5 +53,13 @@
       "player_type": "group",
       "setup_data": {}
     }
+  },
+  "core": {
+    "discovery": {
+      "domain": "discovery",
+      "values": {
+        "zeroconf_interfaces": "all"
+      }
+    }
   }
 }
