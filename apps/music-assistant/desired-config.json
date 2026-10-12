@@ -7,73 +7,29 @@
       "enabled": true,
       "name": "Chromecast",
       "values": {
-        "manual_discovery_ip_addresses": [
-          "192.168.2.69",
-          "192.168.2.197",
-          "192.168.2.40",
-          "192.168.2.188",
-          "192.168.2.196",
-          "192.168.2.167",
-          "192.168.2.109"
-        ]
+        "manual_discovery_ip_addresses": []
       }
     }
   },
-  "players": {
-    "spb_00f620b37b8a": {
-      "enabled": true
-    },
-    "spb_e4f0424ef300": {
-      "enabled": true
-    },
-    "spb_883d245b0a4e": {
-      "enabled": true
-    },
-    "syncgroup_home0001": {
-      "values": {
-        "group_members": [
-          "4bbaf09b-0edb-c4c5-d22d-0254a5955f22",
-          "8223adc5-57e6-895a-71e4-06a4133bcdf4",
-          "5000cce8-e5e8-cab1-8d42-301cc6f3b07c",
-          "bc5307cd-ddbd-9c9c-b883-3bc0d7c94804",
-          "up30492340"
-        ],
-        "dynamic_members": false
-      },
-      "provider": "sync_group",
-      "player_id": "syncgroup_home0001",
-      "enabled": true,
-      "name": "Home (local)",
-      "default_name": "Home (local)",
-      "player_type": "group",
-      "setup_data": {}
-    },
-    "spb_409f38ffb05f": {
-      "enabled": true
-    },
-    "spb_48d6d5db892e": {
-      "enabled": true
-    },
-    "0f8c2e9d-3a35-c07a-12ad-5d18ae15c5da": {
-      "values": {
-        "cached_arp_mac": "08:38:E6:35:8E:AA"
-      }
-    },
-    "spb_0838e6358eaa": {
-      "values": {
-        "cached_arp_mac": "08:38:E6:35:8E:AA",
-        "reported_mac": null,
-        "underlying_player_id": "0f8c2e9d-3a35-c07a-12ad-5d18ae15c5da",
-        "protocol_parent_id": "upf1513b60",
-        "protocol_experimental_note": "sendspin_cast_experimental"
-      },
-      "provider": "sendspin",
-      "player_id": "spb_0838e6358eaa",
-      "enabled": false,
-      "name": null,
-      "default_name": "Bedroom clock (Cast)",
-      "player_type": "protocol",
-      "setup_data": {}
-    }
+  "__remove_once__": {
+    "2026-10-12-clear-speakers": [
+      "players/bc5307cd-ddbd-9c9c-b883-3bc0d7c94804",
+      "players/spb_48d6d5db892e",
+      "players/4bbaf09b-0edb-c4c5-d22d-0254a5955f22",
+      "players/spb_00f620b37b8a",
+      "players/0f8c2e9d-3a35-c07a-12ad-5d18ae15c5da",
+      "players/27e6dd53-af1c-4698-b61b-7749d81d1e07",
+      "players/upf1513b60",
+      "players/8223adc5-57e6-895a-71e4-06a4133bcdf4",
+      "players/spb_e4f0424ef300",
+      "players/5000cce8-e5e8-cab1-8d42-301cc6f3b07c",
+      "players/spb_883d245b0a4e",
+      "players/649325b3-1513-f7ec-b803-5fcc9992a01e",
+      "players/spb_409f38ffb05f",
+      "players/syncgroup_home0001",
+      "players/spb_0838e6358eaa",
+      "players/up715fc41a",
+      "player_dsp/4bbaf09b-0edb-c4c5-d22d-0254a5955f22"
+    ]
   }
 }
