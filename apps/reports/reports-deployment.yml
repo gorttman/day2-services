@@ -34,7 +34,18 @@ spec:
       containers:
         - name: reports
           image: python:3.12-alpine
-          command: ["python3", "-u", "/app/site/server.py"]
+          # Start guard: after a node reboot this pod can start before the QNAP
+          # backup share is mounted on k8smaster, and a running pod never sees a
+          # mount made after it started - the backups report then shows every
+          # stream critical (2026-10-13). Exit if the share is not visible; the
+          # kubelet restarts the container, which re-reads the host folder.
+          command:
+            - sh
+            - -c
+            - |
+              for i in $(seq 90); do [ -d /mnt/backup/active_backup ] && break; sleep 2; done
+              [ -d /mnt/backup/active_backup ] || { echo "backup share not mounted, exiting so the kubelet retries"; exit 1; }
+              exec python3 -u /app/site/server.py
           ports:
             - {name: http, containerPort: 8080}
           volumeMounts:
