@@ -131,7 +131,10 @@ data:
     def find_region_wg_servers(server_list, region_id):
         for region in server_list["regions"]:
             if region["id"] == region_id:
-                return region["servers"]["wg"]
+                # PIA's rotating subset sometimes returns the region with no "wg"
+                # entry at all (2026-10-15: KeyError 'wg' on three runs in a row).
+                # Treat that sample as empty instead of crashing the run.
+                return region.get("servers", {}).get("wg", [])
         raise RuntimeError(f"region {region_id!r} not found in PIA server list")
 
 
@@ -156,10 +159,19 @@ data:
         seen_ips = set()
         last_list = None
         for i in range(samples):
-            last_list = fetch_pia_server_list()
-            seen_ips |= {s["ip"] for s in find_region_wg_servers(last_list, region_id)}
+            sample = fetch_pia_server_list()
+            wg = find_region_wg_servers(sample, region_id)
+            if wg:
+                seen_ips |= {s["ip"] for s in wg}
+                # main() picks a replacement peer from this list, so keep the
+                # last sample that actually has WireGuard servers in it.
+                last_list = sample
             if i < samples - 1:
                 time.sleep(delay)
+        if last_list is None:
+            raise RuntimeError(
+                f"PIA returned no WireGuard servers for region {region_id!r} "
+                f"in {samples} samples")
         return seen_ips, last_list
 
 
