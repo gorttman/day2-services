@@ -151,6 +151,11 @@ data:
         return {"name": spec_name, "image": image, "restarts": 0, "state": "warn", "text": "starting"}
 
 
+    def owner_kind(p):
+        owner = next((o for o in p["metadata"].get("ownerReferences", []) if o.get("controller")), None)
+        return owner["kind"] if owner else "Pod"
+
+
     def app_name(p):
         """The workload a pod belongs to: its Deployment/StatefulSet/DaemonSet/
         CronJob name, not the pod's hashed name. Falls back to the pod name."""
@@ -184,7 +189,7 @@ data:
             state, text = "ok", "Running"
         else:
             state, text = "warn", phase
-        return {"ns": p["metadata"]["namespace"], "name": p["metadata"]["name"], "app": app_name(p), "phase": phase,
+        return {"ns": p["metadata"]["namespace"], "name": p["metadata"]["name"], "app": app_name(p), "kind": owner_kind(p), "phase": phase,
                 "state": state, "text": text, "ready": f"{ready}/{len(cons)}", "containers": cons}
 
 
@@ -1580,7 +1585,7 @@ data:
     .pods{padding-left:18px}
     .pod>summary{font-size:14px;padding:9px 14px}
     .cons{padding:2px 14px 10px 44px;display:grid;gap:4px;font-size:13px}
-    .con{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap}
+    .con{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;padding:2px 6px;border-radius:5px}
     .num,.img{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--muted)}
     .chip{display:inline-block;font:500 11px/1 "IBM Plex Mono",monospace;padding:5px 8px;border-radius:5px;background:var(--line);color:var(--muted);white-space:nowrap}
     .chip.good{background:var(--good-soft);color:var(--good)}
@@ -1589,6 +1594,8 @@ data:
     .ns{color:var(--faint)}
     footer{font-size:12.5px;color:var(--faint);max-width:70ch}
     label{cursor:pointer}
+    .ds{background:color-mix(in srgb,var(--accent) 11%,transparent)}
+    .key{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:1px solid var(--line)}
     </style>
     </head>
     <body>
@@ -1598,7 +1605,7 @@ data:
         <h1>Where Things Run</h1>
         <p class="lede">Each node, the applications running on it (one per namespace, e.g. Longhorn, Pi-hole), and the containers inside each. Click to open. Read live from the cluster.</p>
       </header>
-      <div class="bar"><span id="updated">Loading</span><label><input type="checkbox" id="fin"> show finished jobs</label></div>
+      <div class="bar"><span id="updated">Loading</span><label><input type="checkbox" id="fin"> show finished jobs</label><span><span class="key ds"></span>runs one per node (DaemonSet)</span></div>
       <div class="panel" id="tree"></div>
       <footer>Refreshes every 30 seconds. <a href="/">All reports</a>.</footer>
     </main>
@@ -1629,11 +1636,12 @@ data:
           var st=worst(a.pods.map(function(p){return p.state}));
           var cons=[];a.pods.forEach(function(p){p.containers.forEach(function(c){cons.push({c:c,pod:p})})});
           var rows=cons.map(function(x){
-            return '<div class="con"><span>'+esc(x.c.name)+' <span class="img">'+esc(tag(x.c.image))+'</span>'+(nwl>1||wl[x.pod.app]>1?' <span class="ns">'+esc(x.pod.app)+(wl[x.pod.app]>1?' \u00b7 '+esc(x.pod.name.slice(x.pod.app.length)):'')+'</span>':'')+'</span><span>'
+            return '<div class="con'+(x.pod.kind==="DaemonSet"?" ds":"")+'"><span>'+esc(x.c.name)+' <span class="img">'+esc(tag(x.c.image))+'</span>'+(nwl>1||wl[x.pod.app]>1?' <span class="ns">'+esc(x.pod.app)+(wl[x.pod.app]>1?' \u00b7 '+esc(x.pod.name.slice(x.pod.app.length)):'')+'</span>':'')+'</span><span>'
               +(x.c.restarts?chip("warn",x.c.restarts+" restarts"):"")+" "+chip(cls(x.c.state),x.c.text)+'</span></div>'}).join("");
           var text=a.pods.length>1?(st==="ok"?"all running":a.pods.filter(function(p){return p.state!=="ok"}).length+" need a look"):a.pods[0].text;
           var s='<div class="l">'+esc(a.name)+' <span class="ns">'+nwl+(nwl===1?" workload":" workloads")+'</span></div><div>'+chip(cls(st),text)+" "+chip("",cons.length+(cons.length===1?" container":" containers"))+'</div>';
-          return det(n.name+"/"+a.ns+"/"+a.name,"pod",s,'<div class="cons">'+rows+'</div>')}).join("")+'</div>';
+          var allds=a.pods.every(function(p){return p.kind==="DaemonSet"});
+          return det(n.name+"/"+a.ns+"/"+a.name,"pod"+(allds?" ds":""),s,'<div class="cons">'+rows+'</div>')}).join("")+'</div>';
         html+=det(n.name,"node",head,body);
       });
       document.getElementById("tree").innerHTML=html;
