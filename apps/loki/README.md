@@ -1,10 +1,10 @@
-# Loki + Fluent Bit - cluster logging
+# Loki + Alloy - cluster logging
 
 Logs from every container and every node's systemd journal, kept long-term and
 searched in Grafana (Explore -> Loki). OpenSearch was rejected as too heavy for
 the Pi cluster.
 
-    Fluent Bit (DaemonSet, every node)  ->  Loki (1 pod, Longhorn volume for WAL)
+    Alloy (DaemonSet, every node)       ->  Loki (1 pod, Longhorn volume for WAL)
                                                 |  chunks + index
                                           Garage (S3) -> QNAP /cold export
     Grafana queries Loki only, never the QNAP.
@@ -27,9 +27,16 @@ the Pi cluster.
 - **Credentials**: `garage-secrets` SealedSecret (RPC secret, admin token, S3
   key pair). The key pair is created in the SealedSecret and imported into
   Garage by the `garage-init` Job, so nothing is generated at runtime.
+- **Collector: Grafana Alloy, not Fluent Bit.** The spec named Fluent Bit and
+  it was tried first: it crash-loops on every node (`jemalloc: Unsupported
+  system page size`) because the Pi 5 kernel uses 16 KiB memory pages and its
+  allocator supports only 4 KiB. Alloy is Go, has no such limit, and is
+  Grafana's own Loki collector. Reads container logs and each node's systemd
+  journal. Config in `../alloy/alloy-values.yml`.
 - **Labels** (low cardinality only): `cluster` (pilab), `node`, `namespace`,
-  `app`, `signal_type` (`container` or `host`). Pod name, container name and
-  the rest stay in the JSON log line - use `| json` in LogQL.
+  `app`, `signal_type` (`container` or `host`). Pod and container name (and the
+  systemd unit for host logs) are structured metadata: filter with
+  `{app="x"} | pod="x-123"`, they are not labels.
 - **Retention**: compactor on. Default 43800h (5 years); streams with
   `signal_type="host"` (journald) or `"auth"` 87600h (10 years). Change it in
   `loki-values.yml` -> `limits_config`.
@@ -48,12 +55,11 @@ the Pi cluster.
 
 - `loki-app.yml`, `loki-values.yml` - Loki chart.
 - `manifests/` - Garage: config, StatefulSet, Services, setup Job, sealed secret.
-- `../fluent-bit/` - the collector.
+- `../alloy/` - the collector.
 - Grafana datasource (`loki-pilab`) and dashboard: day1-foundation `apps/grafana`.
 
 ## Checks
 
-- `kubectl -n fluent-bit get pods -o wide` - one per node.
+- `kubectl -n alloy get pods -o wide` - one per node.
 - Grafana -> Explore -> Loki -> `{signal_type="host", node="pinode-01"}`.
-- `kubectl -n loki logs deploy/...` is a StatefulSet: `kubectl -n loki logs loki-0`
-  should show the compactor with retention enabled.
+- `kubectl -n loki logs loki-0` should show the compactor with retention enabled.

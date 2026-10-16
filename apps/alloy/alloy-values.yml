@@ -1,0 +1,186 @@
+# Grafana Alloy as the log collector (DaemonSet, every node) -> Loki.
+#
+# Why Alloy and not Fluent Bit: the spec asked for Fluent Bit, and it was tried
+# first (2026-10-17). It crash-loops on every node here: "jemalloc: Unsupported
+# system page size". The Pi 5 kernel (6.12.47+rpt-rpi-2712) uses 16 KiB memory
+# pages and Fluent Bit's bundled allocator only supports 4 KiB. Alloy is Go, so
+# it has no such limit, and it is Grafana's own Loki collector.
+#
+# Reads:  container logs from /var/log/pods (found through the Kubernetes API,
+#         so labels come from pod metadata) and each node's systemd journal.
+# Writes: to Loki, cluster-internal only.
+#
+# Labels sent to Loki are low-cardinality on purpose: cluster, node, namespace,
+# app, signal_type (container | host). Pod and container name ride along as
+# structured metadata - filter on them with `| pod="..."` in LogQL, they are not
+# labels.
+controller:
+  type: daemonset
+  tolerations:
+    - operator: Exists
+  volumes:
+    extra:
+      - name: runjournal
+        hostPath: {path: /run/log/journal, type: DirectoryOrCreate}
+      - name: machineid
+        hostPath: {path: /etc/machine-id, type: File}
+      - name: alloystate
+        hostPath: {path: /var/lib/alloy, type: DirectoryOrCreate}
+
+image:
+  registry: docker.io
+  repository: grafana/alloy
+  tag: v1.20.1
+  # Pinned by digest as well (manifest list, covers arm64).
+  digest: sha256:2aa2099af76c0098d4af7a4d6e48f86cb66dc1a000222ad927a1c67c6542d13f
+
+alloy:
+  # Positions (how far each file has been read) survive restarts.
+  storagePath: /var/lib/alloy/data
+  mounts:
+    varlog: true
+    extra:
+      - {name: runjournal, mountPath: /run/log/journal, readOnly: true}
+      - {name: machineid, mountPath: /etc/machine-id, readOnly: true}
+      - {name: alloystate, mountPath: /var/lib/alloy}
+  extraEnv:
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+  # Container log files are root-only.
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      memory: 384Mi
+  configMap:
+    create: true
+    content: |
+      // ---- container logs ------------------------------------------------
+      discovery.kubernetes "pods" {
+        role = "pod"
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + sys.env("NODE_NAME")
+        }
+      }
+
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        // Where the log files are: /var/log/pods/<ns>_<pod>_<uid>/<container>/N.log
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+          separator     = "/"
+          target_label  = "__path__"
+          replacement   = "/var/log/pods/*$1/*.log"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        // app: container name, overridden by the app label if the pod has one,
+        // overridden again by app.kubernetes.io/name.
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app"]
+          regex         = "(.+)"
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          regex         = "(.+)"
+          target_label  = "app"
+        }
+      }
+
+      local.file_match "pods" {
+        path_targets = discovery.relabel.pods.output
+      }
+
+      loki.source.file "pods" {
+        targets    = local.file_match.pods.targets
+        forward_to = [loki.process.pods.receiver]
+      }
+
+      loki.process "pods" {
+        stage.cri {}
+        // pod and container become structured metadata, not labels.
+        stage.structured_metadata {
+          values = {
+            pod       = "pod",
+            container = "container",
+          }
+        }
+        stage.label_drop {
+          values = ["pod", "container", "filename", "stream"]
+        }
+        stage.static_labels {
+          values = {
+            cluster     = "pilab",
+            signal_type = "container",
+            node        = sys.env("NODE_NAME"),
+          }
+        }
+        forward_to = [loki.write.default.receiver]
+      }
+
+      // ---- host journal --------------------------------------------------
+      loki.relabel "journal" {
+        forward_to = []
+        rule {
+          source_labels = ["__journal_syslog_identifier"]
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__journal__systemd_unit"]
+          target_label  = "unit"
+        }
+      }
+
+      loki.source.journal "host" {
+        max_age       = "12h"
+        relabel_rules = loki.relabel.journal.rules
+        labels = {
+          cluster     = "pilab",
+          signal_type = "host",
+          namespace   = "host",
+          node        = sys.env("NODE_NAME"),
+        }
+        forward_to = [loki.process.journal.receiver]
+      }
+
+      loki.process "journal" {
+        // Unit is kept as structured metadata, like pod/container above.
+        stage.structured_metadata {
+          values = {
+            unit = "unit",
+          }
+        }
+        stage.label_drop {
+          values = ["unit"]
+        }
+        forward_to = [loki.write.default.receiver]
+      }
+
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }

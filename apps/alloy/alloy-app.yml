@@ -1,0 +1,31 @@
+# Grafana Alloy log collector (DaemonSet, every node) -> Loki. Chart pinned:
+# 1.13.1 is Alloy v1.20.1. Values in alloy-values.yml (which also explains why
+# this is Alloy and not the Fluent Bit the spec named).
+# The store it writes to is apps/loki; design notes in apps/loki/README.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: alloy
+      targetRevision: 1.13.1
+      helm:
+        releaseName: alloy
+        valueFiles:
+          - $values/apps/alloy/alloy-values.yml
+    - repoURL: https://github.com/gorttman/day2-services.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: alloy
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
