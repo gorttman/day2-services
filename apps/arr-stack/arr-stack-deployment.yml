@@ -210,9 +210,12 @@ spec:
           tcpSocket: {port: 7878}
           initialDelaySeconds: 20
           periodSeconds: 15
+        # 2Gi: 1Gi OOM-killed Radarr 122x in 35h (2026-10-16) on start-up bursts
+        # (queue re-check + failed imports). Cache fills any limit, so the cap
+        # only matters for real spikes.
         resources:
-          requests: {memory: "128Mi", cpu: "50m"}
-          limits: {memory: "1Gi", cpu: "1000m"}
+          requests: {memory: "512Mi", cpu: "50m"}
+          limits: {memory: "2Gi", cpu: "1000m"}
       - name: prowlarr
         image: lscr.io/linuxserver/prowlarr:2.4.0
         imagePullPolicy: IfNotPresent
