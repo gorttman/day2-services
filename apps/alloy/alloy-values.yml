@@ -28,11 +28,12 @@ controller:
         hostPath: {path: /var/lib/alloy, type: DirectoryOrCreate}
 
 image:
-  registry: docker.io
-  repository: grafana/alloy
+  # Mirror of docker.io/grafana/alloy:v1.20.1 (see
+  # .github/workflows/mirror-upstream-images.yml), pinned by digest.
+  registry: ghcr.io
+  repository: gorttman/alloy
   tag: v1.20.1
-  # Pinned by digest as well (manifest list, covers arm64).
-  digest: sha256:2aa2099af76c0098d4af7a4d6e48f86cb66dc1a000222ad927a1c67c6542d13f
+  digest: sha256:7da8bffc169818b996cab76cf88855bc713144b7f886ab8d94c77898311b156d
 
 alloy:
   # Positions (how far each file has been read) survive restarts.

@@ -44,9 +44,10 @@ the Pi cluster.
   and holds them in the WAL on its Longhorn volume; recent logs stay queryable
   from there.
 - **No new exposure**: everything is ClusterIP. Grafana is reached as before.
-- **Images** are pinned by digest. They are not mirrored to ghcr.io/gorttman:
-  there is no registry push credential on this host. Other upstream images
-  (immich, paperless) are pulled directly the same way.
+- **Images** (Loki, Alloy, Garage) are mirrored to ghcr.io/gorttman by
+  `.github/workflows/mirror-upstream-images.yml` and pinned by digest. The
+  mirror is a copy, not a build. The Garage setup Job still uses
+  `python:3.12-alpine` from Docker Hub, like the reports app.
 - **Not done**: syslog-ng (only needed if a non-Kubernetes device must send
   syslog); the Telegraf tag taxonomy has no `cluster` / `signal_type` tags yet,
   so the label names here are the starting point for it.

@@ -1,8 +1,7 @@
 # Garage: the S3-compatible object store behind Loki.
 #
-# Image pinned by digest (v2.3.0). Not mirrored to ghcr.io/gorttman yet - no
-# registry push credential exists on this host; upstream images are pulled
-# directly elsewhere in the cluster (immich, paperless).
+# Image: ghcr.io/gorttman/garage, a mirror of docker.io/dxflrs/garage:v2.3.0
+# (.github/workflows/mirror-upstream-images.yml), pinned by digest.
 #
 # Data (block files) is on the QNAP /cold export (empty and unused until now),
 # in the "garage" subfolder. The export is hard-mounted NFS, so a QNAP stall can
@@ -29,7 +28,7 @@ spec:
     spec:
       containers:
         - name: garage
-          image: dxflrs/garage@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690
+          image: ghcr.io/gorttman/garage@sha256:e1af6511b92963c61ceacd499691d26ad48842de85b09dbea2919afa88abb327
           command: ["/garage", "server"]
           envFrom:
             - secretRef:

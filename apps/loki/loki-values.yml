@@ -9,11 +9,12 @@ deploymentMode: SingleBinary
 loki:
   auth_enabled: false
   image:
-    registry: docker.io
-    repository: grafana/loki
+    # Mirror of docker.io/grafana/loki:3.6.12 (see
+    # .github/workflows/mirror-upstream-images.yml), pinned by digest.
+    registry: ghcr.io
+    repository: gorttman/loki
     tag: 3.6.12
-    # Pinned by digest as well (manifest list, covers arm64).
-    digest: sha256:2483b71b28b15dee230f85512cae2b20c4b5f6e98a6eabe686cbccfa5ea3ba4a
+    digest: sha256:50c0bce624479eb5eab9ee6d1e9cbf7db15d96f034c5d4d27204fec4c1cd4ed7
 
   commonConfig:
     replication_factor: 1
