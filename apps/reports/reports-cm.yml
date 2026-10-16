@@ -1760,7 +1760,7 @@ data:
       </header>
       <div class="bar"><span id="updated">Loading</span><label><input type="checkbox" id="fin"> show finished jobs</label><span><span class="key ds"></span>runs one per node (DaemonSet)</span></div>
       <div class="panel" id="tree"></div>
-      <footer>Refreshes every 30 seconds. <a href="/">All reports</a>.</footer>
+      <footer>Logs: <a href="https://grafana.i3sec.com.au/d/cluster-logs/cluster-logs" target="_blank" rel="noopener">search cluster and host logs</a> (Grafana, Loki). Refreshes every 30 seconds. <a href="/">All reports</a>.</footer>
     </main>
     <script>
     var OPEN=new Set(),DATA=null;
