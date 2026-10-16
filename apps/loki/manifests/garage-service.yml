@@ -1,0 +1,29 @@
+# garage: the real Service (ClusterIP only - nothing is exposed outside).
+# s3: a stable name for Loki to use. It is an ExternalName pointing at garage,
+# so the object store can be replaced (a NAS-hosted S3, say) by repointing this
+# one record; Loki's config never changes. This is the in-cluster form of the
+# "S3 hostname that DNS can repoint" requirement.
+apiVersion: v1
+kind: Service
+metadata:
+  name: garage
+  namespace: loki
+  labels:
+    app: garage
+spec:
+  clusterIP: None
+  selector:
+    app: garage
+  ports:
+    - {name: s3, port: 3900}
+    - {name: rpc, port: 3901}
+    - {name: admin, port: 3903}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3
+  namespace: loki
+spec:
+  type: ExternalName
+  externalName: garage.loki.svc.cluster.local

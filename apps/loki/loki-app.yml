@@ -1,0 +1,38 @@
+# Loki log store + Garage (its S3 object store). Three sources:
+#   1. the grafana/loki Helm chart (version pinned - 7.3.0 is Loki 3.6.12),
+#   2. the Garage manifests in manifests/ (kustomize),
+#   3. this repo again, only to expose loki-values.yml to the chart as $values.
+# Fluent Bit (the collector) is its own app: apps/fluent-bit.
+# Design and decisions: README.md in this folder.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      targetRevision: 7.3.0
+      helm:
+        releaseName: loki
+        valueFiles:
+          - $values/apps/loki/loki-values.yml
+    - repoURL: https://github.com/gorttman/day2-services.git
+      targetRevision: main
+      path: apps/loki/manifests
+    - repoURL: https://github.com/gorttman/day2-services.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: loki
+  syncPolicy:
+    automated:
+      # prune off: this holds the log history (a Longhorn volume and the S3
+      # bucket's index). A stray prune is not a "resync and move on" event.
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

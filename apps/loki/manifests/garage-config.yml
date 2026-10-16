@@ -1,0 +1,35 @@
+# Garage config. The secrets (rpc secret, admin token) are NOT here: Garage
+# reads GARAGE_RPC_SECRET and GARAGE_ADMIN_TOKEN from the environment, set from
+# the garage-secrets SealedSecret.
+#
+# replication_factor = 1: a single node. This is a log store, not a primary
+# copy of anything; the QNAP RAID is the durability layer underneath.
+#
+# metadata_dir is on the Longhorn volume, data_dir is on the QNAP /cold export.
+# Metadata (an LMDB database) must NOT sit on NFS - LMDB relies on file locking
+# and mmap, which NFS does not give it reliably. Only the bulk block data goes
+# to the QNAP.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: garage-config
+  namespace: loki
+  labels:
+    app: garage
+data:
+  garage.toml: |
+    metadata_dir = "/meta"
+    data_dir = "/data"
+    db_engine = "lmdb"
+    metadata_fsync = true
+    replication_factor = 1
+
+    rpc_bind_addr = "[::]:3901"
+    rpc_public_addr = "127.0.0.1:3901"
+
+    [s3_api]
+    s3_region = "garage"
+    api_bind_addr = "[::]:3900"
+
+    [admin]
+    api_bind_addr = "[::]:3903"

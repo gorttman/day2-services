@@ -50,3 +50,8 @@ resources:
   - reports/reports-app.yml
   - open-webui/open-webui-app.yml
   - litellm/litellm-app.yml
+# Cluster logging (added 2026-10-17): Loki + Garage (S3 on the QNAP /cold
+# export) store logs, Fluent Bit ships them from every node. Grafana reads Loki
+# through the datasource in day1-foundation. See loki/README.md.
+  - loki/loki-app.yml
+  - fluent-bit/fluent-bit-app.yml

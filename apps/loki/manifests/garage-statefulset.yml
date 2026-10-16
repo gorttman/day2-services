@@ -1,0 +1,73 @@
+# Garage: the S3-compatible object store behind Loki.
+#
+# Image pinned by digest (v2.3.0). Not mirrored to ghcr.io/gorttman yet - no
+# registry push credential exists on this host; upstream images are pulled
+# directly elsewhere in the cluster (immich, paperless).
+#
+# Data (block files) is on the QNAP /cold export (empty and unused until now),
+# in the "garage" subfolder. The export is hard-mounted NFS, so a QNAP stall can
+# stall Garage - and only Garage: Loki keeps ingesting and buffers on its own
+# volume until Garage answers again (see loki-values.yml).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: garage
+  namespace: loki
+  labels:
+    app: garage
+    app.kubernetes.io/name: garage
+spec:
+  serviceName: garage
+  replicas: 1
+  selector:
+    matchLabels:
+      app: garage
+  template:
+    metadata:
+      labels:
+        app: garage
+    spec:
+      containers:
+        - name: garage
+          image: dxflrs/garage@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690
+          args: ["server"]
+          envFrom:
+            - secretRef:
+                name: garage-secrets
+          ports:
+            - {name: s3, containerPort: 3900}
+            - {name: rpc, containerPort: 3901}
+            - {name: admin, containerPort: 3903}
+          volumeMounts:
+            - {name: config, mountPath: /etc/garage.toml, subPath: garage.toml, readOnly: true}
+            - {name: meta, mountPath: /meta}
+            - {name: data, mountPath: /data, subPath: garage}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          readinessProbe:
+            tcpSocket: {port: s3}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: s3}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 6
+      volumes:
+        - name: config
+          configMap:
+            name: garage-config
+        - name: data
+          nfs:
+            server: qnap.i3sec.com.au
+            path: /cold
+  volumeClaimTemplates:
+    - metadata:
+        name: meta
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 5Gi

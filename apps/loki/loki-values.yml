@@ -1,0 +1,169 @@
+# Loki, single-binary, Helm chart grafana/loki (see loki-app.yml for the pin).
+#
+# Chunks and the TSDB index go to Garage (S3) on the QNAP via the "s3" Service.
+# The local Longhorn volume holds only the write-ahead log, the index cache and
+# the compactor's working directory - losing it costs the last few minutes of
+# logs, not history.
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  image:
+    registry: docker.io
+    repository: grafana/loki
+    tag: 3.6.12
+    # Pinned by digest as well (manifest list, covers arm64).
+    digest: sha256:2483b71b28b15dee230f85512cae2b20c4b5f6e98a6eabe686cbccfa5ea3ba4a
+
+  commonConfig:
+    replication_factor: 1
+    path_prefix: /var/loki
+
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  storage:
+    type: s3
+    bucketNames:
+      chunks: loki
+      ruler: loki
+      admin: loki
+    s3:
+      endpoint: http://s3.loki.svc.cluster.local:3900
+      region: garage
+      accessKeyId: ${S3_ACCESS_KEY_ID}
+      secretAccessKey: ${S3_SECRET_ACCESS_KEY}
+      s3ForcePathStyle: true
+      insecure: true
+
+  storage_config:
+    # Separate prefix for the index so it is easy to see in the bucket.
+    tsdb_shipper:
+      active_index_directory: /var/loki/tsdb-index
+      cache_location: /var/loki/tsdb-cache
+
+  compactor:
+    working_directory: /var/loki/compactor
+    retention_enabled: true
+    delete_request_store: s3
+    # Deletes are applied after this delay; the safety margin before chunks go.
+    retention_delete_delay: 2h
+
+  limits_config:
+    # Default retention: 5 years (43800h). Brett asked for "much longer" than
+    # the 365d placeholder; this is long and cheap (the QNAP has several TB
+    # free and the log volume is small). Raise it in this one place.
+    retention_period: 43800h
+    # Per-stream overrides: host (journald) logs are kept 10 years; so are any
+    # streams carrying authentication logs (a future `signal_type="auth"`).
+    retention_stream:
+      - selector: '{signal_type="host"}'
+        priority: 1
+        period: 87600h
+      - selector: '{signal_type="auth"}'
+        priority: 2
+        period: 87600h
+    allow_structured_metadata: true
+    volume_enabled: true
+    # Home-cluster volumes: generous burst, modest steady state.
+    ingestion_rate_mb: 8
+    ingestion_burst_size_mb: 16
+    max_label_names_per_series: 15
+
+  # Reads S3 credentials from environment variables.
+  # (extraArgs below turns the substitution on.)
+
+  ingester:
+    # Long idle/age so small streams are written as fewer, larger chunks - and
+    # so a QNAP that sleeps or is briefly away leaves the data in the WAL.
+    chunk_idle_period: 1h
+    max_chunk_age: 2h
+    wal:
+      enabled: true
+      dir: /var/loki/wal
+      replay_memory_ceiling: 400MB
+
+  server:
+    http_listen_port: 3100
+    grpc_server_max_recv_msg_size: 16777216
+    grpc_server_max_send_msg_size: 16777216
+
+singleBinary:
+  replicas: 1
+  # Credentials for S3 (from the SealedSecret in the garage manifests).
+  extraEnvFrom:
+    - secretRef:
+        name: garage-secrets
+  extraArgs:
+    - -config.expand-env=true
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: longhorn
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      memory: 1Gi
+
+# Everything below is switched off: this is a small single-binary install, not
+# the scalable one.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+ingester:
+  replicas: 0
+querier:
+  replicas: 0
+queryFrontend:
+  replicas: 0
+queryScheduler:
+  replicas: 0
+distributor:
+  replicas: 0
+compactor:
+  replicas: 0
+indexGateway:
+  replicas: 0
+bloomCompactor:
+  replicas: 0
+bloomGateway:
+  replicas: 0
+
+minio:
+  enabled: false
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+monitoring:
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false
+  serviceMonitor:
+    enabled: false
+  lokiCanary:
+    enabled: false
+sidecar:
+  rules:
+    enabled: false
+rbac:
+  sccEnabled: false

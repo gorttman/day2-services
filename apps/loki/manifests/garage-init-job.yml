@@ -1,0 +1,89 @@
+# One-shot, idempotent setup of Garage after every sync: assigns the node its
+# storage role, creates the "loki" bucket, imports the access key Loki uses
+# (the same key pair is in the SealedSecret, so nothing is generated at
+# runtime), and grants that key read/write on the bucket. Safe to re-run: each
+# step checks first.
+#
+# Uses Garage's admin API (v2) rather than the garage CLI because the Garage
+# image has no shell. ArgoCD runs it as a PostSync hook and removes the old Job
+# before creating a new one.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: garage-init
+  namespace: loki
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: python:3.12-alpine
+          envFrom:
+            - secretRef:
+                name: garage-secrets
+          command: ["python3", "-u", "-c"]
+          args:
+            - |
+              import json, os, time, urllib.request, urllib.error
+              BASE = "http://garage.loki.svc.cluster.local:3903/v2/"
+              HDR = {"Authorization": "Bearer " + os.environ["GARAGE_ADMIN_TOKEN"],
+                     "Content-Type": "application/json"}
+
+              def call(method, path, body=None):
+                  data = json.dumps(body).encode() if body is not None else None
+                  req = urllib.request.Request(BASE + path, data=data, headers=HDR, method=method)
+                  with urllib.request.urlopen(req, timeout=20) as r:
+                      txt = r.read().decode()
+                      return json.loads(txt) if txt else {}
+
+              for i in range(60):
+                  try:
+                      status = call("GET", "GetClusterStatus")
+                      break
+                  except Exception as e:
+                      print("waiting for garage:", e)
+                      time.sleep(5)
+              else:
+                  raise SystemExit("garage never answered")
+
+              node = status["nodes"][0]["id"]
+              layout = call("GET", "GetClusterLayout")
+              if not layout.get("roles"):
+                  call("POST", "UpdateClusterLayout",
+                       {"roles": [{"id": node, "zone": "home", "capacity": 2000000000000, "tags": ["qnap-cold"]}]})
+                  call("POST", "ApplyClusterLayout", {"version": layout["version"] + 1})
+                  print("layout applied")
+              else:
+                  print("layout already set")
+
+              bucket = "loki"
+              bid = None
+              for b in call("GET", "ListBuckets"):
+                  if bucket in (b.get("globalAliases") or []):
+                      bid = b["id"]
+              if bid is None:
+                  bid = call("POST", "CreateBucket", {"globalAlias": bucket})["id"]
+                  print("bucket created")
+              else:
+                  print("bucket exists")
+
+              kid = os.environ["S3_ACCESS_KEY_ID"]
+              if kid not in [k["id"] for k in call("GET", "ListKeys")]:
+                  call("POST", "ImportKey", {"accessKeyId": kid,
+                                             "secretAccessKey": os.environ["S3_SECRET_ACCESS_KEY"],
+                                             "name": "loki"})
+                  print("key imported")
+              else:
+                  print("key exists")
+
+              call("POST", "AllowBucketKey", {"bucketId": bid, "accessKeyId": kid,
+                                              "permissions": {"read": True, "write": True, "owner": True}})
+              print("key allowed on bucket; done")
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}

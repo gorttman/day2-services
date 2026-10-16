@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: loki
+
+# Garage (the S3 server Loki stores its chunks and index in) and its
+# one-shot setup Job. The namespace itself is created by the Application
+# (CreateNamespace=true), same as the other day2 apps that don't declare one.
+resources:
+  - garage-sealed-secret.yml
+  - garage-config.yml
+  - garage-statefulset.yml
+  - garage-service.yml
+  - garage-init-job.yml
