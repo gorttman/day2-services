@@ -9,3 +9,4 @@ resources:
   - reports-deployment.yml
   - reports-service.yml
   - reports-ingress.yml
+  - reports-control-ingress.yml

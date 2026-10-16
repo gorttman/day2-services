@@ -1,0 +1,27 @@
+# Internal-only control page: no Cloudflare Tunnel entry, DNS in dns-conf
+# (Pi-hole -> Traefik VIP). Same reports server, host-routed in server.py.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reports-control
+  namespace: reports
+  labels: {app: reports, app.kubernetes.io/name: reports, argocd.argoproj.io/managed-by: argocd}
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - control.i3sec.com.au
+    secretName: control-tls
+  rules:
+  - host: control.i3sec.com.au
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: reports
+            port:
+              number: 80
