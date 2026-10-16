@@ -1,0 +1,29 @@
+# Read-only view of pods and nodes for the /placement/ report (reports-cm.yml,
+# server.py). No write verbs, no secrets, no exec.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: reports
+  namespace: reports
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: reports-placement-read
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: reports-placement-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: reports-placement-read
+subjects:
+  - kind: ServiceAccount
+    name: reports
+    namespace: reports

@@ -27,6 +27,9 @@ data:
                                backup-dashboard app, moved here unchanged)
       /todo/                   long-term watchlist/todo register, reads
                                todo-register.json
+      /placement/              nodes -> pods -> containers, read live from the
+                               Kubernetes API (read-only ServiceAccount)
+      /api/placement           the same as JSON
       /api/backups             the backup report's overall verdict as JSON,
                                for the landing page's status line
       /api/media               the same for the media report, summarised from
@@ -67,10 +70,11 @@ data:
         "/consolidation/consolidation-register.json": ("consolidation-register.json", "application/json"),
         "/todo/": ("todo.html", "text/html; charset=utf-8"),
         "/todo/todo-register.json": ("todo-register.json", "application/json"),
+        "/placement/": ("placement.html", "text/html; charset=utf-8"),
     }
     # The subscriptions page fetches subscriptions.json relative to itself, so
     # it must be served from a trailing-slash URL.
-    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/", "/icloud-migration": "/icloud-migration/", "/consolidation": "/consolidation/", "/todo": "/todo/"}
+    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/", "/icloud-migration": "/icloud-migration/", "/consolidation": "/consolidation/", "/todo": "/todo/", "/placement": "/placement/"}
 
     ORDER = {"good": 0, "warn": 1, "crit": 2}
 
@@ -105,6 +109,87 @@ data:
                 "generated": d.get("generated"),
             }
             _media_cache.update(at=time.time(), value=value)
+            return value
+
+
+    # Read-only view of the cluster for /placement/, via the pod's own
+    # ServiceAccount (reports-rbac.yml: get/list on pods and nodes only).
+    # Held for 10 seconds so a page refresh does not hit the API every time.
+    KUBE_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    PLACE_TTL = 10
+    _place_cache = {"at": 0.0, "value": None}
+    _place_lock = threading.Lock()
+
+
+    def kube_get(path):
+        import os
+        import ssl
+        host = os.environ["KUBERNETES_SERVICE_HOST"]
+        port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+        token = Path(KUBE_DIR, "token").read_text().strip()
+        ctx = ssl.create_default_context(cafile=f"{KUBE_DIR}/ca.crt")
+        req = urllib.request.Request(f"https://{host}:{port}{path}", headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as resp:
+            return json.load(resp)
+
+
+    def container_view(spec_name, image, st):
+        state = (st or {}).get("state") or {}
+        if "running" in state:
+            ok = st.get("ready", False)
+            return {"name": spec_name, "image": image, "restarts": st.get("restartCount", 0),
+                    "state": "ok" if ok else "warn", "text": "running" if ok else "not ready"}
+        if "waiting" in state:
+            reason = state["waiting"].get("reason") or "waiting"
+            return {"name": spec_name, "image": image, "restarts": (st or {}).get("restartCount", 0),
+                    "state": "bad" if reason in ("CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull", "CreateContainerError") else "warn",
+                    "text": reason}
+        if "terminated" in state:
+            reason = state["terminated"].get("reason") or "terminated"
+            return {"name": spec_name, "image": image, "restarts": (st or {}).get("restartCount", 0),
+                    "state": "ok" if reason == "Completed" else "bad", "text": reason}
+        return {"name": spec_name, "image": image, "restarts": 0, "state": "warn", "text": "starting"}
+
+
+    def pod_view(p):
+        spec, status = p["spec"], p.get("status", {})
+        by_name = {c["name"]: c for c in status.get("containerStatuses", [])}
+        cons = [container_view(c["name"], c.get("image", ""), by_name.get(c["name"])) for c in spec.get("containers", [])]
+        phase = status.get("phase", "Unknown")
+        ready = sum(1 for c in cons if c["state"] == "ok" and c["text"] == "running")
+        if p["metadata"].get("deletionTimestamp"):
+            state, text = "warn", "Terminating"
+        elif phase == "Succeeded":
+            state, text = "ok", "Completed"
+        elif phase == "Failed":
+            state, text = "bad", status.get("reason") or "Failed"
+        elif any(c["state"] == "bad" for c in cons):
+            state, text = "bad", next(c["text"] for c in cons if c["state"] == "bad")
+        elif phase == "Running" and ready == len(cons):
+            state, text = "ok", "Running"
+        else:
+            state, text = "warn", phase
+        return {"ns": p["metadata"]["namespace"], "name": p["metadata"]["name"], "phase": phase,
+                "state": state, "text": text, "ready": f"{ready}/{len(cons)}", "containers": cons}
+
+
+    def placement():
+        with _place_lock:
+            if _place_cache["value"] and time.time() - _place_cache["at"] < PLACE_TTL:
+                return _place_cache["value"]
+            nodes = {}
+            for n in kube_get("/api/v1/nodes")["items"]:
+                ready = next((c["status"] == "True" for c in n["status"].get("conditions", []) if c["type"] == "Ready"), False)
+                ip = next((a["address"] for a in n["status"].get("addresses", []) if a["type"] == "InternalIP"), "")
+                nodes[n["metadata"]["name"]] = {"name": n["metadata"]["name"], "ip": ip, "ready": ready, "pods": []}
+            for p in kube_get("/api/v1/pods")["items"]:
+                node = p["spec"].get("nodeName") or "(not placed)"
+                nodes.setdefault(node, {"name": node, "ip": "", "ready": None, "pods": []})["pods"].append(pod_view(p))
+            out = sorted(nodes.values(), key=lambda n: n["name"])
+            for n in out:
+                n["pods"].sort(key=lambda x: (x["ns"], x["name"]))
+            value = {"generated": datetime.now(timezone.utc).isoformat(), "nodes": out}
+            _place_cache.update(at=time.time(), value=value)
             return value
 
 
@@ -172,6 +257,12 @@ data:
             if path == "/api/media":
                 try:
                     self.send(200, json.dumps(media_summary()).encode("utf-8"), "application/json")
+                except Exception as exc:  # noqa: BLE001
+                    self.send(502, json.dumps({"error": str(exc)[:300]}).encode("utf-8"), "application/json")
+                return
+            if path == "/api/placement":
+                try:
+                    self.send(200, json.dumps(placement()).encode("utf-8"), "application/json")
                 except Exception as exc:  # noqa: BLE001
                     self.send(502, json.dumps({"error": str(exc)[:300]}).encode("utf-8"), "application/json")
                 return
@@ -268,6 +359,11 @@ data:
           <p>Volumes filling up, critical workloads that are down, node load, and stalled migrations. Red means look at it.</p>
           <div class="status"><span class="pill">Grafana</span><span>Nothing is sent anywhere yet - check this page</span></div>
         </a>
+        <a class="card" href="/placement/" target="_blank" rel="noopener">
+          <h2>Where Things Run <span>→</span></h2>
+          <p>Every node, the pods on it and the containers inside each pod, read live from the cluster.</p>
+          <div class="status" id="place-status"><span class="pill">Loading</span></div>
+        </a>
         <a class="card" href="/todo/" target="_blank" rel="noopener">
           <h2>Long-term TODO <span>→</span></h2>
           <p>Things worth revisiting later: tools to re-check once they mature, ideas parked on purpose, no deadline attached.</p>
@@ -329,6 +425,13 @@ data:
       if (review) parts.push(["pill warn", `${review} to check`]);
       setStatus("subs-status", parts);
     }).catch(() => setStatus("subs-status", [["pill crit", "Unavailable"]]));
+
+    fetch("/api/placement", { cache: "no-store" }).then(r => r.json()).then(d => {
+      if (d.error) throw new Error(d.error);
+      const parts = d.nodes.map(n => ["", n.name + " " + n.pods.filter(p => p.phase !== "Succeeded").length]);
+      const bad = d.nodes.reduce((t, n) => t + n.pods.filter(p => p.state === "bad").length, 0);
+      setStatus("place-status", [bad ? ["pill warn", bad + " unhealthy"] : ["pill good", "All running"], ...parts]);
+    }).catch(() => setStatus("place-status", [["pill crit", "Unavailable"]]));
 
     fetch("/todo/todo-register.json", { cache: "no-store" }).then(r => r.json()).then(d => {
       const open = d.items.filter(i => i.status === "open").length;
@@ -1430,6 +1533,98 @@ data:
         {"id":"sd_card","name":"SD cards","expected":10,"processed":0,"note":"Not inventoried yet. Per card: label, camera, date range, ingested yes/no."}
       ]
     }
+  placement.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Where Things Run</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+    <style>
+    :root{--bg:#f3f5f4;--surface:#fff;--ink:#16201d;--muted:#5b6b66;--faint:#8a9994;--line:#d7dfdc;--accent:#1c6b56;
+      --good:#1f7a4d;--good-soft:#dcefe3;--warn:#a35f00;--warn-soft:#fbead0;--crit:#b3372b;--crit-soft:#f7dcd8;color-scheme:light}
+    @media (prefers-color-scheme:dark){:root{--bg:#0f1513;--surface:#171f1c;--ink:#e4ece9;--muted:#9cafa8;--faint:#6f817b;--line:#2a3632;--accent:#5cc4a3;
+      --good:#5cc48c;--good-soft:#1c3527;--warn:#e5a54b;--warn-soft:#3a2c16;--crit:#ef8579;--crit-soft:#3d1f1b;color-scheme:dark}}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;padding-inline:16px;padding-block:40px 48px}
+    main{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+    .eyebrow{font:500 11px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    h1{font:700 clamp(28px,4vw,40px)/1.1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.02em;margin:6px 0 0}
+    p.lede{color:var(--muted);margin:0;max-width:70ch}
+    .bar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:13.5px;color:var(--muted)}
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+    details{border-bottom:1px solid var(--line)}
+    .panel>details:last-child{border-bottom:0}
+    summary{cursor:pointer;list-style:none;display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px}
+    summary::-webkit-details-marker{display:none}
+    summary::before{content:"\25B8";color:var(--faint);margin-right:-4px}
+    details[open]>summary::before{content:"\25BE"}
+    summary>.l{flex:1;min-width:0;overflow-wrap:anywhere}
+    .node>summary{font-weight:600;font-size:16px;background:color-mix(in srgb,var(--line) 35%,transparent)}
+    .pods{padding-left:18px}
+    .pod>summary{font-size:14px;padding:9px 14px}
+    .cons{padding:2px 14px 10px 44px;display:grid;gap:4px;font-size:13px}
+    .con{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap}
+    .num,.img{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--muted)}
+    .chip{display:inline-block;font:500 11px/1 "IBM Plex Mono",monospace;padding:5px 8px;border-radius:5px;background:var(--line);color:var(--muted);white-space:nowrap}
+    .chip.good{background:var(--good-soft);color:var(--good)}
+    .chip.warn{background:var(--warn-soft);color:var(--warn)}
+    .chip.crit{background:var(--crit-soft);color:var(--crit)}
+    .ns{color:var(--faint)}
+    footer{font-size:12.5px;color:var(--faint);max-width:70ch}
+    label{cursor:pointer}
+    </style>
+    </head>
+    <body>
+    <main>
+      <header style="display:flex;flex-direction:column;gap:10px">
+        <div class="eyebrow">i3sec homelab · reports</div>
+        <h1>Where Things Run</h1>
+        <p class="lede">Each node, the pods running on it, and the containers inside each pod. Click to open. Read live from the cluster.</p>
+      </header>
+      <div class="bar"><span id="updated">Loading</span><label><input type="checkbox" id="fin"> show finished jobs</label></div>
+      <div class="panel" id="tree"></div>
+      <footer>Refreshes every 30 seconds. <a href="/">All reports</a>.</footer>
+    </main>
+    <script>
+    var OPEN=new Set(),DATA=null;
+    function esc(s){var d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML}
+    function chip(c,t){return '<span class="chip '+c+'">'+esc(t)+'</span>'}
+    function tag(img){var s=String(img||"");var i=s.lastIndexOf("/");return s.slice(i+1)}
+    function det(key,cls,sum,body){return '<details class="'+cls+'" data-k="'+esc(key)+'"'+(OPEN.has(key)?" open":"")+'><summary>'+sum+'</summary>'+body+'</details>'}
+    function render(){
+      if(!DATA)return;
+      var fin=document.getElementById("fin").checked,html="";
+      DATA.nodes.forEach(function(n){
+        var pods=n.pods.filter(function(p){return fin||p.phase!=="Succeeded"});
+        var bad=pods.filter(function(p){return p.state==="bad"}).length;
+        var run=pods.filter(function(p){return p.phase!=="Succeeded"}).length;
+        var head='<div class="l">'+esc(n.name)+' <span class="ns">'+esc(n.ip||"")+'</span></div>'
+          +'<div>'+(n.ready===false?chip("crit","Not ready"):"")+(bad?chip("warn",bad+" unhealthy"):"")+chip(bad||n.ready===false?"":"good",run+" pods")+'</div>';
+        var body='<div class="pods">'+pods.map(function(p){
+          var cs=p.containers.map(function(c){
+            return '<div class="con"><span>'+esc(c.name)+' <span class="img">'+esc(tag(c.image))+'</span></span><span>'
+              +(c.restarts?chip("warn",c.restarts+" restarts"):"")+" "+chip(c.state==="bad"?"crit":c.state==="ok"?"good":"",c.text)+'</span></div>'}).join("");
+          var s='<div class="l">'+esc(p.name)+' <span class="ns">'+esc(p.ns)+'</span></div><div>'+chip(p.state==="bad"?"crit":p.state==="ok"?"good":"",p.text)+" "+chip("",p.ready+" ready")+'</div>';
+          return det(n.name+"/"+p.ns+"/"+p.name,"pod",s,'<div class="cons">'+cs+'</div>')}).join("")+'</div>';
+        html+=det(n.name,"node",head,body);
+      });
+      document.getElementById("tree").innerHTML=html;
+    }
+    function load(){
+      fetch("/api/placement",{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){
+        if(d.error)throw new Error(d.error);
+        DATA=d;render();
+        document.getElementById("updated").textContent="Updated "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+      }).catch(function(e){document.getElementById("updated").textContent="Could not read the cluster: "+e.message});
+    }
+    document.addEventListener("toggle",function(e){var k=e.target.getAttribute&&e.target.getAttribute("data-k");if(!k)return;if(e.target.open)OPEN.add(k);else OPEN.delete(k)},true);
+    document.getElementById("fin").addEventListener("change",render);
+    load();setInterval(load,30000);
+    </script>
+    </body>
+    </html>
   todo.html: |
     <!doctype html>
     <html lang="en">

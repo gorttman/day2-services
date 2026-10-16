@@ -29,6 +29,7 @@ spec:
       labels:
         app: reports
     spec:
+      serviceAccountName: reports
       nodeSelector:
         kubernetes.io/hostname: k8smaster
       containers:
