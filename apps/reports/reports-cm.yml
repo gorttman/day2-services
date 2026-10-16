@@ -1596,7 +1596,7 @@ data:
       <header style="display:flex;flex-direction:column;gap:10px">
         <div class="eyebrow">i3sec homelab · reports</div>
         <h1>Where Things Run</h1>
-        <p class="lede">Each node, the apps running on it, and the containers inside each app. Click to open. Read live from the cluster.</p>
+        <p class="lede">Each node, the applications running on it (one per namespace, e.g. Longhorn, Pi-hole), and the containers inside each. Click to open. Read live from the cluster.</p>
       </header>
       <div class="bar"><span id="updated">Loading</span><label><input type="checkbox" id="fin"> show finished jobs</label></div>
       <div class="panel" id="tree"></div>
@@ -1617,21 +1617,22 @@ data:
       DATA.nodes.forEach(function(n){
         var pods=n.pods.filter(function(p){return fin||p.phase!=="Succeeded"});
         var apps={};
-        pods.forEach(function(p){var k=p.ns+"/"+p.app;(apps[k]=apps[k]||{ns:p.ns,name:p.app,pods:[]}).pods.push(p)});
+        pods.forEach(function(p){var k=p.ns;(apps[k]=apps[k]||{ns:p.ns,name:p.ns,pods:[]}).pods.push(p)});
         var list=Object.keys(apps).map(function(k){return apps[k]}).sort(function(a,b){
           return (SYS[a.ns]?1:0)-(SYS[b.ns]?1:0)||a.ns.localeCompare(b.ns)||a.name.localeCompare(b.name)});
         var bad=list.filter(function(a){return worst(a.pods.map(function(p){return p.state}))==="bad"}).length;
         var head='<div class="l">'+esc(n.name)+' <span class="ns">'+esc(n.ip||"")+'</span></div>'
           +'<div>'+(n.ready===false?chip("crit","Not ready"):"")+(bad?chip("warn",bad+" unhealthy"):"")+chip(bad||n.ready===false?"":"good",list.length+" apps")+'</div>';
         var body='<div class="pods">'+list.map(function(a){
-          var multi=a.pods.length>1;
+          var wl={};a.pods.forEach(function(p){wl[p.app]=(wl[p.app]||0)+1});
+          var nwl=Object.keys(wl).length;
           var st=worst(a.pods.map(function(p){return p.state}));
           var cons=[];a.pods.forEach(function(p){p.containers.forEach(function(c){cons.push({c:c,pod:p})})});
           var rows=cons.map(function(x){
-            return '<div class="con"><span>'+esc(x.c.name)+' <span class="img">'+esc(tag(x.c.image))+'</span>'+(multi?' <span class="ns">'+esc(x.pod.name)+'</span>':'')+'</span><span>'
+            return '<div class="con"><span>'+esc(x.c.name)+' <span class="img">'+esc(tag(x.c.image))+'</span>'+(nwl>1||wl[x.pod.app]>1?' <span class="ns">'+esc(x.pod.app)+(wl[x.pod.app]>1?' \u00b7 '+esc(x.pod.name.slice(x.pod.app.length)):'')+'</span>':'')+'</span><span>'
               +(x.c.restarts?chip("warn",x.c.restarts+" restarts"):"")+" "+chip(cls(x.c.state),x.c.text)+'</span></div>'}).join("");
-          var text=multi?a.pods.length+" pods":a.pods[0].text;
-          var s='<div class="l">'+esc(a.name)+' <span class="ns">'+esc(a.ns)+'</span></div><div>'+chip(cls(st),text)+" "+chip("",cons.length+(cons.length===1?" container":" containers"))+'</div>';
+          var text=a.pods.length>1?(st==="ok"?"all running":a.pods.filter(function(p){return p.state!=="ok"}).length+" need a look"):a.pods[0].text;
+          var s='<div class="l">'+esc(a.name)+' <span class="ns">'+nwl+(nwl===1?" workload":" workloads")+'</span></div><div>'+chip(cls(st),text)+" "+chip("",cons.length+(cons.length===1?" container":" containers"))+'</div>';
           return det(n.name+"/"+a.ns+"/"+a.name,"pod",s,'<div class="cons">'+rows+'</div>')}).join("")+'</div>';
         html+=det(n.name,"node",head,body);
       });
