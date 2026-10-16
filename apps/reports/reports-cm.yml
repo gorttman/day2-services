@@ -1691,7 +1691,8 @@ data:
     document.getElementById("closeall").addEventListener("click",function(){setAll(false)});
     var known={};
     SECTIONS.forEach(function(sec){sec[1].forEach(function(x){try{known[new URL(x[2]).hostname]=1}catch(e){}})});
-    known["backup-status"+D]=1;known["control"+D]=1;
+    // Aliases of a site that already has a tile (not separate sites).
+    known["backup-status"+D]=1;known["control"+D]=1;known["books"+D]=1;
     function draw(extra){
       var html=SECTIONS.map(function(sec){return section(sec[0],sec[1].map(function(x){return tile(x[0],x[1],x[2])}).join(""),sec[1].length)}).join("");
       if(extra.length)html+=section("Other sites (found automatically)",extra.map(function(h){return tile(h.replace(D,""),"Not named yet",H+h+"/")}).join(""),extra.length);
