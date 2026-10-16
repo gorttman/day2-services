@@ -1,0 +1,54 @@
+name: Mirror upstream images to ghcr.io
+
+# Copies third-party images the cluster runs (logging stack, 2026-10-17) into
+# ghcr.io/<owner>/<name>, so the cluster no longer depends on Docker Hub still
+# serving them. A copy, not a build: each image is taken by digest, so exactly
+# the bytes that were checked are mirrored; all platforms are kept.
+#
+# The source annotation links each package to this (public) repository, which
+# makes the package public too - the nodes pull with no registry credential.
+#
+# Runs when this file changes or on manual dispatch. To mirror another image or
+# a newer version: add a line to the matrix and push.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mirror-upstream-images.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: loki, tag: "3.6.12", source: "docker.io/grafana/loki@sha256:2483b71b28b15dee230f85512cae2b20c4b5f6e98a6eabe686cbccfa5ea3ba4a"}
+          - {name: alloy, tag: "v1.20.1", source: "docker.io/grafana/alloy@sha256:2aa2099af76c0098d4af7a4d6e48f86cb66dc1a000222ad927a1c67c6542d13f"}
+          - {name: garage, tag: "v2.3.0", source: "docker.io/dxflrs/garage@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690"}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy ${{ matrix.name }}
+        run: |
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --tag "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.tag }}" \
+            "${{ matrix.source }}"
+
+      - name: Show result
+        run: docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.tag }}" | head -8
