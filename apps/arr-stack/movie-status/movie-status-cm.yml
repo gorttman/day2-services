@@ -613,6 +613,87 @@ data:
         ]
 
 
+    ALERT_STATE = os.environ.get("ALERT_STATE", "/state/alert_state.json")
+    ALERT_LOCK = threading.Lock()
+
+
+    def kube_get(path):
+        with open(SA_DIR + "/token") as f:
+            token = f.read().strip()
+        req = urllib.request.Request("https://kubernetes.default.svc" + path,
+                                     headers={"Authorization": "Bearer " + token})
+        with urllib.request.urlopen(
+                req, context=ssl.create_default_context(cafile=SA_DIR + "/ca.crt"), timeout=15) as r:
+            return json.load(r)
+
+
+    def alert_signals():
+        """Two numbers for Grafana, scraped by Telegraf every 5 minutes.
+
+        stuckOldestHours  how long the longest-stuck queue item has been
+                          stuck, across Radarr, Sonarr and Whisparr. First
+                          sighting is recorded in the state file, because
+                          the *arrs do not say when an item got stuck.
+                          Items the Clear button handles count too: if
+                          queue-clear is working they vanish within 30
+                          minutes, so one that lingers means it is not.
+        restarts24h       arr-stack restart events in the last 24 hours:
+                          container restarts (restartCount going up) plus
+                          pod replacements (a new pod UID, which is what a
+                          VPN peer rotation or a deploy does and which
+                          restartCount never shows).
+
+        State is a small JSON file on the state PVC, so the history
+        survives a movie-status restart. Each scrape is one sample.
+        """
+        now = time.time()
+        with ALERT_LOCK:
+            try:
+                with open(ALERT_STATE) as f:
+                    st = json.load(f)
+            except Exception:
+                st = {}
+            # --- stuck items -------------------------------------------
+            main, bulk, free, rflag, rq, rflight = movie_side()
+            tv = tv_side()
+            try:
+                wflag = flagged_of(arr_queue("whisparr"))
+            except Exception:
+                wflag = []
+            titles = {f["title"] for f in rflag + tv["flagged"] + wflag}
+            seen = st.get("stuckSince", {})
+            seen = {t: seen.get(t, now) for t in titles}
+            oldest = max((now - v for v in seen.values()), default=0) / 3600.0
+            # --- restarts ----------------------------------------------
+            events = st.get("events", [])
+            last = st.get("pods", {})
+            pods = kube_get("/api/v1/namespaces/%s/pods?labelSelector=app%%3Darr-stack" %
+                            open(SA_DIR + "/namespace").read().strip())["items"]
+            cur = {}
+            for pod in pods:
+                if pod["metadata"].get("deletionTimestamp"):
+                    continue
+                uid = pod["metadata"]["uid"]
+                cur[uid] = {c["name"]: c.get("restartCount", 0)
+                            for c in pod["status"].get("containerStatuses", [])}
+            if last:
+                for uid, counts in cur.items():
+                    if uid not in last:
+                        events.append({"t": now, "what": "new pod"})
+                        continue
+                    for name, n in counts.items():
+                        for _ in range(max(0, n - last[uid].get(name, n))):
+                            events.append({"t": now, "what": "restart " + name})
+            events = [e for e in events if now - e["t"] < 86400]
+            st.update({"stuckSince": seen, "events": events, "pods": cur})
+            tmp = ALERT_STATE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(st, f)
+            os.replace(tmp, ALERT_STATE)
+        return {"stuckCount": len(titles), "stuckOldestHours": round(oldest, 2),
+                "restarts24h": len(events)}
+
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -645,6 +726,11 @@ data:
             if self.path.startswith("/api/status"):
                 try:
                     self._send(200, json.dumps(collect()), "application/json")
+                except Exception as e:
+                    self._send(500, json.dumps({"error": str(e)[:300]}), "application/json")
+            elif self.path == "/api/alerts":
+                try:
+                    self._send(200, json.dumps(alert_signals()), "application/json")
                 except Exception as e:
                     self._send(500, json.dumps({"error": str(e)[:300]}), "application/json")
             elif self.path == "/healthz":

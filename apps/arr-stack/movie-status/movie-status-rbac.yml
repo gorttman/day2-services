@@ -21,6 +21,10 @@ rules:
     resources: ["cronjobs"]
     resourceNames: ["radarr-upgrade-search", "radarr-upgrade-digest", "download-stall-watch", "queue-clear", "jellyfin-notify"]
     verbs: ["get"]
+  # Restart counting for /api/alerts (arr-stack pod + container restarts).
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
