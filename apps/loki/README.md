@@ -54,7 +54,7 @@ the Pi cluster.
 ## Files
 
 - `loki-app.yml`, `loki-values.yml` - Loki chart.
-- `manifests/` - Garage: config, StatefulSet, Services, setup Job, sealed secret.
+- `../garage/` - Garage: config, StatefulSet, Services, setup Job, sealed secret.
 - `../alloy/` - the collector.
 - Grafana datasource (`loki-pilab`) and dashboard: day1-foundation `apps/grafana`.
 

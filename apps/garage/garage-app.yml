@@ -1,0 +1,26 @@
+# Garage: the S3-compatible object store behind Loki (namespace loki, shared
+# with the loki app). Data on the QNAP /cold export, metadata on a Longhorn
+# volume. Its setup Job (garage-init) runs after each sync as a PostSync hook,
+# creating the "loki" bucket and key; Loki (apps/loki) needs that to be healthy.
+# Design notes: apps/loki/README.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: garage
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: loki
+  source:
+    repoURL: https://github.com/gorttman/day2-services.git
+    targetRevision: main
+    path: apps/garage
+  syncPolicy:
+    automated:
+      # prune off: the bucket is the log history.
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

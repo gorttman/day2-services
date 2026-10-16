@@ -53,5 +53,6 @@ resources:
 # Cluster logging (added 2026-10-17): Loki + Garage (S3 on the QNAP /cold
 # export) store logs, Alloy ships them from every node. Grafana reads Loki
 # through the datasource in day1-foundation. See loki/README.md.
+  - garage/garage-app.yml
   - loki/loki-app.yml
   - alloy/alloy-app.yml

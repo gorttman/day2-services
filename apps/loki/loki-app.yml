@@ -1,8 +1,9 @@
-# Loki log store + Garage (its S3 object store). Three sources:
-#   1. the grafana/loki Helm chart (version pinned - 7.3.0 is Loki 3.6.12),
-#   2. the Garage manifests in manifests/ (kustomize),
-#   3. this repo again, only to expose loki-values.yml to the chart as $values.
-# Fluent Bit (the collector) is its own app: apps/fluent-bit.
+# Loki log store. Two sources: the grafana/loki Helm chart (version pinned -
+# 7.3.0 is Loki 3.6.12) and this repo, only to expose loki-values.yml to the
+# chart as $values.
+# Its S3 object store, Garage, is its own app (apps/garage, same namespace):
+# Loki cannot become healthy until Garage's setup Job has made the bucket, so
+# the two must not be one sync. The collector is apps/alloy.
 # Design and decisions: README.md in this folder.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -19,9 +20,6 @@ spec:
         releaseName: loki
         valueFiles:
           - $values/apps/loki/loki-values.yml
-    - repoURL: https://github.com/gorttman/day2-services.git
-      targetRevision: main
-      path: apps/loki/manifests
     - repoURL: https://github.com/gorttman/day2-services.git
       targetRevision: main
       ref: values
