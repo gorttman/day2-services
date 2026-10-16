@@ -1604,7 +1604,18 @@ data:
     main{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
     .eyebrow{font:500 11px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
     h1{font:700 clamp(30px,5vw,44px)/1.1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.02em;margin:6px 0 0}
-    h2{font:700 18px/1.2 "Bricolage Grotesque",system-ui,sans-serif;margin:0 0 10px}
+    h2{font:700 18px/1.2 "Bricolage Grotesque",system-ui,sans-serif;margin:0}
+    #sections{display:flex;flex-direction:column;gap:12px}
+    details{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+    summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:center;padding:12px 14px}
+    summary::-webkit-details-marker{display:none}
+    summary::before{content:"\25B8";color:var(--faint)}
+    details[open]>summary::before{content:"\25BE"}
+    summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:10px}
+    .c{margin-left:auto;font:500 11px/1 "IBM Plex Mono",ui-monospace,monospace;color:var(--faint)}
+    details>.grid{padding:0 14px 14px}
+    .bar{display:flex;gap:14px;font-size:13px}
+    .bar button{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font:inherit;text-decoration:underline}
     p.lede{color:var(--muted);margin:6px 0 0;max-width:70ch}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
     a.tile{display:flex;flex-direction:column;gap:2px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;color:inherit;text-decoration:none}
@@ -1623,6 +1634,7 @@ data:
         <h1>Control</h1>
         <p class="lede">Every report and admin site in one place. Home network only.</p>
       </header>
+      <div class="bar"><button id="openall" type="button">Expand all</button><button id="closeall" type="button">Collapse all</button></div>
       <div id="sections"></div>
       <footer id="foot">Sites listed under "Other sites" were found automatically from the cluster and just need a name added here.</footer>
     </main>
@@ -1667,13 +1679,22 @@ data:
     function esc(x){var d=document.createElement("div");d.textContent=x==null?"":String(x);return d.innerHTML}
     function tile(t,d,u){var h=u.replace(/^https?:\/\//,"").replace(/\/$/,"");
       return '<a class="tile" href="'+esc(u)+'" target="_blank" rel="noopener"><span class="t">'+esc(t)+'</span><span class="d">'+esc(d)+'</span><span class="h">'+esc(h)+'</span></a>'}
-    function section(name,tiles){return '<section><h2>'+esc(name)+'</h2><div class="grid">'+tiles+'</div></section>'}
+    var KEY="control-open",st={};
+    try{st=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
+    var DEFAULT_OPEN={"Reports":1,"Cluster and storage":1};
+    function isOpen(n){return n in st?st[n]:!!DEFAULT_OPEN[n]}
+    function section(name,tiles,count){return '<details data-n="'+esc(name)+'"'+(isOpen(name)?' open':'')+'><summary><h2>'+esc(name)+'</h2><span class="c">'+count+(count===1?' site':' sites')+'</span></summary><div class="grid">'+tiles+'</div></details>'}
+    function save(){try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}}
+    document.addEventListener("toggle",function(e){var n=e.target.getAttribute&&e.target.getAttribute("data-n");if(!n)return;st[n]=e.target.open;save()},true);
+    function setAll(v){var d=document.querySelectorAll("details[data-n]");for(var i=0;i<d.length;i++){d[i].open=v}}
+    document.getElementById("openall").addEventListener("click",function(){setAll(true)});
+    document.getElementById("closeall").addEventListener("click",function(){setAll(false)});
     var known={};
     SECTIONS.forEach(function(sec){sec[1].forEach(function(x){try{known[new URL(x[2]).hostname]=1}catch(e){}})});
     known["backup-status"+D]=1;known["control"+D]=1;
     function draw(extra){
-      var html=SECTIONS.map(function(sec){return section(sec[0],sec[1].map(function(x){return tile(x[0],x[1],x[2])}).join(""))}).join("");
-      if(extra.length)html+=section("Other sites (found automatically)",extra.map(function(h){return tile(h.replace(D,""),"Not named yet",H+h+"/")}).join(""));
+      var html=SECTIONS.map(function(sec){return section(sec[0],sec[1].map(function(x){return tile(x[0],x[1],x[2])}).join(""),sec[1].length)}).join("");
+      if(extra.length)html+=section("Other sites (found automatically)",extra.map(function(h){return tile(h.replace(D,""),"Not named yet",H+h+"/")}).join(""),extra.length);
       document.getElementById("sections").innerHTML=html;
     }
     draw([]);
