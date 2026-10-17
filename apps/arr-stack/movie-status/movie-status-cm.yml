@@ -88,6 +88,23 @@ data:
     BULK_PROFILE = int(os.environ.get("BULK_PROFILE", "8"))
     SEARCH_BATCH = int(os.environ.get("SEARCH_BATCH", "50"))
     STUCK_HOURS = int(os.environ.get("STUCK_HOURS", "24"))
+    # Auto-feed: the unattended version of the "Search more midday movies"
+    # button. Searches the next batch only when the pipe has drained, never
+    # past FEED_MAX_TIER (Drama/Thriller tiers by default - Romance,
+    # Christmas and the rest stay on the manual button), and never more than
+    # FEED_MAX_PER_DAY titles in 24h so a runaway cannot burn the indexers'
+    # daily API allowance the way Radarr's own "Search All Missing" does.
+    FEED_MAX_TIER = int(os.environ.get("FEED_MAX_TIER", "2"))
+    FEED_MAX_INFLIGHT = int(os.environ.get("FEED_MAX_INFLIGHT", "12"))
+    FEED_MAX_PER_DAY = int(os.environ.get("FEED_MAX_PER_DAY", "200"))
+    FEED_MIN_FREE_TB = float(os.environ.get("FEED_MIN_FREE_TB", "2"))
+    # Auto-fix of "needs you" imports: only acts on items at least this old,
+    # so a normal import in progress is never raced.
+    FIX_MIN_HOURS = float(os.environ.get("FIX_MIN_HOURS", "2"))
+    # ISO UTC timestamp. Until then run_fiximports does nothing. Set while the
+    # stuck-download alert is being tested against deliberately-left items;
+    # an empty value disables the pause.
+    FIX_PAUSE_UNTIL = os.environ.get("FIX_PAUSE_UNTIL", "")
     # Tiering copied from ~/projects/movie-backfill/bulk_backfill.py, which remains the
     # source of truth - the button exists so a batch can be run without a
     # terminal, not to become a second, subtly different implementation.
@@ -467,37 +484,50 @@ data:
         }
 
 
-    def run_search(batch=None):
+    def load_bulk_state():
+        try:
+            with open(BULK_STATE) as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+
+    def run_search(batch=None, max_tier=None):
         """Search the next batch of missing midday movies, worst-first.
 
         Same selection and the same state file as bulk_backfill.py, so
         running this and running the script by hand cannot disagree about
-        what has already been tried.
+        what has already been tried. max_tier is for the unattended feed.
         """
         batch = batch or SEARCH_BATCH
         movies = [m for m in arr("radarr", "movie")
                   if m.get("rootFolderPath") == BULK_ROOT
                   and m.get("qualityProfileId") == BULK_PROFILE]
-        try:
-            with open(BULK_STATE) as f:
-                done = set(json.load(f).get("searched", []))
-        except Exception:
-            done = set()
+        state = load_bulk_state()
+        done = set(state.get("searched", []))
         missing = [m for m in movies if not m.get("hasFile")
                    and m.get("monitored") and m.get("isAvailable")]
-        todo = [m for m in missing if m["id"] not in done]
+        todo = [m for m in missing if m["id"] not in done
+                and (max_tier is None or tier_of(m) <= max_tier)]
         todo.sort(key=lambda m: (tier_of(m), -(m.get("year") or 0)))
         pick = todo[:batch]
         if not pick:
             return {"ok": True, "searched": 0, "remaining": 0,
-                    "message": "Nothing left to search - every missing title has been tried."}
+                    "message": "Nothing left to search - every missing title has been tried."
+                               if max_tier is None else
+                               "Nothing left to search in tiers 1-%d." % max_tier}
         ids = [m["id"] for m in pick]
         cmd = arr_post("radarr", "command", {"name": "MoviesSearch", "movieIds": ids})
         # State only after Radarr accepts the command, so a failure retries
         # the same batch rather than skipping it.
         done |= set(ids)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        week = (now - datetime.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        runs = [r for r in state.get("runs", []) if r[0] >= week]
+        runs.append([now.strftime("%Y-%m-%dT%H:%M:%SZ"), len(ids)])
+        state["searched"], state["runs"] = sorted(done), runs
         with open(BULK_STATE, "w") as f:
-            json.dump({"searched": sorted(done)}, f)
+            json.dump(state, f)
         tiers = {}
         for m in pick:
             t = "tier %d" % tier_of(m)
@@ -507,6 +537,160 @@ data:
                 "message": "Searching %d titles (%s). %d still unsearched."
                            % (len(ids), ", ".join("%s: %s" % kv for kv in sorted(tiers.items())),
                               len(todo) - len(ids))}
+
+
+    def run_feed():
+        """Search the next batch unattended, but only when the pipe has drained.
+
+        Replaces pressing the button every time a batch finished. Three
+        gates, each reported plainly so the CronJob log says why it waited:
+        downloads still in flight, disk space, and the 24h search cap.
+        """
+        busy = [r for r in arr_queue("radarr") if r.get("status") != "completed"]
+        if len(busy) > FEED_MAX_INFLIGHT:
+            return {"ok": True, "searched": 0, "message":
+                    "Waiting: %d downloads still in flight (feeds below %d)."
+                    % (len(busy), FEED_MAX_INFLIGHT + 1)}
+        roots = {r["path"]: r for r in arr("radarr", "rootfolder")}
+        free_tb = (roots.get(BULK_ROOT, {}).get("freeSpace") or 0) / 1e12
+        if free_tb < FEED_MIN_FREE_TB:
+            return {"ok": True, "searched": 0, "message":
+                    "Waiting: only %.1f TB free on the midday library (needs %.1f)."
+                    % (free_tb, FEED_MIN_FREE_TB)}
+        since = (datetime.datetime.now(datetime.timezone.utc)
+                 - datetime.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        last_day = sum(n for t, n in load_bulk_state().get("runs", []) if t >= since)
+        room = FEED_MAX_PER_DAY - last_day
+        if room <= 0:
+            return {"ok": True, "searched": 0, "message":
+                    "Waiting: %d titles already searched in the last 24h (cap %d)."
+                    % (last_day, FEED_MAX_PER_DAY)}
+        return run_search(batch=min(SEARCH_BATCH, room), max_tier=FEED_MAX_TIER)
+
+
+    def _norm(text):
+        return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
+    def run_fiximports():
+        """Resolve the 'needs you, not the button' queue items that are safe to.
+
+        Unattended form of the media-queue-fix skill, covering only the
+        cases where the right answer does not depend on judgement:
+
+          already imported / destination exists -> drop, keep file, ban nothing
+          no eligible files, library already has it -> drop, ban nothing
+          manual import required / matched by ID -> import, but only when
+            there is exactly one candidate, it has no rejections, and the
+            title it resolved to appears in the release name
+          archive never unpacked -> import if a playable file is in it,
+            blocklist only once it is clearly never going to unpack
+
+        Everything else is left alone and counted, so the stuck-download
+        alert still fires for the genuinely unknown ones. Never blocklists a
+        release that downloaded properly.
+        """
+        if FIX_PAUSE_UNTIL and datetime.datetime.now(datetime.timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ") < FIX_PAUSE_UNTIL:
+            return {"ok": True, "fixed": [], "left": [], "failed": [],
+                    "message": "Paused until %s." % FIX_PAUSE_UNTIL}
+        now = datetime.datetime.now(datetime.timezone.utc)
+        too_new = (now - datetime.timedelta(hours=FIX_MIN_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        give_up = (now - datetime.timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        fixed, left, failed = [], [], []
+
+        def remove(app, r, blocklist):
+            arr_delete(app, "queue/%s?removeFromClient=true&blocklist=%s&skipRedownload=false"
+                       % (r["id"], "true" if blocklist else "false"))
+
+        def has_file(app, r):
+            if app == "radarr":
+                return bool(r.get("movieId")) and bool(arr(app, "movie/%s" % r["movieId"]).get("hasFile"))
+            return bool(r.get("episodeId")) and bool(arr(app, "episode/%s" % r["episodeId"]).get("hasFile"))
+
+        def candidates(app, r):
+            return arr(app, "manualimport?downloadId=%s&filterExistingFiles=false" % r["downloadId"])
+
+        def importable(app, cands):
+            files = []
+            for c in cands:
+                if c.get("rejections"):
+                    continue
+                f = {"path": c["path"], "quality": c["quality"],
+                     "languages": c.get("languages") or [],
+                     "releaseGroup": c.get("releaseGroup") or "",
+                     "indexerFlags": c.get("indexerFlags") or 0,
+                     "downloadId": c.get("downloadId") or ""}
+                if app == "radarr":
+                    if not c.get("movie"):
+                        continue
+                    f["movieId"] = c["movie"]["id"]
+                else:
+                    if not c.get("series") or not c.get("episodes"):
+                        continue
+                    f["seriesId"] = c["series"]["id"]
+                    f["episodeIds"] = [e["id"] for e in c["episodes"]]
+                files.append(f)
+            return files
+
+        def title_ok(app, r, cands):
+            name = _norm(r.get("title"))
+            for c in cands:
+                t = (c.get("movie") if app == "radarr" else c.get("series")) or {}
+                if _norm(t.get("title")) not in name:
+                    return False
+            return True
+
+        for app in ("radarr", "sonarr"):
+            try:
+                recs = arr_queue(app)
+            except Exception as e:
+                failed.append({"app": app, "why": str(e)[:100]})
+                continue
+            for r in recs:
+                if r.get("status") != "completed" or r.get("trackedDownloadStatus") not in ("warning", "error"):
+                    continue
+                title = (r.get("title") or "?")[:90]
+                if (r.get("added") or "9999") > too_new:
+                    continue
+                blob = " ".join(m for x in r.get("statusMessages", [])
+                                for m in (x.get("messages") or [])).lower()
+                try:
+                    if "already been imported" in blob or "already exists" in blob:
+                        remove(app, r, False)
+                        fixed.append({"app": app, "title": title, "did": "dropped - library already has it"})
+                    elif "no files found are eligible" in blob:
+                        if has_file(app, r):
+                            remove(app, r, False)
+                            fixed.append({"app": app, "title": title,
+                                          "did": "dropped - finished download, library already has it"})
+                        else:
+                            left.append({"app": app, "title": title, "why": "files gone and no copy in the library"})
+                    elif "manual import required" in blob or "matched to" in blob or "archive file" in blob:
+                        cands = candidates(app, r)
+                        files = importable(app, cands)
+                        if files and len(files) == len(cands) and title_ok(app, r, cands):
+                            arr_post(app, "command", {"name": "ManualImport", "importMode": "auto",
+                                                      "files": files})
+                            fixed.append({"app": app, "title": title,
+                                          "did": "imported %d file(s)" % len(files)})
+                        elif "archive file" in blob and not cands and (r.get("added") or "9999") < give_up:
+                            remove(app, r, True)
+                            fixed.append({"app": app, "title": title,
+                                          "did": "blocklisted - archive never unpacked, nothing playable"})
+                        else:
+                            left.append({"app": app, "title": title,
+                                         "why": "needs a look - match not clear-cut"})
+                    else:
+                        left.append({"app": app, "title": title, "why": "unrecognised message"})
+                except Exception as e:
+                    failed.append({"app": app, "title": title, "why": str(e)[:100]})
+        msg = "Fixed %d needs-you items." % len(fixed)
+        if left:
+            msg += " %d left for a person." % len(left)
+        if failed:
+            msg += " %d errored." % len(failed)
+        return {"ok": True, "fixed": fixed, "left": left, "failed": failed, "message": msg}
 
 
     def run_unstick():
@@ -713,7 +897,8 @@ data:
             # search costs indexer queries, an unstick blocklists releases
             # that were already failing. Worth knowing before it is ever
             # exposed more widely.
-            actions = {"/api/run/search": run_search, "/api/run/unstick": run_unstick}
+            actions = {"/api/run/search": run_search, "/api/run/unstick": run_unstick,
+                       "/api/run/feed": run_feed, "/api/run/fiximports": run_fiximports}
             fn = actions.get(self.path.split("?")[0])
             if not fn:
                 return self._send(404, json.dumps({"error": "no such action"}), "application/json")

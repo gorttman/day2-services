@@ -10,7 +10,9 @@
 # ("Manual Import required", "already imported") is deliberately left
 # alone - stuck_reason() returns None for those - because blocklisting
 # a release that actually worked bans a good release for nothing. That
-# case still needs a person; see the media-queue-fix skill.
+# case is handled by the second step (fiximports), which only acts where
+# the right answer is not a judgement call. The third step feeds the next
+# batch of midday-movie searches once the previous one has drained.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -23,19 +25,32 @@ metadata:
 data:
   queue_clear.py: |
     #!/usr/bin/env python3
+    # Three steps, in order, each independent so one failing does not stop
+    # the others:
+    #   unstick     clear dead downloads (the board's Clear button)
+    #   fiximports  resolve the safe "needs you" items (see run_fiximports)
+    #   feed        search the next 50 midday movies if the pipe has drained
     import json
-    import sys
     import urllib.error
     import urllib.request
 
-    URL = "http://movie-status.arr-stack.svc.cluster.local/api/run/unstick"
+    BASE = "http://movie-status.arr-stack.svc.cluster.local/api/run/"
+    rc = 0
 
-    try:
-        with urllib.request.urlopen(urllib.request.Request(URL, method="POST"), timeout=60) as r:
-            body = json.load(r)
-    except urllib.error.URLError as e:
-        sys.exit("queue-clear: could not reach movie-status: %s" % e)
-
-    print(body.get("message", json.dumps(body)))
-    for f in body.get("failed", []):
-        print("FAILED: %s %s - %s" % (f.get("app"), f.get("title", ""), f.get("why")))
+    for step, timeout in (("unstick", 60), ("fiximports", 240), ("feed", 120)):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(BASE + step, method="POST"),
+                                        timeout=timeout) as r:
+                body = json.load(r)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            print("%s: FAILED - %s" % (step, e))
+            rc = 1
+            continue
+        print("%s: %s" % (step, body.get("message", json.dumps(body))))
+        for key in ("fixed", "left", "failed"):
+            for f in body.get(key, []):
+                print("  %s %s %s - %s" % (key, f.get("app", ""), f.get("title", ""),
+                                           f.get("did") or f.get("why", "")))
+        for f in body.get("failed", []) if step == "unstick" else []:
+            rc = 1
+    raise SystemExit(rc)

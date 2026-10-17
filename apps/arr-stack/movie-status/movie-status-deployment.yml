@@ -76,6 +76,11 @@ spec:
             # own default list would otherwise silently omit queue-clear.
             - {name: CRONJOBS, value: "radarr-upgrade-search,radarr-upgrade-digest,download-stall-watch,queue-clear,jellyfin-notify"}
             - {name: TZ, value: Australia/Sydney}
+            # The needs-you auto-fixer stays off until 16:00 AEDT on 18 Oct
+            # so the stuck-download alert can be tested against the 8
+            # deliberately-left items first. Harmless once the time passes;
+            # delete the line whenever convenient.
+            - {name: FIX_PAUSE_UNTIL, value: "2026-10-18T05:00:00Z"}
           volumeMounts:
             - {name: app, mountPath: /app, readOnly: true}
             - {name: radarr-config, mountPath: /app-config/radarr, readOnly: true}
