@@ -229,7 +229,7 @@ alloy:
           values = { udm_class = "event" }
         }
         stage.match {
-          selector = "{app=\"udm\"} |~ \"(hostapd|wevent|mcad|stahtd|LLDP|kernel:|\\[wifi|Gateway \\[[A-Z_]+-[A-Z]+-[0-9]+\\])\""
+          selector = "{app=\"udm\"} |~ `(hostapd|wevent|mcad|stahtd|LLDP|kernel:|\\[wifi|Gateway \\[[A-Z_]+-[A-Z]+-[0-9]+\\])`"
           stage.static_labels {
             values = { udm_class = "chatter" }
           }
