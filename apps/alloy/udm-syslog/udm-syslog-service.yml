@@ -1,0 +1,20 @@
+# Receiver address for UDM syslog (UDM -> 192.168.20.231:514 -> any Alloy pod).
+# One fixed VIP so the UDM setting never depends on which node holds a pod.
+# externalTrafficPolicy Local keeps the sender's source IP and routes only to
+# pods on the node MetalLB announces from; every node runs an Alloy pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: alloy-syslog
+  namespace: alloy
+  annotations:
+    metallb.io/loadBalancerIPs: 192.168.20.231
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/instance: alloy
+  ports:
+    - {name: syslog-udp, port: 514, targetPort: 1514, protocol: UDP}
+    - {name: syslog-tcp, port: 514, targetPort: 1514, protocol: TCP}

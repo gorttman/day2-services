@@ -185,3 +185,35 @@ alloy:
           url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
         }
       }
+
+      // ---- UDM syslog -----------------------------------------------------
+      // Network-device syslog, received on 1514 (UDP + TCP) in every Alloy pod.
+      // A LoadBalancer Service (apps/alloy/udm-syslog) maps 192.168.20.231:514
+      // onto whichever pods are up. UniFi sends RFC 3164 over UDP.
+      loki.source.syslog "udm" {
+        listener {
+          address       = "0.0.0.0:1514"
+          protocol      = "udp"
+          syslog_format = "rfc3164"
+          use_incoming_timestamp = true
+          labels = {
+            cluster     = "pilab",
+            signal_type = "network",
+            namespace   = "network",
+            app         = "udm",
+          }
+        }
+        listener {
+          address       = "0.0.0.0:1514"
+          protocol      = "tcp"
+          syslog_format = "rfc3164"
+          use_incoming_timestamp = true
+          labels = {
+            cluster     = "pilab",
+            signal_type = "network",
+            namespace   = "network",
+            app         = "udm",
+          }
+        }
+        forward_to = [loki.write.default.receiver]
+      }
