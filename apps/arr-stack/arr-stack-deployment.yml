@@ -130,16 +130,17 @@ spec:
         # rundown and what to do if a manual re-registration is ever
         # needed instead.
         # Admit the arr UIs through gluetun's firewall (inbound)
-        # 6969 added 2026-08-27 for whisparr.
+        # 6969 added 2026-08-27 for whisparr. 8000 = gluetun control server
+        # (API-key auth; the vpn-healer swaps the VPN peer in place via it).
         - name: FIREWALL_INPUT_PORTS
-          value: "8989,7878,9696,8080,8090,6767,5800,5299,6969"
+          value: "8989,7878,9696,8080,8090,6767,5800,5299,6969,8000"
         # Keep cluster traffic (DNS, kubelet probes, pod/svc CIDRs) off the VPN
         - name: FIREWALL_OUTBOUND_SUBNETS
           value: "10.42.0.0/16,10.43.0.0/16"
         volumeMounts:
         - name: dev-net-tun
           mountPath: /dev/net/tun
-        - name: gluetun-auth
+        - name: gluetun-control
           mountPath: /gluetun/auth/config.toml
           subPath: config.toml
           readOnly: true
@@ -549,9 +550,10 @@ spec:
           requests: {memory: "32Mi", cpu: "10m"}
           limits: {memory: "128Mi", cpu: "200m"}
       volumes:
-      - name: gluetun-auth
-        configMap:
-          name: gluetun-auth
+      - name: gluetun-control
+        secret:
+          secretName: gluetun-control
+          items: [{key: config.toml, path: config.toml}]
       - name: dev-net-tun
         hostPath:
           path: /dev/net/tun

@@ -76,6 +76,9 @@ spec:
                 - name: pia-credentials
                   mountPath: /run/secrets/pia
                   readOnly: true
+                - name: gluetun-control
+                  mountPath: /run/secrets/gluetun-control
+                  readOnly: true
                 - name: git-deploy-key
                   mountPath: /run/secrets/git-deploy-key
                   readOnly: true
@@ -86,6 +89,10 @@ spec:
             - name: pia-credentials
               secret:
                 secretName: pia-account-credentials
+            - name: gluetun-control
+              secret:
+                secretName: gluetun-control
+                items: [{key: apikey, path: apikey}]
             - name: git-deploy-key
               secret:
                 secretName: vpn-healer-git-deploy-key

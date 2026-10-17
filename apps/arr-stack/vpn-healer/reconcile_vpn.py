@@ -26,7 +26,8 @@ proactive, catches retirement before gluetun even notices; backup:
 scan gluetun's recent logs for a sustained restart loop, to catch
 other failure causes too). If stale, redoes the registration, patches
 the live gluetun-config ConfigMap and gluetun-vpn SealedSecret,
-restarts the arr-stack pod so gluetun picks it up, and commits the
+applies it to the running gluetun in place (pod restart only as a
+    fallback), and commits the
 rotation back to git so a future ArgoCD sync doesn't revert to the
 stale peer.
 """
@@ -50,6 +51,16 @@ SEALEDSECRET_NAME = os.environ.get("SEALEDSECRET_NAME", "gluetun-vpn")
 POD_SELECTOR = os.environ.get("POD_SELECTOR", "app=arr-stack")
 GLUETUN_CONTAINER = os.environ.get("GLUETUN_CONTAINER", "gluetun")
 PIA_REGION = os.environ.get("PIA_REGION", "aus")
+# How long to keep looking for gluetun's endpoint in its startup log
+# after a restart before calling the restart itself failed. The log line
+# appears within seconds of gluetun starting, but on a loaded node the
+# replacement pod can take minutes to schedule and start its containers,
+# so this is a wait for the pod, not for pod-level Ready (sabnzbd alone
+# takes ~3.5min to pass its probe). Cheaper to wait here than to delete
+# the pod again - every spurious delete aborts an in-flight SABnzbd
+# unpack and strands an _UNPACK_ folder (1,062 of them, 766 GB, found
+# 2026-09-20).
+ENDPOINT_POLL_TIMEOUT = int(os.environ.get("ENDPOINT_POLL_TIMEOUT", "300"))
 RESTART_LOOP_WINDOW = os.environ.get("RESTART_LOOP_WINDOW", "5m")
 RESTART_LOOP_THRESHOLD = int(os.environ.get("RESTART_LOOP_THRESHOLD", "10"))
 SEALED_SECRETS_CERT_URL = os.environ.get(
@@ -107,7 +118,10 @@ def fetch_pia_server_list():
 def find_region_wg_servers(server_list, region_id):
     for region in server_list["regions"]:
         if region["id"] == region_id:
-            return region["servers"]["wg"]
+            # PIA's rotating subset sometimes returns the region with no "wg"
+            # entry at all (2026-10-15: KeyError 'wg' on three runs in a row).
+            # Treat that sample as empty instead of crashing the run.
+            return region.get("servers", {}).get("wg", [])
     raise RuntimeError(f"region {region_id!r} not found in PIA server list")
 
 
@@ -132,10 +146,19 @@ def collect_region_wg_ips(region_id, samples=PIA_STALENESS_SAMPLES, delay=PIA_ST
     seen_ips = set()
     last_list = None
     for i in range(samples):
-        last_list = fetch_pia_server_list()
-        seen_ips |= {s["ip"] for s in find_region_wg_servers(last_list, region_id)}
+        sample = fetch_pia_server_list()
+        wg = find_region_wg_servers(sample, region_id)
+        if wg:
+            seen_ips |= {s["ip"] for s in wg}
+            # main() picks a replacement peer from this list, so keep the
+            # last sample that actually has WireGuard servers in it.
+            last_list = sample
         if i < samples - 1:
             time.sleep(delay)
+    if last_list is None:
+        raise RuntimeError(
+            f"PIA returned no WireGuard servers for region {region_id!r} "
+            f"in {samples} samples")
     return seen_ips, last_list
 
 
@@ -143,9 +166,109 @@ def is_endpoint_stale(current_ip, wg_ips_seen):
     return current_ip not in wg_ips_seen
 
 
+# Confirmation window for the list-based staleness signal, added 2026-10-05.
+#
+# The 2026-08-24 fix above assumed a pool of 4 servers behind the "aus"
+# region, so 5 samples would miss a healthy peer about 0.1% of the time.
+# Measured 2026-10-05: the pool is at least 7 servers, PIA returns 3 per
+# call, and a given healthy server shows up in only about 40% of samples.
+# Five samples miss it roughly 6-10% of the time, and at 96 runs a day that
+# is 5-9 false "stale" reads a day. It matched the real history exactly:
+# 26 rotations in 5 days, cycling through only 7 distinct servers (the
+# same ones over and over), each one a full arr-stack pod delete that
+# aborted any download, unpack or import in flight.
+#
+# No sample count fixes this, because the signal itself is a random
+# subset. What does: require the peer to be missing from EVERY sample on
+# every run for STALE_GRACE_SECONDS. A healthy peer is missing from a run
+# ~10% of the time, so it stays missing for 12 runs (3h) in a row with
+# probability ~1e-12. A genuinely retired server is missing every time and
+# is still rotated, just 3h later. A genuinely dead tunnel does not wait at
+# all: gluetun_is_restart_looping() below is unchanged and rotates
+# immediately, so a real outage is as fast as it ever was.
+#
+# The marker is an annotation on the live gluetun-config ConfigMap (this
+# ServiceAccount already has get/patch on exactly that object). It is not
+# in git and ArgoCD does not treat a live-only annotation as drift.
+ABSENT_ANNOTATION = "vpn-healer-peer-absent-since"
+STALE_GRACE_SECONDS = int(os.environ.get("STALE_GRACE_SECONDS", "10800"))
+
+
+def read_absent_since():
+    raw = kubectl("get", "configmap", CONFIGMAP_NAME, "-o", "json", check=False)
+    try:
+        value = (json.loads(raw).get("metadata", {}).get("annotations") or {}).get(ABSENT_ANNOTATION)
+        return float(value) if value else None
+    except (ValueError, TypeError):
+        return None
+
+
+def set_absent_since(value):
+    # value=None removes the annotation (JSON merge patch null).
+    kubectl("patch", "configmap", CONFIGMAP_NAME, "--type", "merge", "-p",
+            json.dumps({"metadata": {"annotations": {
+                ABSENT_ANNOTATION: None if value is None else str(int(value))}}}))
+
+
+def confirm_staleness(listed_stale, absent_since, now, grace=STALE_GRACE_SECONDS):
+    """Pure decision. Returns (confirmed_stale, new_marker, note).
+
+    listed_stale: the peer was missing from this run's union of samples.
+    absent_since: epoch seconds the marker was first set, or None.
+    new_marker: what the marker should be afterwards (None = clear it).
+    """
+    if not listed_stale:
+        return False, None, "peer is in PIA's list"
+    if absent_since is None:
+        return False, now, "peer missing from PIA's list - starting confirmation window"
+    waited = now - absent_since
+    if waited >= grace:
+        return True, absent_since, f"peer missing from every run for {int(waited)}s (grace {grace}s)"
+    return False, absent_since, f"peer still missing, {int(waited)}s of {grace}s"
+
+
 def get_arr_stack_pod_name():
+    # Deliberately NOT `{.items[0].metadata.name}`. During a restart there
+    # are briefly TWO pods matching this selector - the old one still
+    # Terminating and the new one coming up - and items[0] can be the
+    # terminating one, which is the wrong target for a delete or a log
+    # read. This is hardening, NOT the fix for the four-restarts-per-
+    # rotation bug: that was misdiagnosed here on 2026-09-20 as exactly
+    # this race, and the real cause was that the service account had no
+    # pods/exec permission at all - see read_endpoint_ip().
+    #
+    # Filter to a pod that is Running and has no deletionTimestamp, so
+    # the name we hand to kubectl is one that can actually serve it.
+    #
+    # The filtering is done in Python, NOT in a jsonpath predicate.
+    # `?(@.metadata.deletionTimestamp=='')` looks like it should work
+    # and silently matches NOTHING: on a pod that is not being deleted
+    # the field is absent entirely, and kubectl's jsonpath does not
+    # treat an absent field as equal to ''. Verified live 2026-09-20 -
+    # that predicate returned zero rows against a healthy single-pod
+    # arr-stack, which would have made this fall through to the same
+    # items[0] behaviour it exists to replace. Emit the fields and
+    # decide here instead. Pipe-separated because a literal tab needs
+    # escaping through both YAML and jsonpath to get here intact.
+    rows = kubectl(
+        "get", "pods", "-l", POD_SELECTOR,
+        # NOTE the doubled backslash. kubectl's jsonpath parser wants
+        # the literal two characters \n inside {"..."}; a real newline
+        # there is a parse error ('error parsing jsonpath', rc=1, empty
+        # stdout) which check=False would have turned into a silent
+        # fall-through to items[0] - the exact bug being fixed.
+        # Verified both spellings against live kubectl 2026-09-20.
+        "-o", 'jsonpath={range .items[*]}{.metadata.name}{"|"}'
+              '{.status.phase}{"|"}{.metadata.deletionTimestamp}{"\\n"}{end}',
+        check=False)
+    for line in (rows or "").splitlines():
+        parts = line.split("|")
+        if len(parts) >= 3 and parts[1] == "Running" and not parts[2]:
+            return parts[0]
+    # Fall back to the old behaviour rather than hard-failing: a
+    # single-pod steady state still resolves fine this way.
     return kubectl("get", "pods", "-l", POD_SELECTOR,
-                    "-o", "jsonpath={.items[0].metadata.name}")
+                    "-o", "jsonpath={.items[0].metadata.name}", check=False)
 
 
 def gluetun_is_restart_looping():
@@ -249,7 +372,76 @@ def patch_sealed_secret(encrypted_private_key):
             "--type", "merge", "-p", json.dumps(patch))
 
 
-def restart_arr_stack(expected_endpoint_ip, attempts=4, settle_timeout=60):
+GLUETUN_CONTROL_KEY_FILE = os.environ.get(
+    "GLUETUN_CONTROL_KEY_FILE", "/run/secrets/gluetun-control/apikey")
+
+
+def gluetun_api(pod_ip, method, path, body=None):
+    # gluetun's control server (port 8000, API-key auth, see the
+    # gluetun-control SealedSecret). Reached over the pod IP - no
+    # pods/exec needed, see read_endpoint_ip for why that stays off.
+    with open(GLUETUN_CONTROL_KEY_FILE) as f:
+        key = f.read().strip()
+    resp = requests.request(method, f"http://{pod_ip}:8000{path}", json=body,
+                            headers={"X-API-Key": key}, timeout=15)
+    resp.raise_for_status()
+    return resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+
+
+def apply_in_place(new_fields, private_key_b64, settle_timeout=90):
+    """Switch gluetun to the new peer without restarting any container.
+
+    Deleting the arr-stack pod bounced all 11 containers on every
+    rotation (26 rotations in 5 days; Radarr OOMs on start-up, queue
+    re-checks, failed imports). gluetun can stop and restart its own
+    tunnel cleanly via its control server - tested live 2026-10-17:
+    ip rule 101 is removed and re-added, tunnel back in seconds.
+    (Killing just the gluetun *container* instead leaves a stale ip
+    rule in the shared netns and it never recovers.)
+
+    True once gluetun reports the new endpoint and the tunnel passes
+    traffic; False means the caller should fall back to a pod restart.
+    """
+    try:
+        pod_ip = kubectl("get", "pods", "-l", POD_SELECTOR, "-o",
+                         "jsonpath={.items[0].status.podIP}")
+        body = {
+            "provider": {"server_selection": {"wireguard": {
+                "endpoint_ip": new_fields["WIREGUARD_ENDPOINT_IP"],
+                "endpoint_port": int(new_fields["WIREGUARD_ENDPOINT_PORT"]),
+                "public_key": new_fields["WIREGUARD_PUBLIC_KEY"],
+            }}},
+            "wireguard": {
+                "private_key": private_key_b64,
+                "addresses": [new_fields["WIREGUARD_ADDRESSES"]],
+            },
+        }
+        print(f"gluetun settings PUT: {gluetun_api(pod_ip, 'PUT', '/v1/vpn/settings', body)!r}")
+        deadline = time.monotonic() + settle_timeout
+        while time.monotonic() < deadline:
+            time.sleep(5)
+            try:
+                status = gluetun_api(pod_ip, "GET", "/v1/vpn/status")
+                cfg = gluetun_api(pod_ip, "GET", "/v1/vpn/settings")
+                ep = cfg["provider"]["server_selection"]["wireguard"]["endpoint_ip"]
+                if (status.get("status") == "running"
+                        and ep == new_fields["WIREGUARD_ENDPOINT_IP"]
+                        and gluetun_api(pod_ip, "GET", "/v1/publicip/ip")):
+                    return True
+            except (requests.RequestException, KeyError, ValueError, AttributeError):
+                continue
+    except (requests.RequestException, OSError, RuntimeError) as exc:
+        print(f"in-place apply failed: {exc}")
+    return False
+
+
+# attempts 4 -> 2 (2026-09-20). Retrying only helps when a delete lands
+# a pod with a stale endpoint; each extra delete otherwise just aborts
+# in-flight SABnzbd unpacks. Now that the endpoint check can actually
+# succeed (2026-09-27, see read_endpoint_ip) a genuine rotation needs
+# one delete, so 2 leaves a single retry for a real stale-pod race.
+def restart_arr_stack(expected_endpoint_ip, attempts=2, settle_timeout=60,
+                       endpoint_poll_timeout=ENDPOINT_POLL_TIMEOUT):
     # A single delete-and-hope isn't enough: confirmed live 2026-08-09
     # that a concurrent restart (ArgoCD self-heal, or an overlapping
     # healer run - manually triggering a Job alongside this CronJob
@@ -263,18 +455,68 @@ def restart_arr_stack(expected_endpoint_ip, attempts=4, settle_timeout=60):
     for attempt in range(1, attempts + 1):
         kubectl("delete", "pod", get_arr_stack_pod_name(), "--wait=true",
                 f"--timeout={settle_timeout}s", check=False, timeout=settle_timeout + 10)
-        pod_name = wait_for_pod_ready(GLUETUN_CONTAINER, timeout=settle_timeout)
-        if pod_name is None:
-            continue
-        actual_ip = kubectl("exec", pod_name, "-c", GLUETUN_CONTAINER,
-                             "--", "printenv", "WIREGUARD_ENDPOINT_IP", check=False)
+        wait_for_pod_ready(GLUETUN_CONTAINER, timeout=settle_timeout)
+        # Poll rather than read once: the replacement pod may not have
+        # started gluetun yet. An empty read means "not there yet", NOT
+        # "the restart failed".
+        actual_ip = read_endpoint_ip(timeout=endpoint_poll_timeout)
         if actual_ip == expected_endpoint_ip:
             return
-        print(f"restart attempt {attempt}/{attempts}: pod {pod_name} came up with "
+        print(f"restart attempt {attempt}/{attempts}: pod came up with "
               f"endpoint {actual_ip!r}, expected {expected_endpoint_ip!r} - retrying")
     raise RuntimeError(
         f"arr-stack pod never came up with endpoint {expected_endpoint_ip!r} "
         f"after {attempts} restart attempts - needs a human look")
+
+
+# gluetun prints its resolved settings once at start, including a line
+# "Endpoint IP address: <ip>". That is what the replacement pod is
+# verified against.
+ENDPOINT_LOG_RE = re.compile(r"Endpoint IP address:\s*(\d{1,3}(?:\.\d{1,3}){3})")
+
+
+def parse_endpoint_from_logs(logs):
+    """Return the LAST endpoint gluetun logged, or '' if none yet."""
+    found = ENDPOINT_LOG_RE.findall(logs or "")
+    return found[-1] if found else ""
+
+
+def read_endpoint_ip(timeout):
+    """Read the endpoint the current gluetun container started with.
+
+    Read from gluetun's startup LOG, not via `kubectl exec ... printenv`.
+    The original code exec'd, and that could never have worked from this
+    CronJob: vpn-healer-rbac.yml grants pods get/list/delete and
+    pods/log get, and no pods/exec (verified 2026-09-27 with
+    `kubectl auth can-i create pods/exec --as=...:vpn-healer` -> no; the
+    string never appears in this directory's git history). Every exec was
+    Forbidden, stdout was empty, kubectl(check=False) returned '', and
+    restart_arr_stack() read that as "the restart did not take" - so
+    every genuine rotation deleted the pod repeatedly and then failed the
+    Job, even though git, the ConfigMap and the live pod all already had
+    the new peer. Seen on 2026-09-20 (4 attempts) and again 2026-09-27
+    10:00 AEST (2 attempts, after the polling change), where the pod had
+    the right endpoint the whole time.
+
+    Logs need no new privilege - pods/log get is already granted and
+    gluetun_is_restart_looping() uses it. Granting pods/exec instead
+    would let this account run commands in every container in the
+    namespace, including ones holding API keys.
+
+    Returns the endpoint as soon as it appears, or '' if the window
+    passes without one.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        pod_name = get_arr_stack_pod_name()
+        if pod_name:
+            value = parse_endpoint_from_logs(
+                kubectl("logs", pod_name, "-c", GLUETUN_CONTAINER, check=False))
+            if value:
+                return value
+        if time.monotonic() >= deadline:
+            return ""
+        time.sleep(5)
 
 
 def wait_for_pod_ready(container, timeout):
@@ -347,7 +589,13 @@ def main():
     wg_ips_seen, server_list = collect_region_wg_ips(PIA_REGION)
     wg_servers = find_region_wg_servers(server_list, PIA_REGION)
 
-    stale = is_endpoint_stale(current_ip, wg_ips_seen)
+    listed_stale = is_endpoint_stale(current_ip, wg_ips_seen)
+    prior_marker = read_absent_since()
+    stale, new_marker, stale_note = confirm_staleness(listed_stale, prior_marker, time.time())
+    if new_marker != prior_marker:
+        set_absent_since(new_marker)
+    if listed_stale:
+        print(f"Staleness check: {stale_note}.")
     looping = gluetun_is_restart_looping()
     # Diagnostic escape hatch only - never set on the CronJob itself, so
     # every normal scheduled run stays exactly as staleness-gated as
@@ -359,7 +607,8 @@ def main():
     forced = os.environ.get("FORCE_ROTATE") == "1"
 
     if not stale and not looping and not forced:
-        print(f"OK: peer {current_ip} still listed in PIA's {PIA_REGION!r} region, "
+        listed = "still listed in" if not listed_stale else "missing from this sample of"
+        print(f"OK: peer {current_ip} {listed} PIA's {PIA_REGION!r} region, "
               "no restart loop detected.")
         return 0
 
@@ -403,9 +652,16 @@ def main():
 
     patch_configmap(new_fields)
     patch_sealed_secret(encrypted_private_key)
-    restart_arr_stack(new_fields["WIREGUARD_ENDPOINT_IP"])
+    if apply_in_place(new_fields, private_key_b64):
+        how = "applied in place (no pod restart)"
+    else:
+        print("in-place apply did not come up - falling back to a pod restart")
+        restart_arr_stack(new_fields["WIREGUARD_ENDPOINT_IP"])
+        how = "arr-stack pod restarted"
+    # New peer: forget any "old peer was missing" history.
+    set_absent_since(None)
 
-    print(f"Done: rotated {current_ip} -> {server['ip']}, arr-stack restarted, "
+    print(f"Done: rotated {current_ip} -> {server['ip']}, {how}, "
           "git updated.")
     return 0
 

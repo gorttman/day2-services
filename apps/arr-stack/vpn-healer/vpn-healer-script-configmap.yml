@@ -40,7 +40,8 @@ data:
     scan gluetun's recent logs for a sustained restart loop, to catch
     other failure causes too). If stale, redoes the registration, patches
     the live gluetun-config ConfigMap and gluetun-vpn SealedSecret,
-    restarts the arr-stack pod so gluetun picks it up, and commits the
+    applies it to the running gluetun in place (pod restart only as a
+        fallback), and commits the
     rotation back to git so a future ArgoCD sync doesn't revert to the
     stale peer.
     """
@@ -385,6 +386,69 @@ data:
                 "--type", "merge", "-p", json.dumps(patch))
 
 
+    GLUETUN_CONTROL_KEY_FILE = os.environ.get(
+        "GLUETUN_CONTROL_KEY_FILE", "/run/secrets/gluetun-control/apikey")
+
+
+    def gluetun_api(pod_ip, method, path, body=None):
+        # gluetun's control server (port 8000, API-key auth, see the
+        # gluetun-control SealedSecret). Reached over the pod IP - no
+        # pods/exec needed, see read_endpoint_ip for why that stays off.
+        with open(GLUETUN_CONTROL_KEY_FILE) as f:
+            key = f.read().strip()
+        resp = requests.request(method, f"http://{pod_ip}:8000{path}", json=body,
+                                headers={"X-API-Key": key}, timeout=15)
+        resp.raise_for_status()
+        return resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+
+
+    def apply_in_place(new_fields, private_key_b64, settle_timeout=90):
+        """Switch gluetun to the new peer without restarting any container.
+
+        Deleting the arr-stack pod bounced all 11 containers on every
+        rotation (26 rotations in 5 days; Radarr OOMs on start-up, queue
+        re-checks, failed imports). gluetun can stop and restart its own
+        tunnel cleanly via its control server - tested live 2026-10-17:
+        ip rule 101 is removed and re-added, tunnel back in seconds.
+        (Killing just the gluetun *container* instead leaves a stale ip
+        rule in the shared netns and it never recovers.)
+
+        True once gluetun reports the new endpoint and the tunnel passes
+        traffic; False means the caller should fall back to a pod restart.
+        """
+        try:
+            pod_ip = kubectl("get", "pods", "-l", POD_SELECTOR, "-o",
+                             "jsonpath={.items[0].status.podIP}")
+            body = {
+                "provider": {"server_selection": {"wireguard": {
+                    "endpoint_ip": new_fields["WIREGUARD_ENDPOINT_IP"],
+                    "endpoint_port": int(new_fields["WIREGUARD_ENDPOINT_PORT"]),
+                    "public_key": new_fields["WIREGUARD_PUBLIC_KEY"],
+                }}},
+                "wireguard": {
+                    "private_key": private_key_b64,
+                    "addresses": [new_fields["WIREGUARD_ADDRESSES"]],
+                },
+            }
+            print(f"gluetun settings PUT: {gluetun_api(pod_ip, 'PUT', '/v1/vpn/settings', body)!r}")
+            deadline = time.monotonic() + settle_timeout
+            while time.monotonic() < deadline:
+                time.sleep(5)
+                try:
+                    status = gluetun_api(pod_ip, "GET", "/v1/vpn/status")
+                    cfg = gluetun_api(pod_ip, "GET", "/v1/vpn/settings")
+                    ep = cfg["provider"]["server_selection"]["wireguard"]["endpoint_ip"]
+                    if (status.get("status") == "running"
+                            and ep == new_fields["WIREGUARD_ENDPOINT_IP"]
+                            and gluetun_api(pod_ip, "GET", "/v1/publicip/ip")):
+                        return True
+                except (requests.RequestException, KeyError, ValueError, AttributeError):
+                    continue
+        except (requests.RequestException, OSError, RuntimeError) as exc:
+            print(f"in-place apply failed: {exc}")
+        return False
+
+
     # attempts 4 -> 2 (2026-09-20). Retrying only helps when a delete lands
     # a pod with a stale endpoint; each extra delete otherwise just aborts
     # in-flight SABnzbd unpacks. Now that the endpoint check can actually
@@ -602,11 +666,16 @@ data:
 
         patch_configmap(new_fields)
         patch_sealed_secret(encrypted_private_key)
-        restart_arr_stack(new_fields["WIREGUARD_ENDPOINT_IP"])
+        if apply_in_place(new_fields, private_key_b64):
+            how = "applied in place (no pod restart)"
+        else:
+            print("in-place apply did not come up - falling back to a pod restart")
+            restart_arr_stack(new_fields["WIREGUARD_ENDPOINT_IP"])
+            how = "arr-stack pod restarted"
         # New peer: forget any "old peer was missing" history.
         set_absent_since(None)
 
-        print(f"Done: rotated {current_ip} -> {server['ip']}, arr-stack restarted, "
+        print(f"Done: rotated {current_ip} -> {server['ip']}, {how}, "
               "git updated.")
         return 0
 
