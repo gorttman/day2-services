@@ -1,0 +1,19 @@
+# Control-server auth for gluetun (mounted at /gluetun/auth/config.toml).
+# Lets the vpn-healer read and replace the VPN settings in place
+# (kubectl exec -> 127.0.0.1:8000) instead of deleting the whole pod,
+# which restarted all 11 containers every rotation. Port 8000 is not in
+# FIREWALL_INPUT_PORTS, so only containers in this pod can reach it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gluetun-auth
+  namespace: arr-stack
+  labels:
+    app: arr-stack
+    argocd.argoproj.io/managed-by: argocd
+data:
+  config.toml: |
+    [[roles]]
+    name = "healer"
+    routes = ["GET /v1/vpn/settings", "PUT /v1/vpn/settings", "GET /v1/vpn/status", "PUT /v1/vpn/status"]
+    auth = "none"

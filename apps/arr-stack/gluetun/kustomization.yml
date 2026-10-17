@@ -5,3 +5,4 @@ resources:
   - gluetun-sealed-secret.yml
   - gluetun-config.yml
   - pia-account-credentials-sealed-secret.yml
+  - gluetun-auth.yml
