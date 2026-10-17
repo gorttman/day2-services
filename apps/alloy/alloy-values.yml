@@ -217,5 +217,22 @@ alloy:
             app         = "udm",
           }
         }
+        forward_to = [loki.process.udm.receiver]
+      }
+
+      // Tier the UDM's logs for retention (apps/loki/loki-values.yml).
+      // udm_class=chatter (firewall default-policy lines, wifi/hostapd, switch
+      // LLDP, kernel, station tracker) is kept 30 days; everything else the UDM
+      // says (admin activity, security, VPN, updates) is udm_class=event, 13 months.
+      loki.process "udm" {
+        stage.static_labels {
+          values = { udm_class = "event" }
+        }
+        stage.match {
+          selector = "{app=\"udm\"} |~ \"(hostapd|wevent|mcad|stahtd|LLDP|kernel:|\\[wifi|Gateway \\[[A-Z_]+-[A-Z]+-[0-9]+\\])\""
+          stage.static_labels {
+            values = { udm_class = "chatter" }
+          }
+        }
         forward_to = [loki.write.default.receiver]
       }

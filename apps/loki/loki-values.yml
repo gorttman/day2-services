@@ -58,19 +58,30 @@ loki:
     retention_delete_delay: 2h
 
   limits_config:
-    # Default retention: 5 years (43800h). Brett asked for "much longer" than
-    # the 365d placeholder; this is long and cheap (the QNAP has several TB
-    # free and the log volume is small). Raise it in this one place.
-    retention_period: 43800h
-    # Per-stream overrides: host (journald) logs are kept 10 years; so are any
-    # streams carrying authentication logs (a future `signal_type="auth"`).
+    # Retention tiers, set 2026-10-18 (not regulated, so short): the old 5y/10y
+    # scheme was scaled down about tenfold, same shape.
+    #   13 months  host (journald), auth, UDM events (admin/security/VPN/updates)
+    #   6 months   default: container logs and anything else
+    #   30 days    UDM chatter (firewall default-policy, wifi, LLDP, kernel) and argocd
+    # When selectors overlap the highest priority wins. udm_class is added in
+    # apps/alloy/alloy-values.yml.
+    retention_period: 4380h
     retention_stream:
       - selector: '{signal_type="host"}'
         priority: 1
-        period: 87600h
+        period: 9490h
       - selector: '{signal_type="auth"}'
         priority: 2
-        period: 87600h
+        period: 9490h
+      - selector: '{signal_type="network"}'
+        priority: 3
+        period: 9490h
+      - selector: '{signal_type="network", udm_class="chatter"}'
+        priority: 4
+        period: 720h
+      - selector: '{namespace="argocd"}'
+        priority: 5
+        period: 720h
     allow_structured_metadata: true
     volume_enabled: true
     # Home-cluster volumes: generous burst, modest steady state.
