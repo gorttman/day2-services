@@ -283,7 +283,7 @@ search job does, and writes a closing note when it does.
 
 Pace is tuned by env on the CronJob - `BATCH`, `TIERS`, `MAX_QUEUE`,
 `MIN_FREE_TB`. Scope is `ROOT_FOLDER` (/movies); /movies-bulk is left
-alone, `~/gm-dev/bulk_backfill.py` owns that one and works the missing
+alone, `~/projects/movie-backfill/bulk_backfill.py` owns that one and works the missing
 list rather than the upgrade list.
 
 ## LIVE 2026-09-10: on-demand status board (movie-status)
@@ -304,7 +304,7 @@ Shows, for each library: what has been replaced, what is queued, what
 is left, expected finish, what landed recently, and separately anything
 stuck that needs a person. `/movies` is the upgrade backfill and has a
 real nightly schedule, so it gets a date. `/movies-bulk` - the midday
-movies - is driven by hand from `~/gm-dev/bulk_backfill.py`, so it
+movies - is driven by hand from `~/projects/movie-backfill/bulk_backfill.py`, so it
 shows a measured rate and batch count instead of a fake ETA. Its
 "searched" figure comes from that script's own state file, mounted as a
 single-file read-only hostPath (the script rewrites it in place, so the
