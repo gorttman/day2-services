@@ -385,7 +385,10 @@ def gluetun_api(pod_ip, method, path, body=None):
     resp = requests.request(method, f"http://{pod_ip}:8000{path}", json=body,
                             headers={"X-API-Key": key}, timeout=15)
     resp.raise_for_status()
-    return resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+    try:
+        return resp.json()
+    except ValueError:
+        return resp.text
 
 
 def apply_in_place(new_fields, private_key_b64, settle_timeout=90):
@@ -428,7 +431,7 @@ def apply_in_place(new_fields, private_key_b64, settle_timeout=90):
                         and ep == new_fields["WIREGUARD_ENDPOINT_IP"]
                         and gluetun_api(pod_ip, "GET", "/v1/publicip/ip")):
                     return True
-            except (requests.RequestException, KeyError, ValueError, AttributeError):
+            except (requests.RequestException, KeyError, ValueError, AttributeError, TypeError):
                 continue
     except (requests.RequestException, OSError, RuntimeError) as exc:
         print(f"in-place apply failed: {exc}")
