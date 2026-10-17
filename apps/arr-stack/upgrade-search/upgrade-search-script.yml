@@ -28,7 +28,7 @@ data:
     Unmet" fires every one of them at the indexers at once, which burns
     NZBgeek's daily API allowance in a single pass and collides with the
     /movies-bulk backfill (~1,666 titles still to go, see
-    ~/gm-dev/bulk_backfill.py). RSS sync never helps here either - it only
+    ~/projects/movie-backfill/bulk_backfill.py). RSS sync never helps here either - it only
     sees newly-posted releases, which will never surface a 1988 catalogue
     title. So this walks the backlog a batch a night instead, worst-quality
     first.

@@ -88,7 +88,7 @@ data:
     BULK_PROFILE = int(os.environ.get("BULK_PROFILE", "8"))
     SEARCH_BATCH = int(os.environ.get("SEARCH_BATCH", "50"))
     STUCK_HOURS = int(os.environ.get("STUCK_HOURS", "24"))
-    # Tiering copied from ~/gm-dev/bulk_backfill.py, which remains the
+    # Tiering copied from ~/projects/movie-backfill/bulk_backfill.py, which remains the
     # source of truth - the button exists so a batch can be run without a
     # terminal, not to become a second, subtly different implementation.
     # Drama/Thriller first, Romance demoted because it is the house style
