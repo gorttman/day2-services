@@ -30,7 +30,7 @@ hardlink/archive, never delete.
 - Register (truth): key consolidation-register.json in apps/reports/reports-cm.yml (edit it there; the page renders it)
 - Log: apps/consolidation/LOG.md  (append one entry per session)
 - Existing workstreams: ~/projects/immich-migration/STATE.md (paused
-  2026-09-21), ~/gm-dev/router-tooling-brief.md (inbox-router tooling),
+  2026-09-21), ~/projects/briefs/router-tooling-brief.md (inbox-router tooling),
   reports iCloud migration page.
 - Pending read-only measurements (scratchpad, may be gone after reset; rerun
   from git if needed): backup_disk_sizes.txt, august_compare.txt,
