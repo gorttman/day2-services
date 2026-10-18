@@ -16,6 +16,7 @@ Measurements (integer fields):
   `namespace`, `app`, and for firewall `ruleset`, `action` (drop/allow/default),
   `action_raw`, `in_zone`, `out_zone`, `proto`.
 - `log_volume` fields `lines`, `bytes` per signal_type and namespace/node/udm_class.
+- `fw_discovery` broadcast/multicast chatter (Tuya, UniFi, vacuum) top 20 per hour by zone/src/dport; excluded from the firewall counts.
 - `fw_top_src`, `fw_top_dport` top 10 per hour (ruleset, action, src or dport).
 - `log_rollup_run` heartbeat each run (points, queries_ok, queries_failed, seconds).
 

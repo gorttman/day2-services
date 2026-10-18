@@ -14,6 +14,8 @@ Measurements (all fields are integers):
   log_volume        lines + bytes per source/namespace/node (shows tier sizes)
   fw_top_src        top 10 firewall source IPs per hour (ruleset, action, src)
   fw_top_dport      top 10 destination ports per hour (ruleset, action, dport)
+  fw_discovery      top 20 broadcast/multicast senders per hour (in_zone, src, dport);
+                    excluded from log_events/fw_top_* so they do not swamp real events
   log_rollup_run    one heartbeat point per run (queries ok/failed, points written)
 """
 import argparse, json, os, sys, time, urllib.parse, urllib.request
@@ -30,13 +32,16 @@ ZONES = {"br0": "Main", "br10": "ClusterBackend", "br20": "Trusted",
          "br30": "Guest", "br40": "IoT", "eth4": "WAN", "": "none"}
 ACTIONS = {"D": "drop", "A": "allow", "RET": "default", "B": "block", "R": "reject"}
 
-FW = (r'{app="udm", udm_class="chatter"} |~ `Gateway \[[A-Z_0-9]+-[A-Z]+-` '
-      r'| regexp `Gateway \[(?P<ruleset>[A-Z_0-9]+)-(?P<action>[A-Z]+)-\d+\].* '
-      r'IN=(?P<in_if>\S*) OUT=(?P<out_if>\S*) .*SRC=(?P<src>\S+) DST=(?P<dst>\S+) .*'
-      r'PROTO=(?P<proto>\S+)(?:.* DPT=(?P<dport>\d+))?` '
-      # Drop the gateway's own UniFi discovery (UDP 10001 from each bridge's .1
-      # address): control chatter, not device activity.
-      r'| src !~ `[0-9]+[.][0-9]+[.][0-9]+[.]1` or dport != `10001`')
+FW_BASE = (r'{app="udm", udm_class="chatter"} |~ `Gateway \[[A-Z_0-9]+-[A-Z]+-` '
+           r'| regexp `Gateway \[(?P<ruleset>[A-Z_0-9]+)-(?P<action>[A-Z]+)-\d+\].* '
+           r'IN=(?P<in_if>\S*) OUT=(?P<out_if>\S*) .*SRC=(?P<src>\S+) DST=(?P<dst>\S+) .*'
+           r'PROTO=(?P<proto>\S+)(?:.* DPT=(?P<dport>\d+))?`')
+# Discovery chatter: anything sent to a broadcast or multicast address (Tuya 6667,
+# Roborock, UniFi 10001/48000 ...). Kept out of the firewall counts and summarised
+# on its own as fw_discovery so a change is still visible.
+DISC = r'255[.]255[.]255[.]255|[0-9]+[.][0-9]+[.][0-9]+[.]255|2(2[4-9]|3[0-9])[.][0-9.]+'
+FW = f"{FW_BASE} | dst !~ `{DISC}`"
+FWD = f"{FW_BASE} | dst =~ `{DISC}`"
 
 # (measurement, class, source, LogQL selector+filters, group-by labels, fixed tags)
 COUNTS = [
@@ -51,11 +56,11 @@ COUNTS = [
 ]
 FW_GROUP = ["ruleset", "action", "in_if", "out_if", "proto"]
 
-def fw(keep):
+def fw(keep, base=None):
     # `keep` trims the extracted labels to the ones being grouped on; without it
     # every per-line src/dst/port combination is its own series and Loki hits
     # its 500-series-per-query limit.
-    return f"{FW} | keep {', '.join(keep)}"
+    return f"{base or FW} | keep {', '.join(keep)}"
 
 def http(url, data=None, headers=None, timeout=60):
     req = urllib.request.Request(url, data=data, headers=headers or {})
@@ -110,6 +115,13 @@ def roll_hour(start):
             m = s["metric"]; n = float(s["value"][1])
             if n > 0 and m.get(key):
                 out.append(line(meas, {"ruleset": m.get("ruleset"), "action": ACTIONS.get(m.get("action"), m.get("action")), key: m[key]}, {"count": n}, ts))
+
+    # Discovery chatter (broadcast/multicast), top 20 per hour by zone/source/port.
+    dq = f"topk(20, sum by (in_if, src, dport) (count_over_time({fw(['in_if', 'src', 'dport'], FWD)} [1h])))"
+    for s in run(dq):
+        m = s["metric"]; n = float(s["value"][1])
+        if n > 0 and m.get("src"):
+            out.append(line("fw_discovery", {"in_zone": ZONES.get(m.get("in_if"), m.get("in_if")), "src": m["src"], "dport": m.get("dport")}, {"count": n}, ts))
 
     # Volume per source: shows how big each retention tier really is.
     for sel, by in (('{signal_type="container"}', "namespace"), ('{signal_type="host"}', "node"), ('{signal_type="network"}', "udm_class")):
