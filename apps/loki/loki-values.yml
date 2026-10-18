@@ -83,6 +83,9 @@ loki:
         priority: 5
         period: 720h
     allow_structured_metadata: true
+    # The hourly log rollup (apps/log-rollup) groups firewall lines by port/source;
+    # the intermediate series count passes the 500 default before topk trims it.
+    max_query_series: 5000
     volume_enabled: true
     # Home-cluster volumes: generous burst, modest steady state.
     ingestion_rate_mb: 8
