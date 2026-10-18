@@ -36,12 +36,15 @@ FW_BASE = (r'{app="udm", udm_class="chatter"} |~ `Gateway \[[A-Z_0-9]+-[A-Z]+-` 
            r'| regexp `Gateway \[(?P<ruleset>[A-Z_0-9]+)-(?P<action>[A-Z]+)-\d+\].* '
            r'IN=(?P<in_if>\S*) OUT=(?P<out_if>\S*) .*SRC=(?P<src>\S+) DST=(?P<dst>\S+) .*'
            r'PROTO=(?P<proto>\S+)(?:.* DPT=(?P<dport>\d+))?`')
-# Discovery chatter: anything sent to a broadcast or multicast address (Tuya 6667,
-# Roborock, UniFi 10001/48000 ...). Kept out of the firewall counts and summarised
-# on its own as fw_discovery so a change is still visible.
-DISC = r'255[.]255[.]255[.]255|[0-9]+[.][0-9]+[.][0-9]+[.]255|2(2[4-9]|3[0-9])[.][0-9.]+'
-FW = f"{FW_BASE} | dst !~ `{DISC}`"
-FWD = f"{FW_BASE} | dst =~ `{DISC}`"
+# Control/discovery chatter, kept out of the firewall counts and summarised on its
+# own as fw_discovery so a change is still visible:
+#  - anything sent to a broadcast or multicast address (IPv4 and IPv6): Tuya 6667,
+#    Roborock, UniFi 10001/48000, mDNS ...
+#  - UniFi devices informing the gateway: Main network (br0) to port 8080.
+DISC = (r'255[.]255[.]255[.]255|[0-9]+[.][0-9]+[.][0-9]+[.]255|2(2[4-9]|3[0-9])[.][0-9.]+'
+        r'|[fF][fF][0-9a-fA-F]{2}:.*')
+FW = f"{FW_BASE} | dst !~ `{DISC}` and (in_if != `br0` or dport != `8080`)"
+FWD = f"{FW_BASE} | dst =~ `{DISC}` or (in_if = `br0` and dport = `8080`)"
 
 # (measurement, class, source, LogQL selector+filters, group-by labels, fixed tags)
 COUNTS = [
