@@ -33,7 +33,10 @@ ACTIONS = {"D": "drop", "A": "allow", "RET": "default", "B": "block", "R": "reje
 FW = (r'{app="udm", udm_class="chatter"} |~ `Gateway \[[A-Z_0-9]+-[A-Z]+-` '
       r'| regexp `Gateway \[(?P<ruleset>[A-Z_0-9]+)-(?P<action>[A-Z]+)-\d+\].* '
       r'IN=(?P<in_if>\S*) OUT=(?P<out_if>\S*) .*SRC=(?P<src>\S+) DST=(?P<dst>\S+) .*'
-      r'PROTO=(?P<proto>\S+)(?:.* DPT=(?P<dport>\d+))?`')
+      r'PROTO=(?P<proto>\S+)(?:.* DPT=(?P<dport>\d+))?` '
+      # Drop the gateway's own UniFi discovery (UDP 10001 from each bridge's .1
+      # address): control chatter, not device activity.
+      r'| src !~ `[0-9]+[.][0-9]+[.][0-9]+[.]1` or dport != `10001`')
 
 # (measurement, class, source, LogQL selector+filters, group-by labels, fixed tags)
 COUNTS = [
