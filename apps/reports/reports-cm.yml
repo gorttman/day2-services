@@ -1808,9 +1808,7 @@ data:
       </header>
       <div class="bar"><span id="updated">Loading</span><label><input type="checkbox" id="fin"> show finished jobs</label><span><span class="key ds"></span>runs one per node (DaemonSet)</span></div>
       <div class="panel" id="tree"></div>
-      <div class="eyebrow" style="margin-top:8px">Certificates</div>
-      <div class="bar"><span id="certsum">Loading</span></div>
-      <div class="panel" id="certs"></div>
+      <div class="panel" id="certs"><div style="padding:12px 14px;color:var(--muted)">Loading certificates</div></div>
       <footer>Logs: <a href="https://grafana.i3sec.com.au/d/cluster-logs/cluster-logs" target="_blank" rel="noopener">search cluster and host logs</a> (Grafana, Loki). Refreshes every 30 seconds. <a href="/">All reports</a>.</footer>
     </main>
     <script>
@@ -1876,11 +1874,10 @@ data:
         n.list.sort(function(a,b){return sev(b.state)-sev(a.state)||(a.days==null?-1:a.days)-(b.days==null?-1:b.days)||a.key.localeCompare(b.key)});
         return n}).sort(function(a,b){return sev(b.state)-sev(a.state)||(a.days==null?-1:a.days)-(b.days==null?-1:b.days)||a.ns.localeCompare(b.ns)});
       var nh=arr.reduce(function(t,n){return t+n.list.length},0);
-      document.getElementById("certsum").innerHTML=chip(bad?"crit":warn?"warn":"good",nh+" hostnames \u00b7 "+list.length+" certificates")+" "
-        +(bad?chip("crit",bad+" need action"):"")+" "+(warn?chip("warn",warn+" expiring soon"):"")+" Managed by cert-manager (Let's Encrypt), renewed automatically. Grouped by app, then hostname; soonest expiry first.";
+      var soon=arr.reduce(function(m,n){return n.days!=null&&(m==null||n.days<m)?n.days:m},null);
       function tone(s){return s==="bad"?"crit":s==="warn"?"warn":"good"}
       function ctext(x){return x.ready===false?"Not ready":x.days==null?"unknown":x.days+" days left"}
-      document.getElementById("certs").innerHTML=arr.map(function(n){
+      var apps=arr.map(function(n){
         var rows=n.list.map(function(h){
           var inner=h.certs.map(function(c){
             return '<div class="con"><span>'+esc(c.name)+' <span class="img">'+esc(c.issuer)+'</span></span><span>'
@@ -1889,12 +1886,15 @@ data:
           var hs='<div class="l">'+esc(h.key)+'</div><div>'+chip(tone(h.state),h.days==null?"not ready":h.days+" days left")+" "+chip("",h.certs.length+(h.certs.length===1?" certificate":" certificates"))+'</div>';
           return det("cert/"+n.ns+"/"+h.key,"pod",hs,'<div class="cons">'+inner+'</div>')}).join("");
         var ns='<div class="l">'+esc(n.ns)+' <span class="ns">'+n.list.length+(n.list.length===1?" hostname":" hostnames")+'</span></div><div>'+chip(tone(n.state),n.days==null?"not ready":"soonest "+n.days+" days")+'</div>';
-        return det("certns/"+n.ns,"node",ns,'<div class="pods">'+rows+'</div>')}).join("");
+        return det("certns/"+n.ns,"pod",ns,'<div class="pods">'+rows+'</div>')}).join("");
+      var top='<div class="l">All certificates <span class="ns">'+arr.length+' apps \u00b7 '+nh+' hostnames \u00b7 '+list.length+' certificates</span></div><div>'
+        +(bad?chip("crit",bad+" need action")+" ":"")+(warn?chip("warn",warn+" expiring soon")+" ":"")+chip(bad?"crit":warn?"warn":"good",soon==null?"none issued":"soonest "+soon+" days")+'</div>';
+      document.getElementById("certs").innerHTML=det("certs-all","node",top,'<div class="pods">'+apps+'</div>');
     }
     function loadCerts(){
       fetch("/api/certificates",{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){
         if(d.error)throw new Error(d.error);certRender(d);
-      }).catch(function(e){document.getElementById("certsum").textContent="Could not read certificates: "+e.message});
+      }).catch(function(e){document.getElementById("certs").innerHTML='<div style="padding:12px 14px;color:var(--muted)">Could not read certificates: '+esc(e.message)+"</div>"});
     }
     document.addEventListener("toggle",function(e){var k=e.target.getAttribute&&e.target.getAttribute("data-k");if(!k)return;if(e.target.open)OPEN.add(k);else OPEN.delete(k)},true);
     document.getElementById("fin").addEventListener("change",render);
