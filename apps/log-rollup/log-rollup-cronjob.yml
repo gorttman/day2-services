@@ -1,0 +1,49 @@
+# Hourly: summarises the previous full hour of Loki logs into InfluxDB bucket
+# log_rollup (infinite retention) so long-term evidence outlives the Loki
+# retention tiers. Design and measurements: README.md and the script docstring.
+#
+# Runs in monitoring to reuse the shared grafana-influxdb org+token (same
+# pattern as icloud-migration-status: one shared token, one bucket per topic).
+# Safe to re-run: points are stamped at the start of the hour and overwrite.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: log-rollup
+  namespace: monitoring
+spec:
+  schedule: "7 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: log-rollup
+              image: python:3.12-slim
+              command: ["python3", "-I", "/app/log_rollup.py"]
+              env:
+                - name: LOKI_URL
+                  value: "http://loki.loki.svc.cluster.local:3100"
+                - name: INFLUX_URL
+                  value: "http://influxdb.monitoring.svc:8086"
+                - name: INFLUX_ORG
+                  valueFrom:
+                    secretKeyRef: {name: grafana-influxdb, key: INFLUXDB_ORG}
+                - name: INFLUX_TOKEN
+                  valueFrom:
+                    secretKeyRef: {name: grafana-influxdb, key: INFLUXDB_TOKEN}
+              volumeMounts:
+                - {name: script, mountPath: /app}
+              resources:
+                requests: {memory: 64Mi, cpu: 50m}
+                limits: {memory: 192Mi, cpu: 500m}
+          volumes:
+            - name: script
+              configMap:
+                name: log-rollup-script
+                defaultMode: 0555
