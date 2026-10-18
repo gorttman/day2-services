@@ -580,6 +580,8 @@ data:
 
           already imported / destination exists -> drop, keep file, ban nothing
           no eligible files, library already has it -> drop, ban nothing
+          no eligible files, nothing importable in the folder, 6h old ->
+            drop, ban nothing (the files are gone; the movie is searched again)
           manual import required / matched by ID -> import, but only when
             there is exactly one candidate, it has no rejections, and the
             title it resolved to appears in the release name
@@ -664,6 +666,14 @@ data:
                             remove(app, r, False)
                             fixed.append({"app": app, "title": title,
                                           "did": "dropped - finished download, library already has it"})
+                        elif not candidates(app, r) and (r.get("added") or "9999") < give_up:
+                            # Radarr reports "completed" but the folder holds nothing
+                            # it can import (files removed, e.g. by a restart or a
+                            # cleanup). Nothing to lose; drop it WITHOUT banning the
+                            # release so the movie stays wanted and is searched again.
+                            remove(app, r, False)
+                            fixed.append({"app": app, "title": title,
+                                          "did": "dropped - download finished but its files are gone, searching again"})
                         else:
                             left.append({"app": app, "title": title, "why": "files gone and no copy in the library"})
                     elif "manual import required" in blob or "matched to" in blob or "archive file" in blob:
