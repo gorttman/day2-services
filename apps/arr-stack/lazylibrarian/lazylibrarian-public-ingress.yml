@@ -8,14 +8,13 @@ metadata:
     app.kubernetes.io/name: lazylibrarian
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
     - lazylibrarian.i3sec.com.au
-    secretName: lazylibrarian-public-tls
+    secretName: lazylibrarian-tls
   rules:
   - host: lazylibrarian.i3sec.com.au
     http:

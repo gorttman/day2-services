@@ -8,14 +8,13 @@ metadata:
     app.kubernetes.io/name: qbittorrent
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
     - qbittorrent.i3sec.com.au
-    secretName: qbittorrent-public-tls
+    secretName: qbittorrent-tls
   rules:
   - host: qbittorrent.i3sec.com.au
     http:

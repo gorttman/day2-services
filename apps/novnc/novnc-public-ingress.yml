@@ -8,7 +8,6 @@ metadata:
     app.kubernetes.io/name: novnc
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     # cloudflared's Public Hostname (Terraform-managed, day1-foundation
     # apps/cloudflare-tf) forwards here as plain HTTP, not HTTPS - without
     # this, nginx's default ssl-redirect would 308 that request to https
@@ -27,7 +26,7 @@ spec:
   tls:
   - hosts:
     - novnc.i3sec.com.au
-    secretName: novnc-public-tls
+    secretName: novnc-tls
   rules:
   - host: novnc.i3sec.com.au
     http:

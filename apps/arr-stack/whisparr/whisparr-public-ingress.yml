@@ -27,14 +27,13 @@ metadata:
     app.kubernetes.io/name: whisparr
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
     - whisparr.i3sec.com.au
-    secretName: whisparr-public-tls
+    secretName: whisparr-tls
   rules:
   - host: whisparr.i3sec.com.au
     http:

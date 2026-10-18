@@ -8,14 +8,13 @@ metadata:
     app.kubernetes.io/name: radarr
     argocd.argoproj.io/managed-by: argocd
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
     - radarr.i3sec.com.au
-    secretName: radarr-public-tls
+    secretName: radarr-tls
   rules:
   - host: radarr.i3sec.com.au
     http:
