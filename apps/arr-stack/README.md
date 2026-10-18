@@ -351,37 +351,31 @@ with connection-refused. The podAffinity still selects `app: arr-stack`
 to co-locate with the real stack pod; only this pod's own labels
 differ. Same trap applies to anything else added to this namespace.
 
-## LIVE 2026-09-10: stall watch (download-stall-watch)
+## Stall watch (2026-09-10), replaced 2026-10-19
 
-The pipeline has gone to zero throughput twice without anything
-noticing - 2026-09-07 and again 2026-09-10, the second time for about
-half a day. Both times the *arrs looked healthy: full queues, nothing
-failing. A queue that never progresses looks identical to a busy one
-unless something measures the change.
+The pipeline went to zero throughput twice without anything noticing -
+2026-09-07 and 2026-09-10, the second time for about half a day. The *arrs
+looked healthy both times: full queues, nothing failing. A queue that never
+progresses looks identical to a busy one unless something measures the change.
+It also costs more than downtime: the nightly upgrade search tags 25 titles a
+night as "searched" whether or not their downloads land.
 
-It costs more than downtime. The nightly upgrade search tags 25 titles
-a night as "searched" whether or not their downloads ever land, so
-every night a jam goes unnoticed permanently burns 25 titles off the
-backlog.
+The first version was the `download-stall-watch` CronJob, which wrote notes to
+the Obsidian vault over NFS. It was suspended on 2026-10-03 because that vault
+mount was one of three feeders of the k8smaster NFS-client wedge, and it was
+removed on 2026-10-19.
 
-`stall-watch/` checks every 30 minutes: per *arr, total bytes left
-across the queue. Queue non-empty and that total not going DOWN across
-two consecutive checks means that app is not moving, and it alerts
-about an hour into a real jam. One flat reading is not enough - a large
-file can sit in post-processing.
-
-It reads the *arr queues, not qBittorrent and SABnzbd. That is the
-honest measure - what matters is whether work finishes, not whether a
-client claims a connection - and it sidesteps qBittorrent's WebUI
-refusing unauthenticated calls from outside its own pod
-(`LocalHostAuth=false` only covers genuine 127.0.0.1, so the ClusterIP
-Service returns 403).
-
-Alerts land in `inbox/media-pipeline-alerts/` in the Obsidian vault,
-the same channel as the weekly digest, and only on a change of state -
-one note per jam plus one when it clears, never one per check. The note
-names the flagged items and anything sitting over 24h, and carries the
-blocklist-and-re-search command that actually fixes it.
+Now `movie-status` does the measuring, with no vault: each Telegraf scrape
+(every 5 min) of `/api/alerts` takes one sample of every downloading or queued
+item's bytes-left across Radarr, Sonarr and Whisparr. Progress is any item's
+bytes-left going down or any item leaving the queue; new items arriving do not
+count. `stallMinutes` is how long active downloads have gone without progress
+(0 when nothing is active or an *arr could not be read), and Grafana rule
+`media-pipeline-stalled` ("Downloads not moving") fires above 120 minutes.
+It still reads the *arr queues rather than qBittorrent or SABnzbd directly:
+what matters is whether work finishes, and qBittorrent's WebUI refuses
+unauthenticated calls from outside its own pod anyway. The pure function is
+`update_progress` in `movie-status/movie-status-cm.yml`.
 
 ## Removed: bazarr and jdownloader2 (2026-08-08)
 
