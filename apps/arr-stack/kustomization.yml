@@ -6,6 +6,7 @@ resources:
   - arr-stack-rbac.yml
   - arr-stack-deployment.yml
   - arr-vpn-deployment.yml
+  - arr-vpn-networkpolicy.yml
   - gluetun
   - sonarr
   - radarr

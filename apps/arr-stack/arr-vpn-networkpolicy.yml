@@ -1,0 +1,26 @@
+# Who may reach the VPN pod (qBittorrent 8090, SABnzbd 8080, Prowlarr 9696,
+# gluetun control 8000). Added 2026-10-18 after the arr-vpn / arr-stack split:
+# before this, any pod in the cluster could reach them.
+# Allowed: pods in this namespace (Sonarr/Radarr/..., movie-status,
+# vpn-healer), plus the two ingress controllers for the web UIs.
+# Ingress only - egress from the VPN pod is untouched, so the tunnel works as before.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arr-vpn-ingress
+  namespace: arr-stack
+spec:
+  podSelector:
+    matchLabels:
+      app: arr-vpn
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
