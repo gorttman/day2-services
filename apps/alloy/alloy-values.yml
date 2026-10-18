@@ -240,6 +240,14 @@ alloy:
           source_labels = ["__syslog_message_app_name"]
           target_label  = "app"
         }
+        // Forensic sources (kernel ring, QTS event log, per-minute NFS health,
+        // one-time kmsg backfill) are kept 13 months, like host journals.
+        rule {
+          source_labels = ["__syslog_message_app_name"]
+          regex         = "qnap-(kernel|kernel-backfill|event|nfsd)"
+          target_label  = "signal_type"
+          replacement   = "host"
+        }
       }
 
       loki.source.syslog "qnap" {
