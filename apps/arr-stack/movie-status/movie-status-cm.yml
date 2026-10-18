@@ -851,7 +851,7 @@ data:
             # --- restarts ----------------------------------------------
             events = st.get("events", [])
             last = st.get("pods", {})
-            pods = kube_get("/api/v1/namespaces/%s/pods?labelSelector=app%%3Darr-stack" %
+            pods = kube_get("/api/v1/namespaces/%s/pods?labelSelector=app%%20in%%20(arr-stack%%2Carr-vpn)" %
                             open(SA_DIR + "/namespace").read().strip())["items"]
             cur = {}
             for pod in pods:

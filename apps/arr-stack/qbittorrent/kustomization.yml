@@ -7,3 +7,4 @@ resources:
   - qbittorrent-ingress.yml
   - qbittorrent-public-ingress.yml
   - qbittorrent-config-seed-script.yml
+  - qbittorrent-auth-sealed-secret.yml

@@ -46,10 +46,48 @@ data:
     # it already had open, causing an infinite whole-pod restart loop.
     # There's nothing running yet when this executes, so there's nothing
     # to revert it.
+    import base64
     import configparser
+    import hashlib
+    import hmac
     import os
 
     CONFIG_PATH = "/config/qBittorrent/qBittorrent.conf"
+    AUTH_DIR = "/qbit-auth"
+
+    # Since the 2026-10-18 pod split Sonarr/Radarr/Whisparr call qBittorrent from
+    # another pod, so they cannot use the 127.0.0.1 auth bypass. They log in with
+    # the qbittorrent-auth secret; this writes that login into qBittorrent.conf
+    # (PBKDF2-HMAC-SHA512, 100000 rounds, 16-byte salt, stored as
+    # @ByteArray(salt:hash) in base64 - qBittorrent's own format). The existing
+    # hash is kept when it already matches, so the file does not churn.
+    def read_login():
+        try:
+            user = open(os.path.join(AUTH_DIR, "username")).read().strip()
+            password = open(os.path.join(AUTH_DIR, "password")).read().strip()
+        except OSError:
+            return None
+        return (user, password) if user and password else None
+
+
+    def password_matches(stored, password):
+        try:
+            if not (stored and stored.startswith("@ByteArray(") and stored.endswith(")")):
+                return False
+            salt_b64, hash_b64 = stored[len("@ByteArray("):-1].split(":", 1)
+            salt = base64.b64decode(salt_b64)
+            want = base64.b64decode(hash_b64)
+            got = hashlib.pbkdf2_hmac("sha512", password.encode(), salt, 100000, dklen=len(want))
+            return hmac.compare_digest(got, want)
+        except Exception:
+            return False
+
+
+    def make_hash(password):
+        salt = os.urandom(16)
+        dk = hashlib.pbkdf2_hmac("sha512", password.encode(), salt, 100000, dklen=64)
+        return "@ByteArray(%s:%s)" % (base64.b64encode(salt).decode(), base64.b64encode(dk).decode())
+
 
     DESIRED = {
         "Preferences": {
@@ -88,6 +126,14 @@ data:
     cp = configparser.ConfigParser()
     cp.optionxform = str  # preserve case - qBittorrent's own keys are mixed-case
     cp.read(CONFIG_PATH)
+    login = read_login()
+    if login:
+        user, password = login
+        stored = cp.get("Preferences", "WebUI\\Password_PBKDF2", fallback=None) if cp.has_section("Preferences") else None
+        DESIRED["Preferences"]["WebUI\\Username"] = user
+        DESIRED["Preferences"]["WebUI\\Password_PBKDF2"] = stored if password_matches(stored, password) else make_hash(password)
+    else:
+        print("no /qbit-auth login mounted - leaving WebUI credentials alone", flush=True)
     changed = False
     for section, keys in DESIRED.items():
         if not cp.has_section(section):

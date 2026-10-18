@@ -48,7 +48,7 @@ from cryptography.hazmat.primitives.asymmetric import x25519
 NAMESPACE = os.environ.get("NAMESPACE", "arr-stack")
 CONFIGMAP_NAME = os.environ.get("CONFIGMAP_NAME", "gluetun-config")
 SEALEDSECRET_NAME = os.environ.get("SEALEDSECRET_NAME", "gluetun-vpn")
-POD_SELECTOR = os.environ.get("POD_SELECTOR", "app=arr-stack")
+POD_SELECTOR = os.environ.get("POD_SELECTOR", "app=arr-vpn")
 GLUETUN_CONTAINER = os.environ.get("GLUETUN_CONTAINER", "gluetun")
 PIA_REGION = os.environ.get("PIA_REGION", "aus")
 # How long to keep looking for gluetun's endpoint in its startup log

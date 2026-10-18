@@ -65,6 +65,22 @@ data:
     INDEXER_WRITE_TIMEOUT = 120
 
     APP_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696, "whisparr": 6969}
+
+    # The stack runs as two pods since 2026-10-18 (see arr-vpn-deployment.yml):
+    #   vpn  = the reconciler beside gluetun/qBittorrent/SABnzbd/Prowlarr -
+    #          configures SABnzbd, qBittorrent and Prowlarr's own indexers
+    #          over localhost (qBittorrent only skips auth for 127.0.0.1).
+    #   arr  = the reconciler beside Sonarr/Radarr/Whisparr - configures them
+    #          over localhost and reaches Prowlarr over its Service.
+    #   all  = the old single-pod behaviour (default, kept for reference).
+    ROLE = os.environ.get("RECONCILER_ROLE", "all")
+    PROWLARR_HOST = os.environ.get("PROWLARR_HOST", "localhost")
+    PROWLARR_BASE = "http://%s:9696/api/v1" % PROWLARR_HOST
+    QBIT_AUTH_DIR = "/qbit-auth"
+
+
+    def on(*roles):
+        return ROLE == "all" or ROLE in roles
     # Sonarr/Radarr name their SABnzbd category field differently -
     # confirmed live via each app's own /downloadclient/schema, not
     # guessed (Sonarr: tvCategory, Radarr: movieCategory).
@@ -656,6 +672,17 @@ data:
     # Sonarr/Radarr download clients (schema-driven - see module docstring)
     # ---------------------------------------------------------------------
 
+    def read_qbit_login():
+        try:
+            with open(os.path.join(QBIT_AUTH_DIR, "username")) as f:
+                user = f.read().strip()
+            with open(os.path.join(QBIT_AUTH_DIR, "password")) as f:
+                password = f.read().strip()
+        except OSError:
+            return None
+        return (user, password) if user and password else None
+
+
     def reconcile_downloadclient(app, apikey, dc_cfg, category, auth_apikey):
         port = APP_PORTS[app]
         base = f"http://localhost:{port}/api/v3"
@@ -683,6 +710,10 @@ data:
         # qbittorrent-config-seed-script.yml.
         if auth_apikey:
             field_values["apiKey"] = auth_apikey
+        if implementation == "QBittorrent":
+            login = read_qbit_login()
+            if login:
+                field_values["username"], field_values["password"] = login
         for f in schema["fields"]:
             if f["name"] in field_values:
                 f["value"] = field_values[f["name"]]
@@ -791,7 +822,7 @@ data:
         """Prowlarr tags are how an indexer gets associated with an
         indexer proxy - there's no direct proxy-to-indexer field. Tag
         labels are lowercased by Prowlarr itself, so match on that."""
-        base = "http://localhost:9696/api/v1"
+        base = PROWLARR_BASE
         wanted = label.lower()
         existing = http_json("GET", f"{base}/tag?apikey={apikey}") or []
         match = next((t for t in existing if t.get("label") == wanted), None)
@@ -807,7 +838,7 @@ data:
         an indexer by actually fetching it at create/update time, so a
         Cloudflare-gated indexer only passes once its proxy already
         exists and is tagged."""
-        base = "http://localhost:9696/api/v1"
+        base = PROWLARR_BASE
         proxies = desired.get("prowlarr", {}).get("indexerProxies", [])
         if not proxies:
             return
@@ -838,7 +869,7 @@ data:
         indexers = desired.get("prowlarr", {}).get("indexers", [])
         if not indexers:
             return
-        base = "http://localhost:9696/api/v1"
+        base = PROWLARR_BASE
         existing = http_json("GET", f"{base}/indexer?apikey={apikey}") or []
         schema_list = http_json("GET", f"{base}/indexer/schema?apikey={apikey}")
 
@@ -908,7 +939,7 @@ data:
     # ---------------------------------------------------------------------
 
     def reconcile_prowlarr_apps(prowlarr_apikey, apikeys):
-        base = "http://localhost:9696/api/v1"
+        base = PROWLARR_BASE
         existing = http_json("GET", f"{base}/applications?apikey={prowlarr_apikey}") or []
         schema_list = http_json("GET", f"{base}/applications/schema?apikey={prowlarr_apikey}")
 
@@ -924,6 +955,10 @@ data:
             for f in schema["fields"]:
                 if f["name"] == "apiKey":
                     f["value"] = apikeys[app]
+                elif f["name"] == "prowlarrUrl":
+                    f["value"] = "http://prowlarr:9696"
+                elif f["name"] == "baseUrl":
+                    f["value"] = "http://%s:%d" % (app, APP_PORTS[app])
 
             match = next((e for e in existing if e.get("name") == app.capitalize()), None)
             if match is None:
@@ -933,6 +968,12 @@ data:
                 schema["id"] = match["id"]
                 http_json("PUT", f"{base}/applications/{match['id']}?apikey={prowlarr_apikey}", body=schema)
                 log("INFO", f"prowlarr: re-applied application link {app.capitalize()!r}")
+        # Push Prowlarr's indexers to the apps again so their stored indexer URLs
+        # point at the Prowlarr Service, not localhost (a no-op when unchanged).
+        try:
+            http_json("POST", f"{base}/command?apikey={prowlarr_apikey}", body={"name": "ApplicationIndexerSync"})
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            log("INFO", f"prowlarr: indexer sync request failed ({e}) - the apps' own sync will catch up")
 
 
     # ---------------------------------------------------------------------
@@ -943,7 +984,9 @@ data:
         apikeys = {app: read_apikey_xml(path) for app, path in CONFIG_XML_PATHS.items()}
         sab_apikey = read_sabnzbd_apikey(SABNZBD_INI_PATH)
 
-        if sab_apikey:
+        if not on("vpn"):
+            pass
+        elif sab_apikey:
             try:
                 reconcile_sabnzbd_categories(desired, sab_apikey)
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
@@ -960,27 +1003,33 @@ data:
             log("INFO", "sabnzbd api key not available yet (config.ini not written) - skipping this pass")
 
         try:
-            reconcile_rootfolders(desired, apikeys)
+            if on("arr"):
+                reconcile_rootfolders(desired, apikeys)
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             log("CRIT", f"root folder reconcile failed: {e}")
 
         try:
-            reconcile_qbittorrent_categories(desired)
+            if on("vpn"):
+                reconcile_qbittorrent_categories(desired)
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             log("CRIT", f"qbittorrent category reconcile failed: {e}")
         try:
-            reconcile_qbittorrent_preferences(desired)
+            if on("vpn"):
+                reconcile_qbittorrent_preferences(desired)
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             log("CRIT", f"qbittorrent preferences reconcile failed: {e}")
 
-        for dc_cfg in desired.get("downloadClients", []):
+        for dc_cfg in (desired.get("downloadClients", []) if on("arr") else []):
             implementation = dc_cfg.get("implementation", "Sabnzbd")
             if implementation == "Sabnzbd":
                 if not sab_apikey:
                     continue
                 auth_key = sab_apikey
             elif implementation == "QBittorrent":
-                auth_key = None  # LocalHostAuth bypass - no credential needed for same-pod calls
+                auth_key = None  # the login comes from /qbit-auth inside reconcile_downloadclient
+                if ROLE == "arr" and not read_qbit_login():
+                    log("INFO", "qbittorrent login not mounted yet - skipping its download client this pass")
+                    continue
             else:
                 log("CRIT", f"downloadclient: unknown implementation {implementation!r} for {dc_cfg['name']!r}")
                 continue
@@ -998,15 +1047,18 @@ data:
 
         if apikeys.get("prowlarr"):
             try:
-                reconcile_prowlarr_indexerproxies(desired, apikeys["prowlarr"])
+                if on("vpn"):
+                    reconcile_prowlarr_indexerproxies(desired, apikeys["prowlarr"])
             except (urllib.error.URLError, urllib.error.HTTPError, OSError, KeyError) as e:
                 log("CRIT", f"prowlarr indexer proxy reconcile failed: {e}")
             try:
-                reconcile_prowlarr_indexers(desired, apikeys["prowlarr"])
+                if on("vpn"):
+                    reconcile_prowlarr_indexers(desired, apikeys["prowlarr"])
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
                 log("CRIT", f"prowlarr indexer reconcile failed: {e}")
             try:
-                reconcile_prowlarr_apps(apikeys["prowlarr"], apikeys)
+                if on("arr"):
+                    reconcile_prowlarr_apps(apikeys["prowlarr"], apikeys)
             except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
                 log("CRIT", f"prowlarr application-link reconcile failed: {e}")
         else:

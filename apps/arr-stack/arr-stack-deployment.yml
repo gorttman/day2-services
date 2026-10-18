@@ -1,17 +1,16 @@
-# One shared pod: containers in a pod share a network namespace, which is
-# the Kubernetes equivalent of docker-compose `network_mode:
-# service:gluetun`. Every arr app's traffic - inbound (Services/Ingress
-# target this pod) and outbound - passes through Gluetun's namespace;
-# Gluetun's firewall only admits the UI ports listed in
-# FIREWALL_INPUT_PORTS and only routes egress via the VPN tunnel.
+# The *arr pod: Sonarr, Radarr, Whisparr, LazyLibrarian and the wiring
+# reconciler. Normal cluster egress (no VPN). Download clients and indexers
+# (qBittorrent, SABnzbd, Prowlarr) run in the separate `arr-vpn` pod
+# (arr-vpn-deployment.yml) behind gluetun and are reached over their Services.
 #
-# LIVE 2026-07-22: real PIA (Private Internet Access) OpenVPN
-# credentials sealed over gluetun-vpn - switched from Mullvad/WireGuard
-# the same day, user already had a PIA subscription. OpenVPN, not
-# WireGuard, deliberately: gluetun's native PIA support is OpenVPN-only.
-# Disabled 2026-07-17 through 2026-07-22 on a placeholder VPN secret
-# (gluetun CrashLoopBackOff, replicas: 0) - re-enabled once real creds
-# landed.
+# SPLIT 2026-10-18 from one eleven-container pod. Why: the VPN peer rotates
+# often and a Radarr OOM used to restart gluetun too; every restart bounced
+# every app and re-ran Radarr's start-up queue check. Now a VPN change touches
+# only arr-vpn, and a Radarr restart touches only this pod.
+#
+# This pod must run on the same node as arr-vpn: the reconciler and the
+# LazyLibrarian seeder read prowlarr-config / sabnzbd-config (Longhorn, single
+# node) for API keys.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -60,97 +59,14 @@ spec:
       # single app in this pod simultaneously, not just qBittorrent.
       # See qbittorrent-config-init's own comment for the actual fix
       # (an initContainer, not a sidecar sharing PIDs).
-      initContainers:
-      # Seeds/patches qBittorrent.conf BEFORE qBittorrent's own container
-      # ever starts, not as a sidecar racing against an already-running
-      # process. qBittorrent (Qt/QSettings) holds its whole config in
-      # memory for its process lifetime and flushes it back to disk
-      # wholesale on graceful shutdown - a sidecar editing the file while
-      # qBittorrent is already running gets silently reverted the moment
-      # anything restarts it (confirmed live 2026-08-25: this caused an
-      # infinite ~30s whole-pod restart loop, since qBittorrent's own
-      # shutdown handler kept overwriting the sidecar's edit before the
-      # freshly-recreated pod even finished coming up). An initContainer
-      # sidesteps this entirely: it runs to completion and exits before
-      # qBittorrent's container starts, so there's no in-memory state to
-      # race against, and it re-runs (idempotently) on every pod restart
-      # for any reason, not just the first one - no signaling, no shared
-      # PID namespace, no extra RBAC needed.
-      - name: qbittorrent-config-init
-        image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
-        imagePullPolicy: IfNotPresent
-        command: ["python3", "/app/seed_config.py"]
-        securityContext:
-          runAsUser: 1000
-          runAsGroup: 1000
-        volumeMounts:
-        - name: qbittorrent-config
-          mountPath: /config
-        - name: qbittorrent-config-seed-script
-          mountPath: /app
-        resources:
-          requests: {memory: "32Mi", cpu: "10m"}
-          limits: {memory: "128Mi", cpu: "200m"}
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: arr-vpn
+              topologyKey: kubernetes.io/hostname
       containers:
-      - name: gluetun
-        image: qmcgaw/gluetun:v3.41.1
-        imagePullPolicy: IfNotPresent
-        securityContext:
-          capabilities:
-            add: ["NET_ADMIN"]
-        envFrom:
-        # Split 2026-08-07: non-secret peer fields (endpoint IP/port,
-        # server pubkey, assigned address) in the plain gluetun-config
-        # ConfigMap; only WIREGUARD_PRIVATE_KEY stays in the Sealed
-        # Secret. See gluetun-config.yml / gluetun-sealed-secret.yml.
-        - configMapRef:
-            name: gluetun-config
-        - secretRef:
-            name: gluetun-vpn
-        env:
-        - name: TZ
-          value: Australia/Sydney
-        # OpenVPN to PIA (UDP 1197, UDP 8080, TCP 501 - all tried) never
-        # completes a handshake from this network: UDP got "TLS key
-        # negotiation failed", TCP got a hard connect timeout, both
-        # against multiple real server IPs across two regions. Basic
-        # outbound connectivity is fine (control test to 1.1.1.1:443
-        # succeeds from the same pod network) and PIA's own account API
-        # (token issuance) works over plain HTTPS, so this points at
-        # something in this network path specifically dropping OpenVPN
-        # traffic, not a PIA-side or credentials problem - consistent
-        # with the user's own prior experience of PIA working fine on
-        # this same network segment via WireGuard (PIA's app default).
-        # Switched 2026-07-23 to WireGuard via gluetun's "custom"
-        # provider (native PIA WireGuard support doesn't exist in
-        # gluetun - upstream confirms this is still work in progress).
-        # The peer registration (keypair + PIA's /addKey API) is now
-        # kept fresh automatically by the vpn-healer CronJob
-        # (../vpn-healer/) - see gluetun-sealed-secret.yml for the full
-        # rundown and what to do if a manual re-registration is ever
-        # needed instead.
-        # Admit the arr UIs through gluetun's firewall (inbound)
-        # 6969 added 2026-08-27 for whisparr. 8000 = gluetun control server
-        # (API-key auth; the vpn-healer swaps the VPN peer in place via it).
-        - name: FIREWALL_INPUT_PORTS
-          value: "8989,7878,9696,8080,8090,6767,5800,5299,6969,8000"
-        # Keep cluster traffic (DNS, kubelet probes, pod/svc CIDRs) off the VPN
-        - name: FIREWALL_OUTBOUND_SUBNETS
-          value: "10.42.0.0/16,10.43.0.0/16"
-        volumeMounts:
-        - name: dev-net-tun
-          mountPath: /dev/net/tun
-        - name: gluetun-control
-          mountPath: /gluetun/auth/config.toml
-          subPath: config.toml
-          readOnly: true
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "256Mi"
-            cpu: "500m"
       - name: sonarr
         image: lscr.io/linuxserver/sonarr:4.0.19
         imagePullPolicy: IfNotPresent
@@ -221,96 +137,6 @@ spec:
         resources:
           requests: {memory: "512Mi", cpu: "50m"}
           limits: {memory: "2Gi", cpu: "1000m"}
-      - name: prowlarr
-        image: lscr.io/linuxserver/prowlarr:2.4.0
-        imagePullPolicy: IfNotPresent
-        env:
-        - {name: PUID, value: "1000"}
-        - {name: PGID, value: "1000"}
-        - {name: TZ, value: Australia/Sydney}
-        ports:
-        - {name: prowlarr, containerPort: 9696, protocol: TCP}
-        volumeMounts:
-        - name: prowlarr-config
-          mountPath: /config
-        readinessProbe:
-          tcpSocket: {port: 9696}
-          initialDelaySeconds: 20
-          periodSeconds: 15
-        resources:
-          requests: {memory: "128Mi", cpu: "50m"}
-          # 512Mi wasn't enough headroom for a burst of concurrent
-          # indexer queries (found live 2026-08-27: OOMKilled,
-          # exitCode 137, repeatedly, while Radarr's MissingMoviesSearch
-          # fired a large batch of requests at once against NZBgeek).
-          limits: {memory: "1024Mi", cpu: "1000m"}
-      - name: sabnzbd
-        image: lscr.io/linuxserver/sabnzbd:5.0.4
-        imagePullPolicy: IfNotPresent
-        env:
-        - {name: PUID, value: "1000"}
-        - {name: PGID, value: "1000"}
-        - {name: TZ, value: Australia/Sydney}
-        ports:
-        - {name: sabnzbd, containerPort: 8080, protocol: TCP}
-        volumeMounts:
-        - name: sabnzbd-config
-          mountPath: /config
-        - name: media
-          mountPath: /downloads
-          subPath: downloads
-        # books-pipeline's own import/ mount, direct - the "books"
-        # category's completed-dir points here (Config > Categories >
-        # books > Folder/Path = /books-import) so a finished books
-        # download lands exactly where books-pipeline already scans, no
-        # extra hop. Set live by arr-wiring-reconciler via SABnzbd's own
-        # config API (mode=set_config&section=categories), not a blind
-        # INI patch - sabnzbd.ini's category section uses ConfigObj's
-        # nested [[section]] format, which configparser can't safely
-        # round-trip, but SABnzbd's own API sidesteps that entirely.
-        - name: books-import
-          mountPath: /books-import
-          subPath: import
-        readinessProbe:
-          tcpSocket: {port: 8080}
-          initialDelaySeconds: 20
-          periodSeconds: 15
-        # 2Gi, not 1Gi: par2 repair loads recovery blocks in memory and is
-        # the peak here, not SABnzbd itself. At a 1Gi limit the par2/python3
-        # RSS reached ~1010Mi and the cgroup OOM-killed the container in a
-        # loop (dmesg, 2026-09-03), leaving the shared pod permanently 9/10
-        # and taking the whole arr stack down with it. Requests stay at
-        # 128Mi, so this raises the burst ceiling only - it does not reserve
-        # more off the node.
-        resources:
-          requests: {memory: "128Mi", cpu: "50m"}
-          limits: {memory: "2Gi", cpu: "1500m"}
-      - name: qbittorrent
-        image: lscr.io/linuxserver/qbittorrent:5.2.3
-        imagePullPolicy: IfNotPresent
-        env:
-        - {name: PUID, value: "1000"}
-        - {name: PGID, value: "1000"}
-        - {name: TZ, value: Australia/Sydney}
-        - {name: WEBUI_PORT, value: "8090"}
-        ports:
-        - {name: qbittorrent, containerPort: 8090, protocol: TCP}
-        volumeMounts:
-        - name: qbittorrent-config
-          mountPath: /config
-        # Same shared /downloads mount every other download client here
-        # uses - a finished torrent import is a plain rename for
-        # Sonarr/Radarr, not a cross-filesystem copy.
-        - name: media
-          mountPath: /downloads
-          subPath: downloads
-        readinessProbe:
-          tcpSocket: {port: 8090}
-          initialDelaySeconds: 20
-          periodSeconds: 15
-        resources:
-          requests: {memory: "128Mi", cpu: "50m"}
-          limits: {memory: "1Gi", cpu: "1000m"}
       # bazarr and jdownloader2 REMOVED 2026-08-08 - deliberate, not a
       # gap. See README's "Removed: bazarr and jdownloader2" section for
       # the full reasoning. Left commented rather than deleted: both
@@ -459,6 +285,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        - {name: PROWLARR_HOST, value: prowlarr}
         volumeMounts:
         - name: lazylibrarian-config
           mountPath: /config
@@ -479,46 +306,13 @@ spec:
         resources:
           requests: {memory: "32Mi", cpu: "10m"}
           limits: {memory: "128Mi", cpu: "200m"}
-      # Applies arr-stack-wiring-config.yml's SABnzbd category and
-      # Sonarr/Radarr download-client wiring live, via each app's own
-      # REST API - unlike lazylibrarian-config-seed above, no pod
-      # restart needed (confirmed live 2026-07-23 against the real
-      # running apps, not guessed from docs - see
-      # arr-stack-wiring-reconciler-script.yml's module docstring for
-      # the full mechanism). Loops every 5 minutes, re-reading the
-      # mounted wiring-config each pass, so an indexer/category change
-      # is a commit away with no pod restart and no manual UI step.
-      # Re-asserts qBittorrent's queue limits through its WebUI API,
-      # because seeding them into qBittorrent.conf does not stick - see
-      # enforce_prefs.py's docstring for the evidence. A loop rather
-      # than a one-shot: the limits are what stop a few dead magnets
-      # taking the whole client to zero throughput, and that has now
-      # happened twice.
-      - name: qbittorrent-prefs
-        image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
-        imagePullPolicy: IfNotPresent
-        command: ["python3", "/app/enforce_prefs.py"]
-        env:
-        # 60s, not the 300s default. qBittorrent reverts these within a
-        # few seconds of starting, so a 5-minute loop leaves the stock
-        # 15-torrent limit in force for most of that window - which is
-        # exactly when a restart has just re-queued everything and the
-        # limit matters most.
-        - {name: INTERVAL_SECONDS, value: "60"}
-        securityContext:
-          runAsUser: 1000
-          runAsGroup: 1000
-        volumeMounts:
-        - name: qbittorrent-config-seed-script
-          mountPath: /app
-          readOnly: true
-        resources:
-          requests: {memory: "24Mi", cpu: "5m"}
-          limits: {memory: "96Mi", cpu: "100m"}
       - name: arr-wiring-reconciler
         image: lscr.io/linuxserver/lazylibrarian:a7c70e36-ls311
         imagePullPolicy: IfNotPresent
         command: ["python3", "/app/reconcile.py"]
+        env:
+        - {name: RECONCILER_ROLE, value: arr}
+        - {name: PROWLARR_HOST, value: prowlarr}
         securityContext:
           runAsUser: 1000
           runAsGroup: 1000
@@ -530,6 +324,9 @@ spec:
           readOnly: true
         - name: arr-stack-wiring-secret
           mountPath: /wiring-secret
+          readOnly: true
+        - name: qbittorrent-auth
+          mountPath: /qbit-auth
           readOnly: true
         - name: sonarr-config
           mountPath: /app-config/sonarr
@@ -550,14 +347,6 @@ spec:
           requests: {memory: "32Mi", cpu: "10m"}
           limits: {memory: "128Mi", cpu: "200m"}
       volumes:
-      - name: gluetun-control
-        secret:
-          secretName: gluetun-control
-          items: [{key: config.toml, path: config.toml}]
-      - name: dev-net-tun
-        hostPath:
-          path: /dev/net/tun
-          type: CharDevice
       - name: sonarr-config
         persistentVolumeClaim: {claimName: sonarr-config}
       - name: radarr-config
@@ -566,11 +355,6 @@ spec:
         persistentVolumeClaim: {claimName: prowlarr-config}
       - name: sabnzbd-config
         persistentVolumeClaim: {claimName: sabnzbd-config}
-      - name: qbittorrent-config
-        persistentVolumeClaim: {claimName: qbittorrent-config}
-      - name: qbittorrent-config-seed-script
-        configMap:
-          name: qbittorrent-config-seed-script
       # bazarr-config/jdownloader2-config volumes removed with their
       # PVCs (see the container blocks above) - a Pod spec referencing
       # a PVC that no longer exists blocks scheduling entirely, not
@@ -626,3 +410,7 @@ spec:
         nfs:
           server: qnap
           path: /media
+
+      - name: qbittorrent-auth
+        secret:
+          secretName: qbittorrent-auth

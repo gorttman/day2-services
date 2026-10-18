@@ -13,7 +13,7 @@ spec:
   # placeholder VPN creds; keep the UIs reachable regardless.
   publishNotReadyAddresses: true
   selector:
-    app: arr-stack
+    app: arr-vpn
   ports:
   - name: http
     port: 8090

@@ -78,7 +78,9 @@ data:
     downloadClients:
       - name: SABnzbd
         implementation: Sabnzbd
-        host: localhost
+        # Service name, not localhost: since 2026-10-18 SABnzbd runs in the
+        # arr-vpn pod, separate from Sonarr/Radarr/Whisparr/LazyLibrarian.
+        host: sabnzbd
         port: 8080
         apps:
           - app: sonarr
@@ -91,13 +93,13 @@ data:
             category: adult
 
       # 2026-08-25: torrent protocol coverage - qBittorrent joins the
-      # shared pod, same as SABnzbd. No credentials here: WebUI\
-      # LocalHostAuth=false (set by qbittorrent-config-seed) bypasses
-      # auth entirely for same-pod (genuine 127.0.0.1) calls, which is
-      # what every app-to-app call in this stack already is.
+      # shared pod, same as SABnzbd. Since the 2026-10-18 pod split the apps
+      # reach it over its Service and log in with the qbittorrent-auth secret
+      # (the reconciler reads /qbit-auth); in-pod callers (the vpn-role
+      # reconciler, qbittorrent-prefs) still use the 127.0.0.1 auth bypass.
       - name: qBittorrent
         implementation: QBittorrent
-        host: localhost
+        host: qbittorrent
         port: 8090
         apps:
           - app: sonarr

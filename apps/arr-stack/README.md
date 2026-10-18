@@ -104,6 +104,38 @@ Indexer API keys go in `wiring/arr-stack-wiring-sealed-secret.yml`
 currently just a placeholder since no indexer is configured yet; see
 that file's header comment for how to add a real one.
 
+## Two pods since 2026-10-18 (read this before the sections below)
+
+The old single eleven-container pod is now two Deployments. Older sections
+below still say "the shared pod" - they predate the split.
+
+- **`arr-vpn`** (`arr-vpn-deployment.yml`): gluetun + qBittorrent + SABnzbd +
+  Prowlarr, sharing gluetun's network namespace. Everything that must leave via
+  the PIA tunnel. vpn-healer targets this pod (`POD_SELECTOR=app=arr-vpn`).
+- **`arr-stack`** (`arr-stack-deployment.yml`): Sonarr, Radarr, Whisparr,
+  LazyLibrarian and their config sidecars. Normal cluster egress, no VPN.
+
+Why: a VPN peer change or a Radarr OOM used to restart every app and re-run
+Radarr's start-up queue check. Now each side restarts alone.
+
+How they talk: Services keep their old names (`sabnzbd`, `qbittorrent`,
+`prowlarr`; the selectors now point at `app: arr-vpn`). The wiring config uses
+those names instead of `localhost`. Two reconcilers run the same script with
+`RECONCILER_ROLE=vpn|arr`: the vpn one configures SABnzbd, qBittorrent and
+Prowlarr's indexers over localhost, the arr one configures the *arr apps and the
+Prowlarr application links (explicit `http://prowlarr:9696` / `http://<app>:<port>`).
+
+qBittorrent only skips auth for 127.0.0.1, so the *arr apps log in with the
+`qbittorrent-auth` SealedSecret (user `arr`); `qbittorrent-config-init` writes
+the hash into qBittorrent.conf. The WebUI login for humans is that same pair.
+
+Both pods must share a node: they both mount `prowlarr-config` and
+`sabnzbd-config` (Longhorn volumes are single-node). `arr-stack` requires
+co-location with `arr-vpn`; `arr-vpn` prefers it. If a restart ever leaves them
+on different nodes, delete the `arr-stack` pod and it will follow `arr-vpn`.
+
+Rollback: revert the split commit; the PVCs are untouched.
+
 ## Network layout - one shared pod
 Containers in a pod share a network namespace, so the whole stack runs as
 **one Deployment** with Gluetun plus the six apps as containers - the
