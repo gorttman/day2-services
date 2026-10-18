@@ -10,3 +10,8 @@ configMapGenerator:
   - name: log-rollup-script
     files:
       - log_rollup.py
+
+# No hash suffix: kustomize does not rewrite the ConfigMap name inside a
+# CronJob's jobTemplate, and each run is a fresh pod that reads the current one.
+generatorOptions:
+  disableNameSuffixHash: true
