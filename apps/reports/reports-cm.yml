@@ -1857,19 +1857,39 @@ data:
         document.getElementById("updated").textContent="Updated "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
       }).catch(function(e){document.getElementById("updated").textContent="Could not read the cluster: "+e.message});
     }
+    function dfmt(t){return new Date(t).toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"})}
+    function sev(x){return x==="bad"?2:x==="warn"?1:0}
     function certRender(d){
       var list=d.certificates||[],bad=list.filter(function(c){return c.state==="bad"}).length,warn=list.filter(function(c){return c.state==="warn"}).length;
-      document.getElementById("certsum").innerHTML=chip(bad?"crit":warn?"warn":"good",list.length+" certificates")+" "
-        +(bad?chip("crit",bad+" need action"):"")+" "+(warn?chip("warn",warn+" expiring soon"):"")+" Managed by cert-manager (Let's Encrypt), renewed automatically 30 days before expiry. Worst first.";
-      document.getElementById("certs").innerHTML=list.map(function(c){
-        var when=c.notAfter?new Date(c.notAfter).toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"}):"not issued";
-        var txt=!c.ready?"Not ready":c.days==null?"unknown":c.days+" days left";
-        var sum='<div class="l">'+esc(c.hosts[0]||c.name)+' <span class="ns">'+esc(c.ns)+'</span></div><div>'+chip(c.state==="bad"?"crit":c.state==="warn"?"warn":"good",txt)+" "+chip("",when)+'</div>';
-        var body='<div class="cons"><div class="con"><span>Names</span><span class="img">'+esc(c.hosts.join(", "))+'</span></div>'
-          +'<div class="con"><span>Issuer</span><span class="img">'+esc(c.issuer)+'</span></div>'
-          +(c.renewalTime?'<div class="con"><span>Renews from</span><span class="img">'+esc(new Date(c.renewalTime).toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"}))+'</span></div>':"")
-          +(c.message?'<div class="con"><span>Problem</span><span class="img">'+esc(c.message)+'</span></div>':"")+'</div>';
-        return det("cert/"+c.ns+"/"+c.name,"pod",sum,body)}).join("");
+      var nss={};
+      list.forEach(function(c){
+        var n=nss[c.ns]=nss[c.ns]||{ns:c.ns,hosts:{},state:"ok",days:null};
+        var k=c.hosts.length?c.hosts.join(", "):c.name;
+        var h=n.hosts[k]=n.hosts[k]||{key:k,certs:[],state:"ok",days:null};
+        h.certs.push(c);
+        if(sev(c.state)>sev(h.state))h.state=c.state;
+        if(c.days!=null&&(h.days==null||c.days<h.days))h.days=c.days;
+      });
+      var arr=Object.keys(nss).map(function(k){
+        var n=nss[k];n.list=Object.keys(n.hosts).map(function(x){return n.hosts[x]});
+        n.list.forEach(function(h){if(sev(h.state)>sev(n.state))n.state=h.state;if(h.days!=null&&(n.days==null||h.days<n.days))n.days=h.days});
+        n.list.sort(function(a,b){return sev(b.state)-sev(a.state)||(a.days==null?-1:a.days)-(b.days==null?-1:b.days)||a.key.localeCompare(b.key)});
+        return n}).sort(function(a,b){return sev(b.state)-sev(a.state)||(a.days==null?-1:a.days)-(b.days==null?-1:b.days)||a.ns.localeCompare(b.ns)});
+      var nh=arr.reduce(function(t,n){return t+n.list.length},0);
+      document.getElementById("certsum").innerHTML=chip(bad?"crit":warn?"warn":"good",nh+" hostnames \u00b7 "+list.length+" certificates")+" "
+        +(bad?chip("crit",bad+" need action"):"")+" "+(warn?chip("warn",warn+" expiring soon"):"")+" Managed by cert-manager (Let's Encrypt), renewed automatically. Grouped by app, then hostname; soonest expiry first.";
+      function tone(s){return s==="bad"?"crit":s==="warn"?"warn":"good"}
+      function ctext(x){return x.ready===false?"Not ready":x.days==null?"unknown":x.days+" days left"}
+      document.getElementById("certs").innerHTML=arr.map(function(n){
+        var rows=n.list.map(function(h){
+          var inner=h.certs.map(function(c){
+            return '<div class="con"><span>'+esc(c.name)+' <span class="img">'+esc(c.issuer)+'</span></span><span>'
+              +(c.message?esc(c.message)+" ":"")+(c.renewalTime?'<span class="img">renews from '+esc(dfmt(c.renewalTime))+'</span> ':"")
+              +chip("",c.notAfter?dfmt(c.notAfter):"not issued")+" "+chip(tone(c.state),ctext(c))+'</span></div>'}).join("");
+          var hs='<div class="l">'+esc(h.key)+'</div><div>'+chip(tone(h.state),h.days==null?"not ready":h.days+" days left")+" "+chip("",h.certs.length+(h.certs.length===1?" certificate":" certificates"))+'</div>';
+          return det("cert/"+n.ns+"/"+h.key,"pod",hs,'<div class="cons">'+inner+'</div>')}).join("");
+        var ns='<div class="l">'+esc(n.ns)+' <span class="ns">'+n.list.length+(n.list.length===1?" hostname":" hostnames")+'</span></div><div>'+chip(tone(n.state),n.days==null?"not ready":"soonest "+n.days+" days")+'</div>';
+        return det("certns/"+n.ns,"node",ns,'<div class="pods">'+rows+'</div>')}).join("");
     }
     function loadCerts(){
       fetch("/api/certificates",{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){
