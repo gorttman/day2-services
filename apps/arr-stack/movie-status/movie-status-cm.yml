@@ -821,8 +821,37 @@ data:
             return json.load(r)
 
 
+    def update_progress(prev, items, failed_any, now):
+        """Has the download queue made any progress since the last scrape?
+
+        Replaces the download-stall-watch CronJob, which needed the vault
+        mount. items maps "app:queueId" -> bytes still to fetch, for items
+        that are actually downloading or waiting for a slot (paused ones are
+        deliberate; completed ones have nothing left to move). Progress is
+        any item's bytes-left going down, or any item leaving the queue
+        (finished or removed). New items arriving is NOT progress. If an
+        *arr could not be read this scrape, nothing is concluded: that has
+        its own alert, and a missing app must not look like progress.
+
+        Returns (state, stall_minutes). stall_minutes is 0 when nothing is
+        active, so an idle queue never alerts.
+        """
+        prev_items = prev.get("items", {})
+        progress_at = prev.get("progressAt", now)
+        if failed_any:
+            return {"items": prev_items, "progressAt": progress_at}, \
+                (now - progress_at) / 60.0 if prev_items else 0.0
+        if not items:
+            progress_at = now
+        elif any(k in prev_items and v < prev_items[k] for k, v in items.items()) \
+                or any(k not in items for k in prev_items):
+            progress_at = now
+        return {"items": items, "progressAt": progress_at}, \
+            (now - progress_at) / 60.0 if items else 0.0
+
+
     def alert_signals():
-        """Two numbers for Grafana, scraped by Telegraf every 5 minutes.
+        """Numbers for Grafana, scraped by Telegraf every 5 minutes.
 
         stuckOldestHours  how long the longest-stuck queue item has been
                           stuck, across Radarr, Sonarr and Whisparr. First
@@ -836,6 +865,10 @@ data:
                           pod replacements (a new pod UID, which is what a
                           VPN peer rotation or a deploy does and which
                           restartCount never shows).
+
+        stallMinutes      how long active downloads have gone without any
+                          progress (see update_progress); 0 when idle.
+        activeDownloads   items downloading or waiting for a slot right now.
 
         State is a small JSON file on the state PVC, so the history
         survives a movie-status restart. Each scrape is one sample.
@@ -879,13 +912,24 @@ data:
                         for _ in range(max(0, n - last[uid].get(name, n))):
                             events.append({"t": now, "what": "restart " + name})
             events = [e for e in events if now - e["t"] < 86400]
-            st.update({"stuckSince": seen, "events": events, "pods": cur})
+            # --- download progress -------------------------------------
+            items, failed_any = {}, False
+            for app in ("radarr", "sonarr", "whisparr"):
+                try:
+                    for r in arr_queue(app):
+                        if r.get("status") in ("downloading", "queued") and int(r.get("sizeleft") or 0) > 0:
+                            items["%s:%s" % (app, r["id"])] = int(r["sizeleft"])
+                except Exception:
+                    failed_any = True
+            dl, stall = update_progress(st.get("dl", {}), items, failed_any, now)
+            st.update({"stuckSince": seen, "events": events, "pods": cur, "dl": dl})
             tmp = ALERT_STATE + ".tmp"
             with open(tmp, "w") as f:
                 json.dump(st, f)
             os.replace(tmp, ALERT_STATE)
         return {"stuckCount": len(titles), "stuckOldestHours": round(oldest, 2),
-                "restarts24h": len(events)}
+                "restarts24h": len(events), "stallMinutes": round(stall),
+                "activeDownloads": len(dl["items"])}
 
 
     class Handler(BaseHTTPRequestHandler):
