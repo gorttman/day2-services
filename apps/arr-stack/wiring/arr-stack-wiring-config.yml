@@ -57,6 +57,10 @@ data:
       misc:
         cache_limit: 256M
         fulldisk_autoresume: 1
+        # SABnzbd rejects any Host header not listed here (403 "Hostname
+        # verification failed"). Since the 2026-10-18 pod split the *arr apps
+        # call it as sabnzbd:8080, so the Service names must be allowed too.
+        host_whitelist: "sabnzbd.i3sec.com.au,sabnzbd,sabnzbd.arr-stack,sabnzbd.arr-stack.svc,sabnzbd.arr-stack.svc.cluster.local"
 
       # Frugal Usenet account (2026-07-23) - username/password sealed
       # and ready (frugal_username/frugal_password in
