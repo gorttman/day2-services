@@ -1,4 +1,4 @@
-# Read-only view of pods, nodes and ingresses for the /placement/ and /control/ pages (reports-cm.yml,
+# Read-only view of pods, nodes, ingresses and cert-manager Certificates for the /placement/ and /control/ pages (reports-cm.yml,
 # server.py). No write verbs, no secrets, no exec.
 apiVersion: v1
 kind: ServiceAccount
@@ -16,6 +16,9 @@ rules:
     verbs: ["get", "list"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
+    verbs: ["get", "list"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates"]
     verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

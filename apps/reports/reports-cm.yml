@@ -30,6 +30,8 @@ data:
       /placement/              nodes -> apps -> containers, read live from the
                                Kubernetes API (read-only ServiceAccount)
       /api/placement           the same as JSON
+      /api/certificates        cert-manager Certificates: status and expiry, for the
+                               certificates panel on /placement/
       /control/                every report and admin site on one page; also served
                                at / for the control.i3sec.com.au host (internal only)
       /api/hosts               hostnames of every ingress, so new apps show up there
@@ -234,6 +236,46 @@ data:
             return value
 
 
+    _certs_cache = {"at": 0.0, "value": None}
+
+
+    def certificates():
+        """Every cert-manager Certificate with its readiness and expiry. Read-only
+        (reports-rbac.yml: get/list on certificates.cert-manager.io, no secrets)."""
+        with _place_lock:
+            if _certs_cache["value"] and time.time() - _certs_cache["at"] < 30:
+                return _certs_cache["value"]
+            now = datetime.now(timezone.utc)
+            rows = []
+            for c in kube_get("/apis/cert-manager.io/v1/certificates")["items"]:
+                st = c.get("status", {})
+                ready = next((x for x in st.get("conditions", []) if x.get("type") == "Ready"), {})
+                not_after = st.get("notAfter")
+                days = None
+                if not_after:
+                    days = int((datetime.fromisoformat(not_after.replace("Z", "+00:00")) - now).total_seconds() // 86400)
+                is_ready = ready.get("status") == "True"
+                if not is_ready:
+                    state = "bad"
+                elif days is not None and days < 7:
+                    state = "bad"
+                elif days is not None and days < 14:
+                    state = "warn"
+                else:
+                    state = "ok"
+                rows.append({
+                    "ns": c["metadata"]["namespace"], "name": c["metadata"]["name"],
+                    "hosts": c.get("spec", {}).get("dnsNames", []),
+                    "issuer": c.get("spec", {}).get("issuerRef", {}).get("name", ""),
+                    "ready": is_ready, "message": ready.get("message", "") if not is_ready else "",
+                    "notAfter": not_after, "renewalTime": st.get("renewalTime"), "days": days, "state": state,
+                })
+            rows.sort(key=lambda r: (r["state"] == "ok", r["days"] if r["days"] is not None else -1, r["ns"], r["name"]))
+            value = {"generated": now.isoformat(), "certificates": rows}
+            _certs_cache.update(at=time.time(), value=value)
+            return value
+
+
     def backup_summary():
         def worst(statuses):
             return max(statuses, key=ORDER.get) if statuses else "crit"
@@ -304,6 +346,12 @@ data:
             if path == "/api/placement":
                 try:
                     self.send(200, json.dumps(placement()).encode("utf-8"), "application/json")
+                except Exception as exc:  # noqa: BLE001
+                    self.send(502, json.dumps({"error": str(exc)[:300]}).encode("utf-8"), "application/json")
+                return
+            if path == "/api/certificates":
+                try:
+                    self.send(200, json.dumps(certificates()).encode("utf-8"), "application/json")
                 except Exception as exc:  # noqa: BLE001
                     self.send(502, json.dumps({"error": str(exc)[:300]}).encode("utf-8"), "application/json")
                 return
@@ -1760,6 +1808,9 @@ data:
       </header>
       <div class="bar"><span id="updated">Loading</span><label><input type="checkbox" id="fin"> show finished jobs</label><span><span class="key ds"></span>runs one per node (DaemonSet)</span></div>
       <div class="panel" id="tree"></div>
+      <div class="eyebrow" style="margin-top:8px">Certificates</div>
+      <div class="bar"><span id="certsum">Loading</span></div>
+      <div class="panel" id="certs"></div>
       <footer>Logs: <a href="https://grafana.i3sec.com.au/d/cluster-logs/cluster-logs" target="_blank" rel="noopener">search cluster and host logs</a> (Grafana, Loki). Refreshes every 30 seconds. <a href="/">All reports</a>.</footer>
     </main>
     <script>
@@ -1806,9 +1857,29 @@ data:
         document.getElementById("updated").textContent="Updated "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
       }).catch(function(e){document.getElementById("updated").textContent="Could not read the cluster: "+e.message});
     }
+    function certRender(d){
+      var list=d.certificates||[],bad=list.filter(function(c){return c.state==="bad"}).length,warn=list.filter(function(c){return c.state==="warn"}).length;
+      document.getElementById("certsum").innerHTML=chip(bad?"crit":warn?"warn":"good",list.length+" certificates")+" "
+        +(bad?chip("crit",bad+" need action"):"")+" "+(warn?chip("warn",warn+" expiring soon"):"")+" Managed by cert-manager (Let's Encrypt), renewed automatically 30 days before expiry. Worst first.";
+      document.getElementById("certs").innerHTML=list.map(function(c){
+        var when=c.notAfter?new Date(c.notAfter).toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"}):"not issued";
+        var txt=!c.ready?"Not ready":c.days==null?"unknown":c.days+" days left";
+        var sum='<div class="l">'+esc(c.hosts[0]||c.name)+' <span class="ns">'+esc(c.ns)+'</span></div><div>'+chip(c.state==="bad"?"crit":c.state==="warn"?"warn":"good",txt)+" "+chip("",when)+'</div>';
+        var body='<div class="cons"><div class="con"><span>Names</span><span class="img">'+esc(c.hosts.join(", "))+'</span></div>'
+          +'<div class="con"><span>Issuer</span><span class="img">'+esc(c.issuer)+'</span></div>'
+          +(c.renewalTime?'<div class="con"><span>Renews from</span><span class="img">'+esc(new Date(c.renewalTime).toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"}))+'</span></div>':"")
+          +(c.message?'<div class="con"><span>Problem</span><span class="img">'+esc(c.message)+'</span></div>':"")+'</div>';
+        return det("cert/"+c.ns+"/"+c.name,"pod",sum,body)}).join("");
+    }
+    function loadCerts(){
+      fetch("/api/certificates",{cache:"no-store"}).then(function(r){return r.json()}).then(function(d){
+        if(d.error)throw new Error(d.error);certRender(d);
+      }).catch(function(e){document.getElementById("certsum").textContent="Could not read certificates: "+e.message});
+    }
     document.addEventListener("toggle",function(e){var k=e.target.getAttribute&&e.target.getAttribute("data-k");if(!k)return;if(e.target.open)OPEN.add(k);else OPEN.delete(k)},true);
     document.getElementById("fin").addEventListener("change",render);
     load();setInterval(load,30000);
+    loadCerts();setInterval(loadCerts,30000);
     </script>
     </body>
     </html>
