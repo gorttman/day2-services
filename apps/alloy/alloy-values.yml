@@ -227,6 +227,38 @@ alloy:
         forward_to = [loki.process.udm.receiver]
       }
 
+      // ---- QNAP script logs ------------------------------------------------
+      // The QNAP has no collector, so a small cron script on it (day0-infra-build
+      // roles/qnap_log_shipper) sends new lines of its own logs (snapshot,
+      // stream watcher, ...) as RFC 3164 over UDP to 192.168.20.231:5514, mapped
+      // to 1515 here. The sending script's tag becomes the app label.
+      // signal_type=storage matches no retention_stream selector, so these keep
+      // the 6-month default.
+      loki.relabel "qnap" {
+        forward_to = []
+        rule {
+          source_labels = ["__syslog_message_app_name"]
+          target_label  = "app"
+        }
+      }
+
+      loki.source.syslog "qnap" {
+        listener {
+          address       = "0.0.0.0:1515"
+          protocol      = "udp"
+          syslog_format = "rfc3164"
+          use_incoming_timestamp = false
+          labels = {
+            cluster     = "pilab",
+            signal_type = "storage",
+            namespace   = "qnap",
+            node        = "qnap",
+          }
+        }
+        relabel_rules = loki.relabel.qnap.rules
+        forward_to    = [loki.write.default.receiver]
+      }
+
       // Tier the UDM's logs for retention (apps/loki/loki-values.yml).
       // udm_class=chatter (firewall default-policy lines, wifi/hostapd, switch
       // LLDP, kernel, station tracker) is kept 30 days; everything else the UDM

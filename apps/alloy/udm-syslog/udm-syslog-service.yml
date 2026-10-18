@@ -1,4 +1,4 @@
-# Receiver address for UDM syslog (UDM -> 192.168.20.231:514 -> any Alloy pod).
+# Receiver address for UDM syslog (and, on 5514, QNAP script logs) (UDM -> 192.168.20.231:514 -> any Alloy pod).
 # One fixed VIP so the UDM setting never depends on which node holds a pod.
 # externalTrafficPolicy Local keeps the sender's source IP and routes only to
 # pods on the node MetalLB announces from; every node runs an Alloy pod.
@@ -18,3 +18,6 @@ spec:
   ports:
     - {name: syslog-udp, port: 514, targetPort: 1514, protocol: UDP}
     - {name: syslog-tcp, port: 514, targetPort: 1514, protocol: TCP}
+    # QNAP script logs (day0-infra-build roles/qnap_log_shipper), own listener
+    # so their labels and retention never mix with the UDM's.
+    - {name: qnap-udp, port: 5514, targetPort: 1515, protocol: UDP}
