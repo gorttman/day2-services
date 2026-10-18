@@ -1,5 +1,5 @@
 # Read-only view of pods, nodes, ingresses and cert-manager Certificates for the /placement/ and /control/ pages (reports-cm.yml,
-# server.py). No write verbs, no secrets, no exec.
+# server.py). The one write is patch on certificates/status for the "Renew now" button. No secrets, no exec.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -20,6 +20,12 @@ rules:
   - apiGroups: ["cert-manager.io"]
     resources: ["certificates"]
     verbs: ["get", "list"]
+  # The "Renew now" button on /placement/ (same call as `cmctl renew`: set the
+  # Issuing condition). Status subresource only - cannot create, edit or delete a
+  # Certificate, and cannot read a Secret.
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates/status"]
+    verbs: ["patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

@@ -30,6 +30,7 @@ data:
       /placement/              nodes -> apps -> containers, read live from the
                                Kubernetes API (read-only ServiceAccount)
       /api/placement           the same as JSON
+      POST /api/certificates/renew   ask cert-manager to re-issue one Certificate now
       /api/certificates        cert-manager Certificates: status and expiry, for the
                                certificates panel on /placement/
       /control/                every report and admin site on one page; also served
@@ -51,11 +52,14 @@ data:
     soon as the kubelet refreshes the volume - no restart, no cache.
     """
     import json
+    import re
     import sys
     import threading
     import time
+    import urllib.error
+    import urllib.parse
     import urllib.request
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from pathlib import Path
 
@@ -135,6 +139,20 @@ data:
         token = Path(KUBE_DIR, "token").read_text().strip()
         ctx = ssl.create_default_context(cafile=f"{KUBE_DIR}/ca.crt")
         req = urllib.request.Request(f"https://{host}:{port}{path}", headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as resp:
+            return json.load(resp)
+
+
+    def kube_patch(path, body):
+        import os
+        import ssl
+        host = os.environ["KUBERNETES_SERVICE_HOST"]
+        port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+        token = Path(KUBE_DIR, "token").read_text().strip()
+        ctx = ssl.create_default_context(cafile=f"{KUBE_DIR}/ca.crt")
+        req = urllib.request.Request(
+            f"https://{host}:{port}{path}", data=json.dumps(body).encode("utf-8"), method="PATCH",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/merge-patch+json"})
         with urllib.request.urlopen(req, timeout=20, context=ctx) as resp:
             return json.load(resp)
 
@@ -276,6 +294,34 @@ data:
             return value
 
 
+    def renew_certificate(ns, name):
+        """Ask cert-manager to re-issue one Certificate now. This is what `cmctl renew`
+        does: set the Issuing condition on the status subresource (reports-rbac.yml
+        allows update/patch on certificates/status and nothing else). Returns (http
+        status, message)."""
+        path = f"/apis/cert-manager.io/v1/namespaces/{ns}/certificates/{name}"
+        try:
+            cert = kube_get(path)
+        except urllib.error.HTTPError as exc:
+            return (404, "no such certificate") if exc.code == 404 else (502, f"cluster said {exc.code}")
+        st = cert.get("status", {})
+        conds = st.get("conditions", [])
+        if any(c.get("type") == "Issuing" and c.get("status") == "True" for c in conds):
+            return 409, "already being re-issued"
+        issued = st.get("notBefore")
+        if issued and datetime.now(timezone.utc) - datetime.fromisoformat(issued.replace("Z", "+00:00")) < timedelta(hours=24):
+            return 429, "issued in the last 24 hours - Let's Encrypt limits repeat issuance for the same names"
+        conds = [c for c in conds if c.get("type") != "Issuing"]
+        conds.append({
+            "type": "Issuing", "status": "True", "reason": "ManuallyTriggered",
+            "message": "Re-issuance triggered from the reports page",
+            "lastTransitionTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "observedGeneration": cert["metadata"].get("generation", 1)})
+        kube_patch(path + "/status", {"status": {"conditions": conds}})
+        _certs_cache["at"] = 0.0
+        return 200, "re-issuing"
+
+
     def backup_summary():
         def worst(statuses):
             return max(statuses, key=ORDER.get) if statuses else "crit"
@@ -369,6 +415,43 @@ data:
                 self.send(200, (SITE / name).read_bytes(), content_type)
                 return
             self.send(404, b"Not found", "text/plain")
+
+        def do_POST(self):
+            path = self.path.split("?", 1)[0]
+            if path != "/api/certificates/renew":
+                self.send(404, b"Not found", "text/plain")
+                return
+
+            def reply(code, message):
+                self.send(code, json.dumps({"message": message} if code == 200 else {"error": message}).encode("utf-8"), "application/json")
+
+            # A custom header cannot be sent cross-site without a CORS preflight, which this
+            # server never answers - together with the Origin check it keeps another web page
+            # from firing this button.
+            if self.headers.get("X-Requested-With") != "reports":
+                reply(403, "missing X-Requested-With header")
+                return
+            origin = self.headers.get("Origin")
+            if origin and urllib.parse.urlparse(origin).netloc != (self.headers.get("Host") or ""):
+                reply(403, "cross-site request refused")
+                return
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                if not 0 < length <= 1024:
+                    raise ValueError("bad length")
+                body = json.loads(self.rfile.read(length))
+                ns, name = str(body["ns"]), str(body["name"])
+                if not (re.fullmatch(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?", ns) and re.fullmatch(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?", name)):
+                    raise ValueError("bad name")
+            except Exception:  # noqa: BLE001
+                reply(400, "send JSON like {\"ns\": \"...\", \"name\": \"...\"}")
+                return
+            try:
+                code, message = renew_certificate(ns, name)
+                print(f"[*] renew {ns}/{name}: {code} {message}")
+                reply(code, message)
+            except Exception as exc:  # noqa: BLE001
+                reply(502, str(exc)[:300])
 
         def log_message(self, fmt, *args):
             if "/healthz" not in (args[0] if args else ""):
@@ -1797,6 +1880,9 @@ data:
     label{cursor:pointer}
     .ds{background:color-mix(in srgb,var(--accent) 11%,transparent)}
     .key{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:1px solid var(--line)}
+    .renew{font:500 11px/1 "IBM Plex Mono",monospace;padding:5px 8px;border-radius:5px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+    .renew:hover{border-color:var(--accent);color:var(--accent)}
+    .renew:disabled{opacity:.5;cursor:default}
     </style>
     </head>
     <body>
@@ -1882,7 +1968,7 @@ data:
           var inner=h.certs.map(function(c){
             return '<div class="con"><span>'+esc(c.name)+' <span class="img">'+esc(c.issuer)+'</span></span><span>'
               +(c.message?esc(c.message)+" ":"")+(c.renewalTime?'<span class="img">renews from '+esc(dfmt(c.renewalTime))+'</span> ':"")
-              +chip("",c.notAfter?dfmt(c.notAfter):"not issued")+" "+chip(tone(c.state),ctext(c))+'</span></div>'}).join("");
+              +chip("",c.notAfter?dfmt(c.notAfter):"not issued")+" "+chip(tone(c.state),ctext(c))+' <button class="renew" data-ns="'+esc(c.ns)+'" data-name="'+esc(c.name)+'">Renew now</button></span></div>'}).join("");
           var hs='<div class="l">'+esc(h.key)+'</div><div>'+chip(tone(h.state),h.days==null?"not ready":h.days+" days left")+" "+chip("",h.certs.length+(h.certs.length===1?" certificate":" certificates"))+'</div>';
           return det("cert/"+n.ns+"/"+h.key,"pod",hs,'<div class="cons">'+inner+'</div>')}).join("");
         var ns='<div class="l">'+esc(n.ns)+' <span class="ns">'+n.list.length+(n.list.length===1?" hostname":" hostnames")+'</span></div><div>'+chip(tone(n.state),n.days==null?"not ready":"soonest "+n.days+" days")+'</div>';
@@ -1896,6 +1982,17 @@ data:
         if(d.error)throw new Error(d.error);certRender(d);
       }).catch(function(e){document.getElementById("certs").innerHTML='<div style="padding:12px 14px;color:var(--muted)">Could not read certificates: '+esc(e.message)+"</div>"});
     }
+    document.getElementById("certs").addEventListener("click",function(e){
+      var b=e.target.closest&&e.target.closest("button.renew");if(!b)return;
+      e.preventDefault();e.stopPropagation();
+      var ns=b.getAttribute("data-ns"),name=b.getAttribute("data-name");
+      if(!confirm("Ask cert-manager to re-issue "+name+" ("+ns+") now?\n\nLet's Encrypt limits repeat issuance for the same names, so use this sparingly."))return;
+      b.disabled=true;b.textContent="Asking";
+      fetch("/api/certificates/renew",{method:"POST",headers:{"Content-Type":"application/json","X-Requested-With":"reports"},body:JSON.stringify({ns:ns,name:name})})
+        .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
+        .then(function(x){alert(x.ok?name+": re-issuing now. It is ready again in about a minute.":name+": not done - "+(x.j.error||"unknown error"));loadCerts()})
+        .catch(function(err){alert(name+": not done - "+err.message);loadCerts()});
+    });
     document.addEventListener("toggle",function(e){var k=e.target.getAttribute&&e.target.getAttribute("data-k");if(!k)return;if(e.target.open)OPEN.add(k);else OPEN.delete(k)},true);
     document.getElementById("fin").addEventListener("change",render);
     load();setInterval(load,30000);
