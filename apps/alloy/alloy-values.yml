@@ -180,9 +180,16 @@ alloy:
         forward_to = [loki.write.default.receiver]
       }
 
+      // Retry for about two hours before dropping a batch (default is 10 tries, roughly
+      // 5-8 minutes). Proven 2026-10-18: Loki down for 7 minutes made every node drop
+      // batches. While retrying, Alloy stops reading and picks up where it left off, so
+      // container and journal lines are held on disk rather than lost.
       loki.write "default" {
         endpoint {
-          url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+          url                 = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+          min_backoff_period  = "500ms"
+          max_backoff_period  = "1m"
+          max_backoff_retries = 120
         }
       }
 
