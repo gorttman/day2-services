@@ -88,6 +88,7 @@ data:
     BULK_PROFILE = int(os.environ.get("BULK_PROFILE", "8"))
     SEARCH_BATCH = int(os.environ.get("SEARCH_BATCH", "50"))
     STUCK_HOURS = int(os.environ.get("STUCK_HOURS", "24"))
+    STALLED_HOURS = int(os.environ.get("STALLED_HOURS", "72"))
     # Auto-feed: the unattended version of the "Search more midday movies"
     # button. Searches the next batch only when the pipe has drained, never
     # past FEED_MAX_TIER (Drama/Thriller tiers by default - Romance,
@@ -283,6 +284,14 @@ data:
         old_enough = (r.get("added") or "9999") < cutoff
         if r.get("trackedDownloadStatus") in ("warning", "error"):
             return "flagged by the app"
+        # Partially downloaded, then every peer vanished. The app reports the
+        # item as status=warning but trackedDownloadStatus=ok, so nothing above
+        # matched and 21 of them sat for weeks holding every qBittorrent slot.
+        stalled_cut = (datetime.datetime.now(datetime.timezone.utc)
+                       - datetime.timedelta(hours=STALLED_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if (r.get("status") == "warning" and "stalled" in (r.get("errorMessage") or "").lower()
+                and (r.get("added") or "9999") < stalled_cut):
+            return "stalled with no connections for %dh+" % STALLED_HOURS
         if size > 0 and left >= size and old_enough:
             return "no progress in %dh" % STUCK_HOURS
         if size == 0 and left == 0 and old_enough:
