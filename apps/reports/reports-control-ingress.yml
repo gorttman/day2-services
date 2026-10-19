@@ -8,6 +8,7 @@ metadata:
   labels: {app: reports, app.kubernetes.io/name: reports, argocd.argoproj.io/managed-by: argocd}
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/renew-before: "808h"
 spec:
   ingressClassName: traefik
   tls:

@@ -9,6 +9,7 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/renew-before: "712h"
 spec:
   # LAN path only: split-horizon DNS (dns-conf) resolves the name to the Traefik
   # VIP. Off-LAN, cloudflare-tf tunnels open-webui.i3sec.com.au straight to the

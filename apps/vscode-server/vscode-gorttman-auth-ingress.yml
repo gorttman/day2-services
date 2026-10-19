@@ -9,6 +9,7 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/renew-before: "824h"
 spec:
   ingressClassName: traefik
   tls:

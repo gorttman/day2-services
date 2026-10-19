@@ -9,6 +9,7 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/renew-before: "728h"
 spec:
   # Internal-only: no Cloudflare Tunnel annotation (tunnel path blocked as
   # of 2026-07-04); DNS for this host lives in dns-conf (add post-merge).

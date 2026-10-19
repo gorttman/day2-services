@@ -9,6 +9,7 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/renew-before: "696h"
 spec:
   # Internal-only: no Cloudflare Tunnel annotation; DNS for this host
   # lives in dns-conf. http->https redirect is global (see day0-bootstrap

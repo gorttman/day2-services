@@ -9,6 +9,7 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/renew-before: "456h"
 spec:
   # Internal-only: no Cloudflare Tunnel annotation; DNS in dns-conf.
   # Backend is the shared arr-stack pod, i.e. traffic enters through

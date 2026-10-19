@@ -14,6 +14,7 @@ metadata:
     # so a publicly-trusted cert is the only way the app works at all.
     # Issued via DNS-01, so nothing here is publicly exposed.
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/renew-before: "600h"
 spec:
   # Internal-only for now, same as paperless/calibre-web's internal
   # hostname - no Cloudflare Tunnel annotation. DNS entry needed in

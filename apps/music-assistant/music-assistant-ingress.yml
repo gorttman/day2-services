@@ -9,6 +9,7 @@ metadata:
     argocd.argoproj.io/managed-by: argocd
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/renew-before: "680h"
 spec:
   # Internal-only: no Cloudflare Tunnel entry, DNS lives in dns-conf. This is
   # only the web UI - Cast speakers never use this hostname, they pull audio
