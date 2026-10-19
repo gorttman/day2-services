@@ -2068,6 +2068,8 @@ data:
       "updated": "2026-10-19",
       "rule": "Not a task tracker. These are things worth remembering with no deadline attached - revisit when it comes up again, not on a schedule.",
       "items": [
+        {"id":"lg-tv-lounge-ap","title":"Check the Family Room LG TV is on the Lounge AP and the sound drift is gone","category":"investigate","added":"2026-10-19","status":"open",
+         "note":"The TV sat on the gateway radio at -62 dBm with about 8% retries; it is now pinned to the In-Wall Lounge AP in UniFi (fixed AP, set 2026-10-19, not in Terraform). It was disconnected to force the move and had not rejoined yet. Turn it on, ask Claude to confirm which AP it joined and its signal, then play the same content that drifted out of sync (sound minutes out, video looping, hang) and say whether it still happens. If it does, the next suspect is the file or the player, not wifi."},
         {"id":"ipad-dns-check","title":"Marinas iPad bypasses Pi-hole for DNS: find out why","category":"investigate","added":"2026-10-19","status":"open",
          "note":"The UDM logged about 1,500 DNS queries in 24 hours from the iPad (192.168.2.73) straight to the gateway, although Main hands out Pi-hole (192.168.20.245/.246). Likely a DNS server typed in on the iPad's wifi settings, or iCloud Private Relay. Check the iPad: Settings > Wi-Fi > ARDA_HOME > Configure DNS (should be Automatic) and Settings > Apple ID > iCloud > Private Relay. Same pattern on valinor (192.168.2.30), probably the NAS second interface with a hand-set DNS. Claude to remind you."},
         {"id":"iot-isolation-logging","title":"IoT to Trusted isolation and inter-VLAN firewall logging","category":"build","added":"2026-10-19","status":"parked",
