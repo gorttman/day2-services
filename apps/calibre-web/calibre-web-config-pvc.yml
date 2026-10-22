@@ -1,0 +1,19 @@
+# calibre-web's config and app.db. Longhorn since 2026-10-22 (was a RAM
+# emptyDir plus a daily tar on the QNAP): replicated, and covered by the
+# nightly Longhorn backup to the backup drive like every other app volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: calibre-web-config
+  namespace: calibre-web
+  labels:
+    app: calibre-web
+    app.kubernetes.io/name: calibre-web
+    argocd.argoproj.io/managed-by: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
