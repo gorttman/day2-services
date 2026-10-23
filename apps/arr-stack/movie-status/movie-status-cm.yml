@@ -88,7 +88,11 @@ data:
     BULK_PROFILE = int(os.environ.get("BULK_PROFILE", "8"))
     SEARCH_BATCH = int(os.environ.get("SEARCH_BATCH", "50"))
     STUCK_HOURS = int(os.environ.get("STUCK_HOURS", "24"))
-    STALLED_HOURS = int(os.environ.get("STALLED_HOURS", "72"))
+    STALLED_HOURS = int(os.environ.get("STALLED_HOURS", "24"))
+    # A magnet whose metadata never arrives is dead; it sits at 0% in
+    # "queued" holding a qBittorrent slot and, until 2026-10-24, the feed's
+    # in-flight gate too.
+    METADATA_HOURS = int(os.environ.get("METADATA_HOURS", "6"))
     # Auto-feed: the unattended version of the "Search more midday movies"
     # button. Searches the next batch only when the pipe has drained, never
     # past FEED_MAX_TIER (Drama/Thriller tiers by default - Romance,
@@ -292,6 +296,11 @@ data:
         if (r.get("status") == "warning" and "stalled" in (r.get("errorMessage") or "").lower()
                 and (r.get("added") or "9999") < stalled_cut):
             return "stalled with no connections for %dh+" % STALLED_HOURS
+        meta_cut = (datetime.datetime.now(datetime.timezone.utc)
+                    - datetime.timedelta(hours=METADATA_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if ("downloading metadata" in (r.get("errorMessage") or "").lower()
+                and (r.get("added") or "9999") < meta_cut):
+            return "magnet metadata never arrived in %dh+" % METADATA_HOURS
         if size > 0 and left >= size and old_enough:
             return "no progress in %dh" % STUCK_HOURS
         if size == 0 and left == 0 and old_enough:
@@ -555,7 +564,15 @@ data:
         gates, each reported plainly so the CronJob log says why it waited:
         downloads still in flight, disk space, and the 24h search cap.
         """
-        busy = [r for r in arr_queue("radarr") if r.get("status") != "completed"]
+        # Only downloads that can actually finish count. Stalled torrents,
+        # magnets still fetching metadata and paused jobs hold a queue row
+        # but move nothing, and counting them kept the feed shut for days
+        # while the stuck-download rules waited out their clocks.
+        def _dead_wait(r):
+            e = (r.get("errorMessage") or "").lower()
+            return "stalled" in e or "downloading metadata" in e or r.get("status") == "paused"
+        busy = [r for r in arr_queue("radarr")
+                if r.get("status") != "completed" and not _dead_wait(r)]
         if len(busy) > FEED_MAX_INFLIGHT:
             return {"ok": True, "searched": 0, "message":
                     "Waiting: %d downloads still in flight (feeds below %d)."
