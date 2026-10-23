@@ -5,6 +5,7 @@ resources:
   - reports-namespace.yml
   - reports-cm.yml
   - reports-backups-cm.yml
+  - reports-drawings-cm.yml
   - reports-rbac.yml
   - reports-deployment.yml
   - reports-service.yml

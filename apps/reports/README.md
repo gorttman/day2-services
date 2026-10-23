@@ -8,6 +8,7 @@ Internal only.
 | Backups | `/backups/` here - formerly the separate `backup-dashboard` app, see [BACKUPS.md](BACKUPS.md) |
 | Subscriptions | `/subscriptions/` here |
 | Media | `movie-status.i3sec.com.au`, stays in arr-stack (needs Radarr's RWO volume) |
+| AI memory drawings | `/drawings/` here - seven design sheets, served from the `reports-drawings` ConfigMap (see `reports-drawings-cm.yml`) |
 | Long-term TODO | `/todo/` here - not a task tracker, no deadlines, edit `todo-register.json` |
 
 One Python server (`server.py` in `reports-cm.yml`) serves everything, pinned

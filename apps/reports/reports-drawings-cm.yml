@@ -1,0 +1,1435 @@
+# The shared AI memory design drawings served at reports.i3sec.com.au/drawings/.
+# One key per sheet. Source and generator: ~/projects/memory-systems-review/diagrams
+# (python3 s001.py ... s004.py writes the SVGs; regenerate this file from them).
+# Kept apart from reports-cm.yml so the two stay well under the 1 MiB ConfigMap limit.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reports-drawings
+  namespace: reports
+data:
+  AI-001.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1480" width="2000" height="1480" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.1" fill="#cfd3dc"/></pattern><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#555B66"/></marker></defs>
+    <rect width="2000" height="1480" fill="#fff"/>
+    <rect x="5" y="5" width="1990" height="1470" fill="#fff" stroke="#1F2A4A" stroke-width="2.5"/>
+    <text x="155" y="26" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="155" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="396" y="26" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="396" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="637" y="26" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="637" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="878" y="26" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="878" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="1119" y="26" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1119" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1360" y="26" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1360" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1601" y="26" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1601" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1842" y="26" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="1842" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="20" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="1979" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="20" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="1979" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="20" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="1979" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="20" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="1979" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="20" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="1979" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="20" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <text x="1979" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <rect x="35" y="35" width="1929" height="1411" fill="#fff" stroke="#1F2A4A" stroke-width="2"/>
+    <rect x="35" y="35" width="1929" height="118" fill="#1F2A4A"/>
+    <text x="71" y="97" font-size="42" font-weight="700" letter-spacing="3.5" fill="#fff">AI WORKFLOW ROUTING</text>
+    <text x="71" y="133" font-size="18" letter-spacing="0.8" fill="#C9D0E4">Overall routing | Clients, gateway, tools and memory</text>
+    <text x="1927" y="86" font-size="19" font-weight="700" letter-spacing="1.2" text-anchor="end" fill="#fff">DWG AI-001 | REV A</text>
+    <text x="1927" y="117" font-size="15.5" letter-spacing="1" text-anchor="end" fill="#C9D0E4">23 OCT 2026 | DRAFT FOR REVIEW</text>
+    <rect x="35" y="148" width="141" height="5" fill="#5547C8"/>
+    <rect x="176" y="148" width="142" height="5" fill="#1E8C68"/>
+    <rect x="318" y="148" width="141" height="5" fill="#B6492A"/>
+    <rect x="70" y="177" width="1858" height="928" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="212" width="1858" height="893" fill="url(#dots)"/>
+    <rect x="70" y="177" width="1858" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="200" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">01 LOGICAL ARCHITECTURE</text>
+    <text x="1908" y="200" font-size="12.5" font-weight="700" letter-spacing="1.8" text-anchor="end" fill="#7a8093">NOT TO SCALE</text>
+    <rect x="100" y="300" width="270" height="740" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="332" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">YOUR DEVICES</text>
+    <rect x="430" y="520" width="280" height="260" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="452" y="552" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">CLOUDFLARE EDGE</text>
+    <rect x="770" y="290" width="890" height="770" rx="22" fill="none" stroke="#1F2A4A" stroke-width="2" stroke-dasharray="9 6"/>
+    <rect x="792" y="272" width="431.55999999999995" height="36" rx="5" fill="#1F2A4A"/>
+    <text x="810" y="296" font-size="14" font-weight="700" letter-spacing="1.6" fill="#fff">HOME CLUSTER | PROTECTED ZONE</text>
+    <rect x="1710" y="300" width="200" height="740" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="1732" y="332" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">EXTERNAL</text>
+    <rect x="1000" y="305" width="640" height="210" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="1022" y="337" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">VAULT POD</text>
+    <rect x="1220" y="555" width="420" height="175" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="1242" y="716" font-size="13" font-weight="700" letter-spacing="1.4" fill="#33332f">TERMINAL AGENTS</text>
+    <rect x="130" y="342" width="210" height="96" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="235.0" y="382.5" font-size="19" font-weight="500" text-anchor="middle" fill="#35298F">iPad / phone</text>
+    <text x="235.0" y="406.5" font-size="14.5" text-anchor="middle" fill="#35298F" opacity="0.85">Claude app</text>
+    <rect x="130" y="597" width="210" height="96" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="235.0" y="637.5" font-size="19" font-weight="500" text-anchor="middle" fill="#35298F">Browser</text>
+    <text x="235.0" y="661.5" font-size="14.5" text-anchor="middle" fill="#35298F" opacity="0.85">client cert installed</text>
+    <rect x="130" y="860" width="210" height="96" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="235.0" y="900.5" font-size="19" font-weight="500" text-anchor="middle" fill="#35298F">Laptop terminal</text>
+    <text x="235.0" y="924.5" font-size="14.5" text-anchor="middle" fill="#35298F" opacity="0.85">LAN or VPN</text>
+    <rect x="460" y="590" width="220" height="110" rx="12" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="570.0" y="637.5" font-size="19" font-weight="500" text-anchor="middle" fill="#7B2A12">Cloudflare</text>
+    <text x="570.0" y="661.5" font-size="14.5" text-anchor="middle" fill="#7B2A12" opacity="0.85">tunnel + mTLS</text>
+    <rect x="800" y="595" width="150" height="100" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="875.0" y="637.5" font-size="19" font-weight="500" text-anchor="middle" fill="#0D5A41">Traefik</text>
+    <text x="875.0" y="661.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">+ Pi-hole</text>
+    <rect x="1010" y="595" width="170" height="100" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1095.0" y="649.0" font-size="19" font-weight="500" text-anchor="middle" fill="#0D5A41">Open WebUI</text>
+    <rect x="1240" y="595" width="170" height="100" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1325.0" y="649.0" font-size="19" font-weight="500" text-anchor="middle" fill="#0D5A41">OpenCode</text>
+    <rect x="1430" y="595" width="170" height="100" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1515.0" y="649.0" font-size="19" font-weight="500" text-anchor="middle" fill="#0D5A41">Claude Code</text>
+    <rect x="1025" y="345" width="590" height="60" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="1320.0" y="367.0" font-size="18" font-weight="500" text-anchor="middle" fill="#223F5E">Vault</text>
+    <text x="1320.0" y="390.0" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">Obsidian markdown on one Longhorn volume</text>
+    <rect x="1025" y="440" width="590" height="60" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1320.0" y="462.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">MCP server</text>
+    <text x="1320.0" y="485.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">the only way in to the vault</text>
+    <rect x="1010" y="840" width="420" height="100" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1220.0" y="882.5" font-size="19" font-weight="500" text-anchor="middle" fill="#0D5A41">LiteLLM</text>
+    <text x="1220.0" y="906.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">model gateway: keys, limits, routing</text>
+    <rect x="1725" y="590" width="170" height="120" rx="12" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="1810.0" y="633.0" font-size="19" font-weight="500" text-anchor="middle" fill="#7B2A12">Anthropic</text>
+    <text x="1810.0" y="657.0" font-size="14.5" text-anchor="middle" fill="#7B2A12" opacity="0.85">Remote Control</text>
+    <text x="1810.0" y="676.0" font-size="14.5" text-anchor="middle" fill="#7B2A12" opacity="0.85">relay + Claude</text>
+    <rect x="1725" y="820" width="170" height="90" rx="12" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="1810.0" y="869.0" font-size="19" font-weight="500" text-anchor="middle" fill="#7B2A12">OpenRouter</text>
+    <rect x="1725" y="940" width="170" height="80" rx="12" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="1810.0" y="972.5" font-size="19" font-weight="500" text-anchor="middle" fill="#7B2A12">Models</text>
+    <text x="1810.0" y="996.5" font-size="14.5" text-anchor="middle" fill="#7B2A12" opacity="0.85">bulk to frontier</text>
+    <path d="M340,645 L460,645" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="400" y="616" font-size="13" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">HTTPS +</text>
+    <text x="400" y="632" font-size="13" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">cert</text>
+    <path d="M680,645 L800,645" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="740" y="632" font-size="13" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">tunnel</text>
+    <path d="M950,645 L1010,645" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M185,693 L185,800 L875,800 L875,695" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" stroke-dasharray="8 6" marker-end="url(#ah)"/>
+    <text x="530" y="826" font-size="14" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">at home: internal route (Pi-hole split DNS)</text>
+    <path d="M1095,595 L1095,500" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1325,595 L1325,500" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1515,595 L1515,500" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="1087" y="556" font-size="13" text-anchor="end" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">narrow</text>
+    <text x="1087" y="572" font-size="13" text-anchor="end" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">cred</text>
+    <text x="1317" y="548" font-size="13" text-anchor="end" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">full cred</text>
+    <text x="1507" y="548" font-size="13" text-anchor="end" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">full cred</text>
+    <path d="M1320,405 L1320,440" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-start="url(#ah)" marker-end="url(#ah)"/>
+    <path d="M1095,695 L1095,840" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1403,695 L1403,840" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1430,890 L1526,890 A9,9 0 0 1 1544,890 L1725,890" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1810,910 L1810,940" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1600,645 L1725,645" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-start="url(#ah)" marker-end="url(#ah)"/>
+    <text x="1662" y="632" font-size="13" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">HTTPS</text>
+    <path d="M340,390 L400,390 L400,258 L1860,258 L1860,590" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-start="url(#ah)" marker-end="url(#ah)"/>
+    <text x="1105" y="248" font-size="14" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">Remote Control: app and cluster both dial out to Anthropic</text>
+    <path d="M235,956 L235,1000 L1535,1000 L1535,730" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="760" y="990" font-size="14" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">SSH over LAN or VPN</text>
+    <rect x="70" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">02 LEGEND</text>
+    <rect x="681" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="681" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="701" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">03 NOTES</text>
+    <rect x="1293" y="1129" width="635" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="1293" y="1129" width="635" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">04 TITLE BLOCK</text>
+    <rect x="94" y="1175" width="36" height="26" rx="6" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="148" y="1192" font-size="15.5" fill="#2b2f3a">Client you use</text>
+    <rect x="94" y="1202" width="36" height="26" rx="6" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="148" y="1219" font-size="15.5" fill="#2b2f3a">Service running in the cluster</text>
+    <rect x="94" y="1229" width="36" height="26" rx="6" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="148" y="1246" font-size="15.5" fill="#2b2f3a">External service (traffic leaves the house)</text>
+    <rect x="94" y="1256" width="36" height="26" rx="6" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="148" y="1273" font-size="15.5" fill="#2b2f3a">Data store</text>
+    <rect x="94" y="1283" width="36" height="26" rx="6" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="148" y="1300" font-size="15.5" fill="#2b2f3a">Zone boundary</text>
+    <rect x="94" y="1310" width="36" height="26" rx="6" fill="none" stroke="#1F2A4A" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="148" y="1327" font-size="15.5" fill="#2b2f3a">Protected zone (only Open WebUI inbound)</text>
+    <line x1="94" y1="1350" x2="128" y2="1350" stroke="#555B66" stroke-width="2" marker-end="url(#ah)"/>
+    <text x="148" y="1354" font-size="15.5" fill="#2b2f3a">Request direction</text>
+    <line x1="94" y1="1377" x2="130" y2="1377" stroke="#555B66" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="148" y="1381" font-size="15.5" fill="#2b2f3a">Alternative path</text>
+    <path d="M94,1404 L104,1404 A9,9 0 0 1 122,1404 L130,1404" fill="none" stroke="#555B66" stroke-width="2"/>
+    <text x="148" y="1408" font-size="15.5" fill="#2b2f3a">Lines cross, not connected</text>
+    <text x="703" y="1192" font-size="14.5" fill="#2b2f3a">1.</text>
+    <text x="726" y="1192" font-size="14.5" fill="#2b2f3a">Every read and write of the vault goes through the MCP</text>
+    <text x="726" y="1210" font-size="14.5" fill="#2b2f3a">server; nothing touches the files directly.</text>
+    <text x="703" y="1233" font-size="14.5" fill="#2b2f3a">2.</text>
+    <text x="726" y="1233" font-size="14.5" fill="#2b2f3a">Claude Code runs on the cluster. The iPad app reaches it</text>
+    <text x="726" y="1251" font-size="14.5" fill="#2b2f3a">by Remote Control; both sides dial out, so no inbound port</text>
+    <text x="726" y="1269" font-size="14.5" fill="#2b2f3a">opens.</text>
+    <text x="703" y="1292" font-size="14.5" fill="#2b2f3a">3.</text>
+    <text x="726" y="1292" font-size="14.5" fill="#2b2f3a">Only Open WebUI has a public name (tunnel plus mTLS). The</text>
+    <text x="726" y="1310" font-size="14.5" fill="#2b2f3a">MCP server and vault are never exposed.</text>
+    <text x="703" y="1333" font-size="14.5" fill="#2b2f3a">4.</text>
+    <text x="726" y="1333" font-size="14.5" fill="#2b2f3a">Open WebUI holds a narrower MCP credential: read, search,</text>
+    <text x="726" y="1351" font-size="14.5" fill="#2b2f3a">propose for review. No direct writes.</text>
+    <text x="703" y="1374" font-size="14.5" fill="#2b2f3a">5.</text>
+    <text x="726" y="1374" font-size="14.5" fill="#2b2f3a">Unverified: OpenCode MCP and custom-endpoint support, and</text>
+    <text x="726" y="1392" font-size="14.5" fill="#2b2f3a">routing Claude Code through LiteLLM.</text>
+    <text x="1313" y="1196" font-size="11.5" font-weight="700" letter-spacing="1.8" fill="#6a7080">TITLE</text>
+    <text x="1313" y="1230" font-size="27" font-weight="700" fill="#1a2036">AI Workflow Routing</text>
+    <text x="1313" y="1255" font-size="15.5" fill="#444a5a">Overall routing | Clients, gateway, tools and memory</text>
+    <rect x="1832" y="1178" width="76" height="58" fill="#1F2A4A"/><text x="1870" y="1216" font-size="21" font-weight="700" text-anchor="middle" fill="#fff" letter-spacing="1">AI</text>
+    <rect x="1832" y="1232" width="26" height="4" fill="#5547C8"/>
+    <rect x="1858" y="1232" width="26" height="4" fill="#1E8C68"/>
+    <rect x="1884" y="1232" width="24" height="4" fill="#B6492A"/>
+    <rect x="1293" y="1266" width="424" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">PROJECT</text>
+    <text x="1313" y="1309" font-size="17" font-weight="600" fill="#1a2036">Shared AI Memory System</text>
+    <rect x="1717" y="1266" width="211" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1737" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWING NO.</text>
+    <text x="1737" y="1309" font-size="17" font-weight="600" fill="#1a2036">AI-001</text>
+    <rect x="1293" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">REVISION</text>
+    <text x="1313" y="1363" font-size="17" font-weight="600" fill="#1a2036">A</text>
+    <rect x="1453" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1473" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DATE</text>
+    <text x="1473" y="1363" font-size="17" font-weight="600" fill="#1a2036">23 Oct 2026</text>
+    <rect x="1613" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SCALE</text>
+    <text x="1633" y="1363" font-size="17" font-weight="600" fill="#1a2036">NTS</text>
+    <rect x="1773" y="1320" width="155" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1793" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SHEET</text>
+    <text x="1793" y="1363" font-size="17" font-weight="600" fill="#1a2036">1 of 1</text>
+    <rect x="1293" y="1372" width="320" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWN BY</text>
+    <text x="1313" y="1415" font-size="17" font-weight="600" fill="#1a2036">Claude (draft)</text>
+    <rect x="1613" y="1372" width="315" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">STATUS</text>
+    <text x="1633" y="1415" font-size="17" font-weight="600" fill="#1a2036">Draft for review</text>
+    </svg>
+  AI-002.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1480" width="2000" height="1480" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.1" fill="#cfd3dc"/></pattern><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#555B66"/></marker></defs>
+    <rect width="2000" height="1480" fill="#fff"/>
+    <rect x="5" y="5" width="1990" height="1470" fill="#fff" stroke="#1F2A4A" stroke-width="2.5"/>
+    <text x="155" y="26" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="155" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="396" y="26" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="396" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="637" y="26" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="637" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="878" y="26" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="878" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="1119" y="26" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1119" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1360" y="26" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1360" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1601" y="26" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1601" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1842" y="26" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="1842" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="20" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="1979" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="20" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="1979" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="20" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="1979" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="20" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="1979" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="20" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="1979" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="20" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <text x="1979" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <rect x="35" y="35" width="1929" height="1411" fill="#fff" stroke="#1F2A4A" stroke-width="2"/>
+    <rect x="35" y="35" width="1929" height="118" fill="#1F2A4A"/>
+    <text x="71" y="97" font-size="42" font-weight="700" letter-spacing="3.5" fill="#fff">AI TOOL SET FLOW</text>
+    <text x="71" y="133" font-size="18" letter-spacing="0.8" fill="#C9D0E4">Tool types by layer | Interface, agent, MCP tool set, vault, protection</text>
+    <text x="1927" y="86" font-size="19" font-weight="700" letter-spacing="1.2" text-anchor="end" fill="#fff">DWG AI-002 | REV A</text>
+    <text x="1927" y="117" font-size="15.5" letter-spacing="1" text-anchor="end" fill="#C9D0E4">23 OCT 2026 | DRAFT FOR REVIEW</text>
+    <rect x="35" y="148" width="141" height="5" fill="#5547C8"/>
+    <rect x="176" y="148" width="142" height="5" fill="#1E8C68"/>
+    <rect x="318" y="148" width="141" height="5" fill="#B6492A"/>
+    <rect x="70" y="177" width="1858" height="928" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="212" width="1858" height="893" fill="url(#dots)"/>
+    <rect x="70" y="177" width="1858" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="200" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">01 TOOL ARCHITECTURE</text>
+    <text x="1908" y="200" font-size="12.5" font-weight="700" letter-spacing="1.8" text-anchor="end" fill="#7a8093">NOT TO SCALE</text>
+    <rect x="100" y="262" width="1150" height="120" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">1  INTERFACES</text>
+    <rect x="100" y="420" width="1150" height="120" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="452" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">2  AGENTS</text>
+    <rect x="100" y="578" width="1150" height="120" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="610" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">3  MCP TOOL SET</text>
+    <rect x="100" y="736" width="1150" height="120" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="768" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">4  VAULT FOLDERS</text>
+    <rect x="100" y="894" width="1150" height="170" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="926" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">5  SYNC AND PROTECTION</text>
+    <rect x="130" y="302" width="340" height="70" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="300.0" y="340.5" font-size="18" font-weight="500" text-anchor="middle" fill="#35298F">iPad / phone: Claude app</text>
+    <rect x="505" y="302" width="340" height="70" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="675.0" y="340.5" font-size="18" font-weight="500" text-anchor="middle" fill="#35298F">Laptop terminal</text>
+    <rect x="880" y="302" width="340" height="70" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="1050.0" y="340.5" font-size="18" font-weight="500" text-anchor="middle" fill="#35298F">Browser</text>
+    <rect x="130" y="460" width="340" height="70" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="300.0" y="487.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Claude Code</text>
+    <text x="300.0" y="510.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">on the cluster</text>
+    <rect x="505" y="460" width="340" height="70" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="675.0" y="498.5" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">OpenCode</text>
+    <rect x="880" y="460" width="340" height="70" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1050.0" y="498.5" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Open WebUI</text>
+    <rect x="130" y="618" width="168" height="56" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="214.0" y="648.25" font-size="15.5" font-weight="500" text-anchor="middle" fill="#0D5A41">search</text>
+    <rect x="312" y="618" width="168" height="56" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="396.0" y="648.25" font-size="15.5" font-weight="500" text-anchor="middle" fill="#0D5A41">read</text>
+    <rect x="494" y="618" width="168" height="56" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="578.0" y="648.25" font-size="15.5" font-weight="500" text-anchor="middle" fill="#0D5A41">write note</text>
+    <rect x="676" y="618" width="168" height="56" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="760.0" y="648.25" font-size="15.5" font-weight="500" text-anchor="middle" fill="#0D5A41">propose change</text>
+    <rect x="858" y="618" width="168" height="56" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="942.0" y="638.0" font-size="15.5" font-weight="500" text-anchor="middle" fill="#0D5A41">review queue</text>
+    <text x="942.0" y="658.5" font-size="15.5" font-weight="500" text-anchor="middle" fill="#0D5A41">+ count</text>
+    <rect x="1040" y="618" width="168" height="56" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1124.0" y="638.0" font-size="15.5" font-weight="500" text-anchor="middle" fill="#6B4B00">unlock private</text>
+    <text x="1124.0" y="658.5" font-size="15.5" font-weight="500" text-anchor="middle" fill="#6B4B00">(logged)</text>
+    <rect x="130" y="776" width="168" height="56" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="214.0" y="806.25" font-size="15.5" font-weight="500" text-anchor="middle" fill="#223F5E">inbox</text>
+    <rect x="312" y="776" width="168" height="56" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="396.0" y="806.25" font-size="15.5" font-weight="500" text-anchor="middle" fill="#223F5E">commonplace</text>
+    <rect x="494" y="776" width="168" height="56" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="578.0" y="806.25" font-size="15.5" font-weight="500" text-anchor="middle" fill="#223F5E">wiki</text>
+    <rect x="676" y="776" width="168" height="56" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="760.0" y="806.25" font-size="15.5" font-weight="500" text-anchor="middle" fill="#223F5E">studio</text>
+    <rect x="858" y="776" width="168" height="56" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="942.0" y="806.25" font-size="15.5" font-weight="500" text-anchor="middle" fill="#223F5E">journal</text>
+    <rect x="1040" y="776" width="168" height="56" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1124.0" y="796.0" font-size="15.5" font-weight="500" text-anchor="middle" fill="#6B4B00">private</text>
+    <text x="1124.0" y="816.5" font-size="15.5" font-weight="500" text-anchor="middle" fill="#6B4B00">agent-blocked</text>
+    <rect x="130" y="936" width="240" height="50" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="250.0" y="963.5" font-size="16" font-weight="500" text-anchor="middle" fill="#0D5A41">Obsidian Sync peer</text>
+    <rect x="420" y="936" width="240" height="50" rx="12" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="540.0" y="963.5" font-size="16" font-weight="500" text-anchor="middle" fill="#7B2A12">Obsidian Sync service</text>
+    <rect x="710" y="936" width="240" height="50" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="830.0" y="963.5" font-size="16" font-weight="500" text-anchor="middle" fill="#35298F">Obsidian app on devices</text>
+    <rect x="980" y="936" width="240" height="50" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1100.0" y="963.5" font-size="16" font-weight="500" text-anchor="middle" fill="#0D5A41">git watcher: local only</text>
+    <rect x="130" y="1000" width="240" height="50" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="250.0" y="1027.5" font-size="16" font-weight="500" text-anchor="middle" fill="#223F5E">Longhorn snapshot</text>
+    <rect x="420" y="1000" width="240" height="50" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="540.0" y="1027.5" font-size="16" font-weight="500" text-anchor="middle" fill="#223F5E">QNAP copy</text>
+    <rect x="710" y="1000" width="240" height="50" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="830.0" y="1027.5" font-size="16" font-weight="500" text-anchor="middle" fill="#223F5E">USB copy</text>
+    <rect x="980" y="1000" width="240" height="50" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1100.0" y="1027.5" font-size="16" font-weight="500" text-anchor="middle" fill="#0D5A41">scheduled restore test</text>
+    <path d="M370,961 L420,961" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M660,961 L710,961" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M370,1025 L420,1025" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M660,1025 L710,1025" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M300,372 L300,460" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="312" y="440" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">Remote Control</text>
+    <path d="M675,372 L675,460" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M675,408 L430,408 L430,460" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="687" y="440" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">SSH (LAN / VPN)</text>
+    <path d="M1050,372 L1050,460" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="1062" y="440" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">tunnel + mTLS or LAN</text>
+    <path d="M360,530 L360,578" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="372" y="561" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">full cred</text>
+    <path d="M675,530 L675,578" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="687" y="561" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">full cred</text>
+    <path d="M1050,530 L1050,578" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="1062" y="561" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">narrow cred</text>
+    <path d="M700,698 L700,736" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-start="url(#ah)" marker-end="url(#ah)"/>
+    <text x="712" y="722" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">read / write / propose, all through MCP</text>
+    <path d="M700,856 L700,894" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="712" y="880" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">protected by</text>
+    <rect x="1310" y="262" width="600" height="388" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="1332" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">AUTOMATION  |  MAKES THE WRITES HAPPEN</text>
+    <rect x="1335" y="300" width="550" height="70" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1610.0" y="326.5" font-size="17" font-weight="500" text-anchor="middle" fill="#0D5A41">Skill: what to write, and how</text>
+    <text x="1610.0" y="348.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">the agent's rulebook; a prompt, so it can be forgotten</text>
+    <rect x="1335" y="385" width="550" height="70" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1610.0" y="411.5" font-size="17" font-weight="500" text-anchor="middle" fill="#0D5A41">Hooks: session start, pre-compact, exit</text>
+    <text x="1610.0" y="433.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">load router + review count; extract before compaction</text>
+    <rect x="1335" y="470" width="550" height="70" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1610.0" y="496.5" font-size="17" font-weight="500" text-anchor="middle" fill="#0D5A41">Timer: transcript extractor</text>
+    <text x="1610.0" y="518.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">every 15 to 30 min, watermark, cheap model</text>
+    <rect x="1335" y="555" width="550" height="70" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1610.0" y="581.5" font-size="17" font-weight="500" text-anchor="middle" fill="#0D5A41">Timer: maintenance</text>
+    <text x="1610.0" y="603.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">lint, rebuild maps, backups, restore test</text>
+    <path d="M1335,335 L1285,335 L1285,460 L1250,460" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1335,420 L1285,420" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M1335,505 L1285,505 L1285,648 L1277,648 A9,9 0 0 0 1259,648 L1250,648" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1335,590 L1285,590" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="1310" y="700" width="600" height="364" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="1332" y="732" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">MODEL PATH</text>
+    <rect x="1335" y="760" width="240" height="76" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1455.0" y="790.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">LiteLLM</text>
+    <text x="1455.0" y="813.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">for OpenCode, Open WebUI</text>
+    <rect x="1635" y="760" width="250" height="76" rx="12" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="1760.0" y="801.5" font-size="18" font-weight="500" text-anchor="middle" fill="#7B2A12">OpenRouter</text>
+    <rect x="1635" y="900" width="250" height="70" rx="12" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="1760.0" y="927.0" font-size="18" font-weight="500" text-anchor="middle" fill="#7B2A12">Models</text>
+    <text x="1760.0" y="950.0" font-size="14.5" text-anchor="middle" fill="#7B2A12" opacity="0.85">bulk to frontier</text>
+    <rect x="1335" y="920" width="240" height="70" rx="12" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="1455.0" y="947.0" font-size="18" font-weight="500" text-anchor="middle" fill="#7B2A12">Anthropic API</text>
+    <text x="1455.0" y="970.0" font-size="14.5" text-anchor="middle" fill="#7B2A12" opacity="0.85">Claude Code, direct</text>
+    <path d="M1250,515 L1268,515 L1268,798 L1335,798" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1268,798 L1268,955 L1335,955" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" stroke-dasharray="8 6" marker-end="url(#ah)"/>
+    <path d="M1575,798 L1635,798" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1760,836 L1760,900" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="70" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">02 LEGEND</text>
+    <rect x="681" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="681" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="701" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">03 NOTES</text>
+    <rect x="1293" y="1129" width="635" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="1293" y="1129" width="635" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">04 TITLE BLOCK</text>
+    <rect x="94" y="1175" width="36" height="26" rx="6" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="148" y="1192" font-size="15.5" fill="#2b2f3a">Interface you use</text>
+    <rect x="94" y="1202" width="36" height="26" rx="6" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="148" y="1219" font-size="15.5" fill="#2b2f3a">Service, tool or automation</text>
+    <rect x="94" y="1229" width="36" height="26" rx="6" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="148" y="1246" font-size="15.5" fill="#2b2f3a">External service (traffic leaves the house)</text>
+    <rect x="94" y="1256" width="36" height="26" rx="6" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="148" y="1273" font-size="15.5" fill="#2b2f3a">Data store or backup copy</text>
+    <rect x="94" y="1283" width="36" height="26" rx="6" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="148" y="1300" font-size="15.5" fill="#2b2f3a">Guarded: blocked or logged</text>
+    <rect x="94" y="1310" width="36" height="26" rx="6" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="148" y="1327" font-size="15.5" fill="#2b2f3a">Layer boundary</text>
+    <line x1="94" y1="1350" x2="128" y2="1350" stroke="#555B66" stroke-width="2" marker-end="url(#ah)"/>
+    <text x="148" y="1354" font-size="15.5" fill="#2b2f3a">Flow direction</text>
+    <line x1="94" y1="1377" x2="130" y2="1377" stroke="#555B66" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="148" y="1381" font-size="15.5" fill="#2b2f3a">Default alternative path</text>
+    <path d="M94,1404 L104,1404 A9,9 0 0 1 122,1404 L130,1404" fill="none" stroke="#555B66" stroke-width="2"/>
+    <text x="148" y="1408" font-size="15.5" fill="#2b2f3a">Lines cross, not connected</text>
+    <text x="703" y="1192" font-size="14.5" fill="#2b2f3a">1.</text>
+    <text x="726" y="1192" font-size="14.5" fill="#2b2f3a">Interfaces reach agents; agents reach the vault only</text>
+    <text x="726" y="1210" font-size="14.5" fill="#2b2f3a">through the MCP tool set.</text>
+    <text x="703" y="1233" font-size="14.5" fill="#2b2f3a">2.</text>
+    <text x="726" y="1233" font-size="14.5" fill="#2b2f3a">Full credential (Claude Code, OpenCode, timers): all</text>
+    <text x="726" y="1251" font-size="14.5" fill="#2b2f3a">tools. Narrow credential (Open WebUI): search, read,</text>
+    <text x="726" y="1269" font-size="14.5" fill="#2b2f3a">propose, review queue.</text>
+    <text x="703" y="1292" font-size="14.5" fill="#2b2f3a">3.</text>
+    <text x="726" y="1292" font-size="14.5" fill="#2b2f3a">Skills and hooks shape the agent. Timers run with no</text>
+    <text x="726" y="1310" font-size="14.5" fill="#2b2f3a">session at all, so capture never depends on a clean exit.</text>
+    <text x="703" y="1333" font-size="14.5" fill="#2b2f3a">4.</text>
+    <text x="726" y="1333" font-size="14.5" fill="#2b2f3a">Obsidian Sync carries the vault to your devices. git keeps</text>
+    <text x="726" y="1351" font-size="14.5" fill="#2b2f3a">local history only. Snapshots go to QNAP, then USB; a</text>
+    <text x="726" y="1369" font-size="14.5" fill="#2b2f3a">scheduled restore test proves them.</text>
+    <text x="703" y="1392" font-size="14.5" fill="#2b2f3a">5.</text>
+    <text x="726" y="1392" font-size="14.5" fill="#2b2f3a">The private folder is blocked server-side; unlocking is</text>
+    <text x="726" y="1410" font-size="14.5" fill="#2b2f3a">time-boxed and logged.</text>
+    <text x="1313" y="1196" font-size="11.5" font-weight="700" letter-spacing="1.8" fill="#6a7080">TITLE</text>
+    <text x="1313" y="1230" font-size="27" font-weight="700" fill="#1a2036">AI Tool Set Flow</text>
+    <text x="1313" y="1255" font-size="15.5" fill="#444a5a">Tool types by layer | Interface, agent, MCP tool set, vault, protection</text>
+    <rect x="1832" y="1178" width="76" height="58" fill="#1F2A4A"/><text x="1870" y="1216" font-size="21" font-weight="700" text-anchor="middle" fill="#fff" letter-spacing="1">AI</text>
+    <rect x="1832" y="1232" width="26" height="4" fill="#5547C8"/>
+    <rect x="1858" y="1232" width="26" height="4" fill="#1E8C68"/>
+    <rect x="1884" y="1232" width="24" height="4" fill="#B6492A"/>
+    <rect x="1293" y="1266" width="424" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">PROJECT</text>
+    <text x="1313" y="1309" font-size="17" font-weight="600" fill="#1a2036">Shared AI Memory System</text>
+    <rect x="1717" y="1266" width="211" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1737" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWING NO.</text>
+    <text x="1737" y="1309" font-size="17" font-weight="600" fill="#1a2036">AI-002</text>
+    <rect x="1293" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">REVISION</text>
+    <text x="1313" y="1363" font-size="17" font-weight="600" fill="#1a2036">A</text>
+    <rect x="1453" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1473" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DATE</text>
+    <text x="1473" y="1363" font-size="17" font-weight="600" fill="#1a2036">23 Oct 2026</text>
+    <rect x="1613" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SCALE</text>
+    <text x="1633" y="1363" font-size="17" font-weight="600" fill="#1a2036">NTS</text>
+    <rect x="1773" y="1320" width="155" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1793" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SHEET</text>
+    <text x="1793" y="1363" font-size="17" font-weight="600" fill="#1a2036">1 of 1</text>
+    <rect x="1293" y="1372" width="320" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWN BY</text>
+    <text x="1313" y="1415" font-size="17" font-weight="600" fill="#1a2036">Claude (draft)</text>
+    <rect x="1613" y="1372" width="315" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">STATUS</text>
+    <text x="1633" y="1415" font-size="17" font-weight="600" fill="#1a2036">Draft for review</text>
+    </svg>
+  AI-003A.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1480" width="2000" height="1480" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.1" fill="#cfd3dc"/></pattern><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#555B66"/></marker></defs>
+    <rect width="2000" height="1480" fill="#fff"/>
+    <rect x="5" y="5" width="1990" height="1470" fill="#fff" stroke="#1F2A4A" stroke-width="2.5"/>
+    <text x="155" y="26" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="155" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="396" y="26" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="396" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="637" y="26" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="637" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="878" y="26" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="878" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="1119" y="26" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1119" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1360" y="26" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1360" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1601" y="26" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1601" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1842" y="26" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="1842" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="20" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="1979" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="20" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="1979" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="20" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="1979" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="20" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="1979" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="20" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="1979" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="20" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <text x="1979" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <rect x="35" y="35" width="1929" height="1411" fill="#fff" stroke="#1F2A4A" stroke-width="2"/>
+    <rect x="35" y="35" width="1929" height="118" fill="#1F2A4A"/>
+    <text x="71" y="97" font-size="42" font-weight="700" letter-spacing="3.5" fill="#fff">WORKFLOW A: CAPTURE</text>
+    <text x="71" y="133" font-size="18" letter-spacing="0.8" fill="#C9D0E4">Functional block diagram | How a fact gets into the vault</text>
+    <text x="1927" y="86" font-size="19" font-weight="700" letter-spacing="1.2" text-anchor="end" fill="#fff">DWG AI-003A | REV A</text>
+    <text x="1927" y="117" font-size="15.5" letter-spacing="1" text-anchor="end" fill="#C9D0E4">23 OCT 2026 | DRAFT FOR REVIEW</text>
+    <rect x="35" y="148" width="141" height="5" fill="#5547C8"/>
+    <rect x="176" y="148" width="142" height="5" fill="#1E8C68"/>
+    <rect x="318" y="148" width="141" height="5" fill="#B6492A"/>
+    <rect x="70" y="177" width="1858" height="928" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="212" width="1858" height="893" fill="url(#dots)"/>
+    <rect x="70" y="177" width="1858" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="200" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">01 FUNCTIONAL FLOW: WRITE PATH</text>
+    <text x="1908" y="200" font-size="12.5" font-weight="700" letter-spacing="1.8" text-anchor="end" fill="#7a8093">NOT TO SCALE</text>
+    <rect x="100" y="262" width="360" height="650" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">TRIGGERS</text>
+    <rect x="500" y="262" width="360" height="650" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="522" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">EXTRACT</text>
+    <rect x="900" y="262" width="480" height="650" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="922" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">WRITE GATE  |  MCP SERVER</text>
+    <rect x="1420" y="262" width="490" height="650" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="1442" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">RESULT</text>
+    <rect x="125" y="310" width="310" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="280.0" y="341.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">In-session write</text>
+    <text x="280.0" y="364.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">agent spots something worth keeping</text>
+    <path d="M435,349 L478,349" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="125" y="410" width="310" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="280.0" y="441.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Timer, 15 to 30 min</text>
+    <text x="280.0" y="464.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">new transcript lines since last mark</text>
+    <path d="M435,449 L478,449" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="125" y="510" width="310" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="280.0" y="541.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Pre-compaction hook</text>
+    <text x="280.0" y="564.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">extract before context is summarised</text>
+    <path d="M435,549 L478,549" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="125" y="610" width="310" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="280.0" y="641.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Exit hook</text>
+    <text x="280.0" y="664.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">final pass if a session closes cleanly</text>
+    <path d="M435,649 L478,649" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="125" y="710" width="310" height="78" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="280.0" y="741.0" font-size="18" font-weight="500" text-anchor="middle" fill="#35298F">You drop something</text>
+    <text x="280.0" y="764.0" font-size="14.5" text-anchor="middle" fill="#35298F" opacity="0.85">file, note or link into inbox</text>
+    <path d="M435,749 L478,749" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M478,349 L478,749" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M478,349 L525,349" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="525" y="310" width="310" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="680.0" y="341.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">1  Collect new content</text>
+    <text x="680.0" y="364.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">transcript slice or dropped item</text>
+    <rect x="525" y="440" width="310" height="78" rx="12" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="680.0" y="471.0" font-size="18" font-weight="500" text-anchor="middle" fill="#7B2A12">2  Pull out the claims</text>
+    <text x="680.0" y="494.0" font-size="14.5" text-anchor="middle" fill="#7B2A12" opacity="0.85">cheap model, via LiteLLM</text>
+    <path d="M680,388 L680,440" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="525" y="570" width="310" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="680.0" y="601.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">3  Tag each claim's origin</text>
+    <text x="680.0" y="624.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">user said / agent concluded / external</text>
+    <path d="M680,518 L680,570" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="525" y="700" width="310" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="680.0" y="731.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">4  Link claim to its source</text>
+    <text x="680.0" y="754.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">dated; raw extract kept</text>
+    <path d="M680,648 L680,700" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M835,739 L880,739 L880,349 L925,349" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="925" y="310" width="430" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1140.0" y="341.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">5  Validate</text>
+    <text x="1140.0" y="364.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">frontmatter complete; tags from the list</text>
+    <rect x="925" y="440" width="430" height="78" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1140.0" y="471.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">6  Check origin</text>
+    <text x="1140.0" y="494.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">external origin is always flagged</text>
+    <path d="M1140,388 L1140,440" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="925" y="570" width="430" height="78" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1140.0" y="601.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">7  Check conflicts</text>
+    <text x="1140.0" y="624.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">contradicts a dated claim? flag, never overwrite</text>
+    <path d="M1140,518 L1140,570" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="925" y="700" width="430" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1140.0" y="731.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">8  Write with a status</text>
+    <text x="1140.0" y="754.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">active, or needs_review with both versions linked</text>
+    <path d="M1140,648 L1140,700" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="1450" y="310" width="430" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1665.0" y="341.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Review count + 1</text>
+    <text x="1665.0" y="364.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">shown at the next session start</text>
+    <rect x="1450" y="430" width="430" height="78" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1665.0" y="461.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">Review queue</text>
+    <text x="1665.0" y="484.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">needs_review; held out of maps and router</text>
+    <rect x="1450" y="670" width="430" height="78" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="1665.0" y="701.0" font-size="18" font-weight="500" text-anchor="middle" fill="#223F5E">Detail note, active</text>
+    <text x="1665.0" y="724.0" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">dated, origin and source recorded</text>
+    <rect x="1450" y="790" width="430" height="78" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1665.0" y="821.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Maps and router rebuilt</text>
+    <text x="1665.0" y="844.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">then a local git commit</text>
+    <path d="M1355,700 L1400,700 L1400,470 L1450,470" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="1408" y="640" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">flagged</text>
+    <path d="M1355,725 L1450,725" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="1403" y="758" font-size="13" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">clean</text>
+    <path d="M1665,430 L1665,388" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1665,748 L1665,790" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="100" y="944" width="1810" height="130" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="976" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">WHY IT WORKS FOR A SESSION YOU NEVER CLOSE</text>
+    <rect x="130" y="984" width="560" height="70" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="410.0" y="1010.5" font-size="17" font-weight="500" text-anchor="middle" fill="#2A2A28">A mark per transcript</text>
+    <text x="410.0" y="1032.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">the timer reads only what is new</text>
+    <rect x="720" y="984" width="560" height="70" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1000.0" y="1010.5" font-size="17" font-weight="500" text-anchor="middle" fill="#2A2A28">A crash loses little</text>
+    <text x="1000.0" y="1032.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">a killed session still gets its last slice read</text>
+    <rect x="1310" y="984" width="570" height="70" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1595.0" y="1010.5" font-size="17" font-weight="500" text-anchor="middle" fill="#2A2A28">Lag is one timer interval</text>
+    <text x="1595.0" y="1032.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">the skill covers anything urgent in-session</text>
+    <rect x="70" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">02 LEGEND</text>
+    <rect x="681" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="681" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="701" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">03 NOTES</text>
+    <rect x="1293" y="1129" width="635" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="1293" y="1129" width="635" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">04 TITLE BLOCK</text>
+    <rect x="94" y="1175" width="36" height="26" rx="6" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="148" y="1192" font-size="15.5" fill="#2b2f3a">Your action</text>
+    <rect x="94" y="1202" width="36" height="26" rx="6" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="148" y="1219" font-size="15.5" fill="#2b2f3a">Automated step</text>
+    <rect x="94" y="1229" width="36" height="26" rx="6" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="148" y="1246" font-size="15.5" fill="#2b2f3a">Gate or human decision</text>
+    <rect x="94" y="1256" width="36" height="26" rx="6" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="148" y="1273" font-size="15.5" fill="#2b2f3a">External model call</text>
+    <rect x="94" y="1283" width="36" height="26" rx="6" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="148" y="1300" font-size="15.5" fill="#2b2f3a">Stored in the vault</text>
+    <rect x="94" y="1310" width="36" height="26" rx="6" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="148" y="1327" font-size="15.5" fill="#2b2f3a">Stage boundary</text>
+    <line x1="94" y1="1350" x2="128" y2="1350" stroke="#555B66" stroke-width="2" marker-end="url(#ah)"/>
+    <text x="148" y="1354" font-size="15.5" fill="#2b2f3a">Flow direction</text>
+    <line x1="94" y1="1377" x2="130" y2="1377" stroke="#555B66" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="148" y="1381" font-size="15.5" fill="#2b2f3a">Fallback path</text>
+    <path d="M94,1404 L104,1404 A9,9 0 0 1 122,1404 L130,1404" fill="none" stroke="#555B66" stroke-width="2"/>
+    <text x="148" y="1408" font-size="15.5" fill="#2b2f3a">Lines cross, not connected</text>
+    <text x="703" y="1192" font-size="14.5" fill="#2b2f3a">1.</text>
+    <text x="726" y="1192" font-size="14.5" fill="#2b2f3a">Every write goes through the MCP server, whichever trigger</text>
+    <text x="726" y="1210" font-size="14.5" fill="#2b2f3a">fired.</text>
+    <text x="703" y="1233" font-size="14.5" fill="#2b2f3a">2.</text>
+    <text x="726" y="1233" font-size="14.5" fill="#2b2f3a">Nothing depends on you closing a session: the timer works</text>
+    <text x="726" y="1251" font-size="14.5" fill="#2b2f3a">from a mark, so a week-long session is read in slices.</text>
+    <text x="703" y="1274" font-size="14.5" fill="#2b2f3a">3.</text>
+    <text x="726" y="1274" font-size="14.5" fill="#2b2f3a">External-origin claims always arrive as needs_review and</text>
+    <text x="726" y="1292" font-size="14.5" fill="#2b2f3a">stay out of the router and maps until you approve.</text>
+    <text x="703" y="1315" font-size="14.5" fill="#2b2f3a">4.</text>
+    <text x="726" y="1315" font-size="14.5" fill="#2b2f3a">A conflict is never settled by newest-wins; both versions</text>
+    <text x="726" y="1333" font-size="14.5" fill="#2b2f3a">are linked and you decide (see AI-003C).</text>
+    <text x="703" y="1356" font-size="14.5" fill="#2b2f3a">5.</text>
+    <text x="726" y="1356" font-size="14.5" fill="#2b2f3a">Unverified: Claude Code hook behaviour (pre-compact,</text>
+    <text x="726" y="1374" font-size="14.5" fill="#2b2f3a">exit); test before relying on it.</text>
+    <text x="1313" y="1196" font-size="11.5" font-weight="700" letter-spacing="1.8" fill="#6a7080">TITLE</text>
+    <text x="1313" y="1230" font-size="27" font-weight="700" fill="#1a2036">Workflow A: Capture</text>
+    <text x="1313" y="1255" font-size="15.5" fill="#444a5a">Functional block diagram | How a fact gets into the vault</text>
+    <rect x="1832" y="1178" width="76" height="58" fill="#1F2A4A"/><text x="1870" y="1216" font-size="21" font-weight="700" text-anchor="middle" fill="#fff" letter-spacing="1">AI</text>
+    <rect x="1832" y="1232" width="26" height="4" fill="#5547C8"/>
+    <rect x="1858" y="1232" width="26" height="4" fill="#1E8C68"/>
+    <rect x="1884" y="1232" width="24" height="4" fill="#B6492A"/>
+    <rect x="1293" y="1266" width="424" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">PROJECT</text>
+    <text x="1313" y="1309" font-size="17" font-weight="600" fill="#1a2036">Shared AI Memory System</text>
+    <rect x="1717" y="1266" width="211" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1737" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWING NO.</text>
+    <text x="1737" y="1309" font-size="17" font-weight="600" fill="#1a2036">AI-003A</text>
+    <rect x="1293" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">REVISION</text>
+    <text x="1313" y="1363" font-size="17" font-weight="600" fill="#1a2036">A</text>
+    <rect x="1453" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1473" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DATE</text>
+    <text x="1473" y="1363" font-size="17" font-weight="600" fill="#1a2036">23 Oct 2026</text>
+    <rect x="1613" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SCALE</text>
+    <text x="1633" y="1363" font-size="17" font-weight="600" fill="#1a2036">NTS</text>
+    <rect x="1773" y="1320" width="155" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1793" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SHEET</text>
+    <text x="1793" y="1363" font-size="17" font-weight="600" fill="#1a2036">3 of 7</text>
+    <rect x="1293" y="1372" width="320" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWN BY</text>
+    <text x="1313" y="1415" font-size="17" font-weight="600" fill="#1a2036">Claude (draft)</text>
+    <rect x="1613" y="1372" width="315" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">STATUS</text>
+    <text x="1633" y="1415" font-size="17" font-weight="600" fill="#1a2036">Draft for review</text>
+    </svg>
+  AI-003B.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1480" width="2000" height="1480" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.1" fill="#cfd3dc"/></pattern><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#555B66"/></marker></defs>
+    <rect width="2000" height="1480" fill="#fff"/>
+    <rect x="5" y="5" width="1990" height="1470" fill="#fff" stroke="#1F2A4A" stroke-width="2.5"/>
+    <text x="155" y="26" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="155" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="396" y="26" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="396" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="637" y="26" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="637" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="878" y="26" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="878" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="1119" y="26" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1119" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1360" y="26" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1360" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1601" y="26" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1601" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1842" y="26" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="1842" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="20" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="1979" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="20" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="1979" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="20" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="1979" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="20" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="1979" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="20" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="1979" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="20" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <text x="1979" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <rect x="35" y="35" width="1929" height="1411" fill="#fff" stroke="#1F2A4A" stroke-width="2"/>
+    <rect x="35" y="35" width="1929" height="118" fill="#1F2A4A"/>
+    <text x="71" y="97" font-size="42" font-weight="700" letter-spacing="3.5" fill="#fff">WORKFLOW B: RECALL</text>
+    <text x="71" y="133" font-size="18" letter-spacing="0.8" fill="#C9D0E4">Functional block diagram | How an agent finds what the vault knows</text>
+    <text x="1927" y="86" font-size="19" font-weight="700" letter-spacing="1.2" text-anchor="end" fill="#fff">DWG AI-003B | REV A</text>
+    <text x="1927" y="117" font-size="15.5" letter-spacing="1" text-anchor="end" fill="#C9D0E4">23 OCT 2026 | DRAFT FOR REVIEW</text>
+    <rect x="35" y="148" width="141" height="5" fill="#5547C8"/>
+    <rect x="176" y="148" width="142" height="5" fill="#1E8C68"/>
+    <rect x="318" y="148" width="141" height="5" fill="#B6492A"/>
+    <rect x="70" y="177" width="1858" height="928" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="212" width="1858" height="893" fill="url(#dots)"/>
+    <rect x="70" y="177" width="1858" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="200" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">01 FUNCTIONAL FLOW: READ PATH</text>
+    <text x="1908" y="200" font-size="12.5" font-weight="700" letter-spacing="1.8" text-anchor="end" fill="#7a8093">NOT TO SCALE</text>
+    <rect x="100" y="262" width="1810" height="150" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">ON EVERY SESSION START</text>
+    <rect x="125" y="318" width="400" height="76" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="325.0" y="348.0" font-size="18" font-weight="500" text-anchor="middle" fill="#35298F">Session opens</text>
+    <text x="325.0" y="371.0" font-size="14.5" text-anchor="middle" fill="#35298F" opacity="0.85">new, resumed or reused</text>
+    <rect x="570" y="318" width="400" height="76" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="770.0" y="348.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Hook loads the router</text>
+    <text x="770.0" y="371.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">wiki/index.md, kept small</text>
+    <rect x="1015" y="318" width="400" height="76" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1215.0" y="348.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">Hook shows the review count</text>
+    <text x="1215.0" y="371.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">items waiting for you</text>
+    <rect x="1460" y="318" width="400" height="76" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1660.0" y="348.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Skill rules apply</text>
+    <text x="1660.0" y="371.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">router, then map, then notes</text>
+    <path d="M525,356 L570,356" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M970,356 L1015,356" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1415,356 L1460,356" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1000,412 L1000,452" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="100" y="452" width="1810" height="250" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="484" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">THEN, FOR EACH QUESTION OR TASK</text>
+    <rect x="125" y="520" width="316" height="110" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="283.0" y="578.5" font-size="18" font-weight="500" text-anchor="middle" fill="#35298F">You ask or set a task</text>
+    <rect x="481" y="520" width="316" height="110" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="639.0" y="557.5" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Router entry</text>
+    <text x="639.0" y="580.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">status, next step, date, links</text>
+    <text x="639.0" y="599.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">TIER 0  always loaded</text>
+    <rect x="837" y="520" width="316" height="110" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="995.0" y="557.5" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Area or topic map</text>
+    <text x="995.0" y="580.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">more context, links down</text>
+    <text x="995.0" y="599.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">TIER 1  on demand</text>
+    <rect x="1193" y="520" width="316" height="110" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="1351.0" y="557.5" font-size="18" font-weight="500" text-anchor="middle" fill="#223F5E">Detail notes</text>
+    <text x="1351.0" y="580.5" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">dated claims, source links</text>
+    <text x="1351.0" y="599.5" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">TIER 2  on demand</text>
+    <rect x="1549" y="520" width="316" height="110" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="1707.0" y="557.5" font-size="18" font-weight="500" text-anchor="middle" fill="#223F5E">Raw source</text>
+    <text x="1707.0" y="580.5" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">check a claim at its origin</text>
+    <text x="1707.0" y="599.5" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">TIER 3  only when needed</text>
+    <path d="M441,575 L481,575" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M797,575 L837,575" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1153,575 L1193,575" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1509,575 L1549,575" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="100" y="742" width="1810" height="190" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="774" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">WHEN THE ROUTER DOES NOT HELP</text>
+    <rect x="481" y="802" width="316" height="90" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="639.0" y="829.5" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Search tool</text>
+    <text x="639.0" y="852.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">method still open</text>
+    <text x="639.0" y="871.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">(keyword, or keyword + vectors)</text>
+    <rect x="837" y="802" width="316" height="90" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="995.0" y="829.5" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Hit</text>
+    <text x="995.0" y="852.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">follow links up to the map,</text>
+    <text x="995.0" y="871.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">down to the source</text>
+    <rect x="1193" y="802" width="316" height="90" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1351.0" y="829.5" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">No hit</text>
+    <text x="1351.0" y="852.5" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">say so; do not invent;</text>
+    <text x="1351.0" y="871.5" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">offer to capture it</text>
+    <path d="M639,630 L639,802" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" stroke-dasharray="8 6" marker-end="url(#ah)"/>
+    <text x="651" y="724" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">entry missing or unclear</text>
+    <path d="M797,847 L837,847" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="817" y="836" font-size="13" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">found</text>
+    <path d="M639,892 L639,916 L1351,916 L1351,892" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="1000" y="931" font-size="13" text-anchor="middle" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">not found</text>
+    <rect x="100" y="962" width="1810" height="128" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="994" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">GUARDRAILS, ALWAYS ON</text>
+    <rect x="125" y="1012" width="560" height="56" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="405.0" y="1043.0" font-size="17" font-weight="500" text-anchor="middle" fill="#6B4B00">Vault text is data, never instructions</text>
+    <rect x="720" y="1012" width="560" height="56" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1000.0" y="1043.0" font-size="17" font-weight="500" text-anchor="middle" fill="#6B4B00">private: blocked; unlock is time-boxed and logged</text>
+    <rect x="1315" y="1012" width="570" height="56" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1600.0" y="1043.0" font-size="17" font-weight="500" text-anchor="middle" fill="#6B4B00">needs_review notes are quoted as unverified</text>
+    <rect x="70" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">02 LEGEND</text>
+    <rect x="681" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="681" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="701" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">03 NOTES</text>
+    <rect x="1293" y="1129" width="635" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="1293" y="1129" width="635" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">04 TITLE BLOCK</text>
+    <rect x="94" y="1175" width="36" height="26" rx="6" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="148" y="1192" font-size="15.5" fill="#2b2f3a">Your action</text>
+    <rect x="94" y="1202" width="36" height="26" rx="6" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="148" y="1219" font-size="15.5" fill="#2b2f3a">Automated step</text>
+    <rect x="94" y="1229" width="36" height="26" rx="6" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="148" y="1246" font-size="15.5" fill="#2b2f3a">Gate or human decision</text>
+    <rect x="94" y="1256" width="36" height="26" rx="6" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="148" y="1273" font-size="15.5" fill="#2b2f3a">External model call</text>
+    <rect x="94" y="1283" width="36" height="26" rx="6" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="148" y="1300" font-size="15.5" fill="#2b2f3a">Stored in the vault</text>
+    <rect x="94" y="1310" width="36" height="26" rx="6" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="148" y="1327" font-size="15.5" fill="#2b2f3a">Stage boundary</text>
+    <line x1="94" y1="1350" x2="128" y2="1350" stroke="#555B66" stroke-width="2" marker-end="url(#ah)"/>
+    <text x="148" y="1354" font-size="15.5" fill="#2b2f3a">Flow direction</text>
+    <line x1="94" y1="1377" x2="130" y2="1377" stroke="#555B66" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="148" y="1381" font-size="15.5" fill="#2b2f3a">Fallback path</text>
+    <path d="M94,1404 L104,1404 A9,9 0 0 1 122,1404 L130,1404" fill="none" stroke="#555B66" stroke-width="2"/>
+    <text x="148" y="1408" font-size="15.5" fill="#2b2f3a">Lines cross, not connected</text>
+    <text x="703" y="1192" font-size="14.5" fill="#2b2f3a">1.</text>
+    <text x="726" y="1192" font-size="14.5" fill="#2b2f3a">The router is the only tier loaded every time; maps, notes</text>
+    <text x="726" y="1210" font-size="14.5" fill="#2b2f3a">and sources are opened only as needed.</text>
+    <text x="703" y="1233" font-size="14.5" fill="#2b2f3a">2.</text>
+    <text x="726" y="1233" font-size="14.5" fill="#2b2f3a">Each tier links to the one below, so the agent always</text>
+    <text x="726" y="1251" font-size="14.5" fill="#2b2f3a">knows where to go next for detail.</text>
+    <text x="703" y="1274" font-size="14.5" fill="#2b2f3a">3.</text>
+    <text x="726" y="1274" font-size="14.5" fill="#2b2f3a">If the router misses, search is the fallback. The method</text>
+    <text x="726" y="1292" font-size="14.5" fill="#2b2f3a">(keyword, vectors, or both) is still open.</text>
+    <text x="703" y="1315" font-size="14.5" fill="#2b2f3a">4.</text>
+    <text x="726" y="1315" font-size="14.5" fill="#2b2f3a">Reading never writes. Anything new learned during the</text>
+    <text x="726" y="1333" font-size="14.5" fill="#2b2f3a">session is captured by Workflow A.</text>
+    <text x="703" y="1356" font-size="14.5" fill="#2b2f3a">5.</text>
+    <text x="726" y="1356" font-size="14.5" fill="#2b2f3a">Unverified: how well each model follows the</text>
+    <text x="726" y="1374" font-size="14.5" fill="#2b2f3a">router-then-map-then-notes rule; test with real questions.</text>
+    <text x="1313" y="1196" font-size="11.5" font-weight="700" letter-spacing="1.8" fill="#6a7080">TITLE</text>
+    <text x="1313" y="1230" font-size="27" font-weight="700" fill="#1a2036">Workflow B: Recall</text>
+    <text x="1313" y="1255" font-size="15.5" fill="#444a5a">Functional block diagram | How an agent finds what the vault knows</text>
+    <rect x="1832" y="1178" width="76" height="58" fill="#1F2A4A"/><text x="1870" y="1216" font-size="21" font-weight="700" text-anchor="middle" fill="#fff" letter-spacing="1">AI</text>
+    <rect x="1832" y="1232" width="26" height="4" fill="#5547C8"/>
+    <rect x="1858" y="1232" width="26" height="4" fill="#1E8C68"/>
+    <rect x="1884" y="1232" width="24" height="4" fill="#B6492A"/>
+    <rect x="1293" y="1266" width="424" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">PROJECT</text>
+    <text x="1313" y="1309" font-size="17" font-weight="600" fill="#1a2036">Shared AI Memory System</text>
+    <rect x="1717" y="1266" width="211" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1737" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWING NO.</text>
+    <text x="1737" y="1309" font-size="17" font-weight="600" fill="#1a2036">AI-003B</text>
+    <rect x="1293" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">REVISION</text>
+    <text x="1313" y="1363" font-size="17" font-weight="600" fill="#1a2036">A</text>
+    <rect x="1453" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1473" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DATE</text>
+    <text x="1473" y="1363" font-size="17" font-weight="600" fill="#1a2036">23 Oct 2026</text>
+    <rect x="1613" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SCALE</text>
+    <text x="1633" y="1363" font-size="17" font-weight="600" fill="#1a2036">NTS</text>
+    <rect x="1773" y="1320" width="155" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1793" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SHEET</text>
+    <text x="1793" y="1363" font-size="17" font-weight="600" fill="#1a2036">4 of 7</text>
+    <rect x="1293" y="1372" width="320" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWN BY</text>
+    <text x="1313" y="1415" font-size="17" font-weight="600" fill="#1a2036">Claude (draft)</text>
+    <rect x="1613" y="1372" width="315" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">STATUS</text>
+    <text x="1633" y="1415" font-size="17" font-weight="600" fill="#1a2036">Draft for review</text>
+    </svg>
+  AI-003C.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1480" width="2000" height="1480" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.1" fill="#cfd3dc"/></pattern><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#555B66"/></marker></defs>
+    <rect width="2000" height="1480" fill="#fff"/>
+    <rect x="5" y="5" width="1990" height="1470" fill="#fff" stroke="#1F2A4A" stroke-width="2.5"/>
+    <text x="155" y="26" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="155" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="396" y="26" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="396" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="637" y="26" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="637" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="878" y="26" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="878" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="1119" y="26" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1119" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1360" y="26" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1360" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1601" y="26" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1601" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1842" y="26" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="1842" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="20" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="1979" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="20" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="1979" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="20" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="1979" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="20" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="1979" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="20" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="1979" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="20" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <text x="1979" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <rect x="35" y="35" width="1929" height="1411" fill="#fff" stroke="#1F2A4A" stroke-width="2"/>
+    <rect x="35" y="35" width="1929" height="118" fill="#1F2A4A"/>
+    <text x="71" y="97" font-size="42" font-weight="700" letter-spacing="3.5" fill="#fff">WORKFLOW C: REVIEW</text>
+    <text x="71" y="133" font-size="18" letter-spacing="0.8" fill="#C9D0E4">Functional block diagram | Approvals, conflicts and supersession</text>
+    <text x="1927" y="86" font-size="19" font-weight="700" letter-spacing="1.2" text-anchor="end" fill="#fff">DWG AI-003C | REV A</text>
+    <text x="1927" y="117" font-size="15.5" letter-spacing="1" text-anchor="end" fill="#C9D0E4">23 OCT 2026 | DRAFT FOR REVIEW</text>
+    <rect x="35" y="148" width="141" height="5" fill="#5547C8"/>
+    <rect x="176" y="148" width="142" height="5" fill="#1E8C68"/>
+    <rect x="318" y="148" width="141" height="5" fill="#B6492A"/>
+    <rect x="70" y="177" width="1858" height="928" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="212" width="1858" height="893" fill="url(#dots)"/>
+    <rect x="70" y="177" width="1858" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="200" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">01 FUNCTIONAL FLOW: HUMAN REVIEW</text>
+    <text x="1908" y="200" font-size="12.5" font-weight="700" letter-spacing="1.8" text-anchor="end" fill="#7a8093">NOT TO SCALE</text>
+    <rect x="100" y="262" width="380" height="640" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">INTAKE</text>
+    <rect x="520" y="262" width="380" height="640" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="542" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">QUEUE</text>
+    <rect x="940" y="262" width="460" height="640" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="962" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">YOUR REVIEW</text>
+    <rect x="1440" y="262" width="470" height="640" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="1462" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">OUTCOME</text>
+    <rect x="125" y="330" width="330" height="80" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="290.0" y="362.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">External-origin claim</text>
+    <text x="290.0" y="385.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">from the web, files or other people</text>
+    <rect x="125" y="470" width="330" height="80" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="290.0" y="502.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">Conflict</text>
+    <text x="290.0" y="525.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">contradicts a dated claim in the vault</text>
+    <rect x="545" y="330" width="330" height="80" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="710.0" y="362.0" font-size="18" font-weight="500" text-anchor="middle" fill="#223F5E">needs_review list</text>
+    <text x="710.0" y="385.0" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">one status field drives it</text>
+    <rect x="545" y="470" width="330" height="80" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="710.0" y="502.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Count at session start</text>
+    <text x="710.0" y="525.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">so you never have to remember</text>
+    <rect x="545" y="610" width="330" height="80" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="710.0" y="642.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Held out of router and maps</text>
+    <text x="710.0" y="665.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">until status becomes active</text>
+    <path d="M455,370 L500,370 L500,370" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M455,370 L545,370" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M455,510 L490,510 L490,390 L545,390" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M710,410 L710,470" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M710,550 L710,610" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="965" y="330" width="410" height="80" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="1170.0" y="362.0" font-size="18" font-weight="500" text-anchor="middle" fill="#35298F">Open an item</text>
+    <text x="1170.0" y="385.0" font-size="14.5" text-anchor="middle" fill="#35298F" opacity="0.85">new claim, its origin, its source link</text>
+    <rect x="965" y="470" width="410" height="80" rx="12" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="1170.0" y="502.0" font-size="18" font-weight="500" text-anchor="middle" fill="#35298F">Decide</text>
+    <text x="1170.0" y="525.0" font-size="14.5" text-anchor="middle" fill="#35298F" opacity="0.85">approve, edit or reject</text>
+    <rect x="965" y="610" width="410" height="100" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1170.0" y="642.5" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">Conflict: see both</text>
+    <text x="1170.0" y="665.5" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">OPEN: side by side and pick, or</text>
+    <text x="1170.0" y="684.5" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">propose and approve</text>
+    <path d="M875,370 L965,370" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1170,410 L1170,470" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M875,395 L922,395 L922,650 L965,650" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="912" y="560" font-size="13" text-anchor="end" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">conflicts</text>
+    <rect x="1465" y="330" width="390" height="76" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1660.0" y="360.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Approved</text>
+    <text x="1660.0" y="383.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">status active; may enter maps</text>
+    <rect x="1465" y="430" width="390" height="76" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1660.0" y="471.5" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Edited, then approved</text>
+    <rect x="1465" y="530" width="390" height="76" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1660.0" y="560.0" font-size="18" font-weight="500" text-anchor="middle" fill="#2A2A28">Rejected</text>
+    <text x="1660.0" y="583.0" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">closed; the source is kept</text>
+    <rect x="1465" y="630" width="390" height="90" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1660.0" y="657.5" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">Superseded</text>
+    <text x="1660.0" y="680.5" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">OPEN: old claim kept and dated,</text>
+    <text x="1660.0" y="699.5" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">or removed</text>
+    <rect x="1465" y="790" width="390" height="76" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1660.0" y="820.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Maps and router rebuilt</text>
+    <text x="1660.0" y="843.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">then a local git commit</text>
+    <path d="M1375,510 L1420,510" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M1420,368 L1420,568" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M1420,368 L1465,368" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1420,468 L1465,468" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1420,568 L1465,568" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1375,660 L1465,660" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1855,368 L1885,368 L1885,828 L1855,828" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1855,468 L1885,468" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M1855,675 L1885,675" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="100" y="942" width="1810" height="130" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="974" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">RULES</text>
+    <rect x="125" y="990" width="560" height="56" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="405.0" y="1021.0" font-size="17" font-weight="500" text-anchor="middle" fill="#2A2A28">No newest-wins, ever</text>
+    <rect x="720" y="990" width="560" height="56" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1000.0" y="1021.0" font-size="17" font-weight="500" text-anchor="middle" fill="#2A2A28">Nothing is silently deleted</text>
+    <rect x="1315" y="990" width="570" height="56" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1600.0" y="1021.0" font-size="17" font-weight="500" text-anchor="middle" fill="#2A2A28">You only drop and review</text>
+    <rect x="70" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">02 LEGEND</text>
+    <rect x="681" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="681" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="701" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">03 NOTES</text>
+    <rect x="1293" y="1129" width="635" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="1293" y="1129" width="635" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">04 TITLE BLOCK</text>
+    <rect x="94" y="1175" width="36" height="26" rx="6" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="148" y="1192" font-size="15.5" fill="#2b2f3a">Your action</text>
+    <rect x="94" y="1202" width="36" height="26" rx="6" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="148" y="1219" font-size="15.5" fill="#2b2f3a">Automated step</text>
+    <rect x="94" y="1229" width="36" height="26" rx="6" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="148" y="1246" font-size="15.5" fill="#2b2f3a">Gate or human decision</text>
+    <rect x="94" y="1256" width="36" height="26" rx="6" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="148" y="1273" font-size="15.5" fill="#2b2f3a">External model call</text>
+    <rect x="94" y="1283" width="36" height="26" rx="6" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="148" y="1300" font-size="15.5" fill="#2b2f3a">Stored in the vault</text>
+    <rect x="94" y="1310" width="36" height="26" rx="6" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="148" y="1327" font-size="15.5" fill="#2b2f3a">Stage boundary</text>
+    <line x1="94" y1="1350" x2="128" y2="1350" stroke="#555B66" stroke-width="2" marker-end="url(#ah)"/>
+    <text x="148" y="1354" font-size="15.5" fill="#2b2f3a">Flow direction</text>
+    <line x1="94" y1="1377" x2="130" y2="1377" stroke="#555B66" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="148" y="1381" font-size="15.5" fill="#2b2f3a">Fallback path</text>
+    <path d="M94,1404 L104,1404 A9,9 0 0 1 122,1404 L130,1404" fill="none" stroke="#555B66" stroke-width="2"/>
+    <text x="148" y="1408" font-size="15.5" fill="#2b2f3a">Lines cross, not connected</text>
+    <text x="703" y="1192" font-size="14.5" fill="#2b2f3a">1.</text>
+    <text x="726" y="1192" font-size="14.5" fill="#2b2f3a">Two things reach the queue: external-origin claims and</text>
+    <text x="726" y="1210" font-size="14.5" fill="#2b2f3a">conflicts. Both are written as needs_review.</text>
+    <text x="703" y="1233" font-size="14.5" fill="#2b2f3a">2.</text>
+    <text x="726" y="1233" font-size="14.5" fill="#2b2f3a">You see the count at every session start, so review does</text>
+    <text x="726" y="1251" font-size="14.5" fill="#2b2f3a">not rely on memory.</text>
+    <text x="703" y="1274" font-size="14.5" fill="#2b2f3a">3.</text>
+    <text x="726" y="1274" font-size="14.5" fill="#2b2f3a">A held-out item cannot appear in the router or maps, so a</text>
+    <text x="726" y="1292" font-size="14.5" fill="#2b2f3a">poisoned or wrong claim cannot steer an agent.</text>
+    <text x="703" y="1315" font-size="14.5" fill="#2b2f3a">4.</text>
+    <text x="726" y="1315" font-size="14.5" fill="#2b2f3a">OPEN: how a conflict is shown, and whether a superseded</text>
+    <text x="726" y="1333" font-size="14.5" fill="#2b2f3a">claim is kept (dated) or removed.</text>
+    <text x="703" y="1356" font-size="14.5" fill="#2b2f3a">5.</text>
+    <text x="726" y="1356" font-size="14.5" fill="#2b2f3a">Rejected items are closed with their source kept, so the</text>
+    <text x="726" y="1374" font-size="14.5" fill="#2b2f3a">same claim is not silently re-proposed.</text>
+    <text x="1313" y="1196" font-size="11.5" font-weight="700" letter-spacing="1.8" fill="#6a7080">TITLE</text>
+    <text x="1313" y="1230" font-size="27" font-weight="700" fill="#1a2036">Workflow C: Review</text>
+    <text x="1313" y="1255" font-size="15.5" fill="#444a5a">Functional block diagram | Approvals, conflicts and supersession</text>
+    <rect x="1832" y="1178" width="76" height="58" fill="#1F2A4A"/><text x="1870" y="1216" font-size="21" font-weight="700" text-anchor="middle" fill="#fff" letter-spacing="1">AI</text>
+    <rect x="1832" y="1232" width="26" height="4" fill="#5547C8"/>
+    <rect x="1858" y="1232" width="26" height="4" fill="#1E8C68"/>
+    <rect x="1884" y="1232" width="24" height="4" fill="#B6492A"/>
+    <rect x="1293" y="1266" width="424" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">PROJECT</text>
+    <text x="1313" y="1309" font-size="17" font-weight="600" fill="#1a2036">Shared AI Memory System</text>
+    <rect x="1717" y="1266" width="211" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1737" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWING NO.</text>
+    <text x="1737" y="1309" font-size="17" font-weight="600" fill="#1a2036">AI-003C</text>
+    <rect x="1293" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">REVISION</text>
+    <text x="1313" y="1363" font-size="17" font-weight="600" fill="#1a2036">A</text>
+    <rect x="1453" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1473" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DATE</text>
+    <text x="1473" y="1363" font-size="17" font-weight="600" fill="#1a2036">23 Oct 2026</text>
+    <rect x="1613" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SCALE</text>
+    <text x="1633" y="1363" font-size="17" font-weight="600" fill="#1a2036">NTS</text>
+    <rect x="1773" y="1320" width="155" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1793" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SHEET</text>
+    <text x="1793" y="1363" font-size="17" font-weight="600" fill="#1a2036">5 of 7</text>
+    <rect x="1293" y="1372" width="320" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWN BY</text>
+    <text x="1313" y="1415" font-size="17" font-weight="600" fill="#1a2036">Claude (draft)</text>
+    <rect x="1613" y="1372" width="315" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">STATUS</text>
+    <text x="1633" y="1415" font-size="17" font-weight="600" fill="#1a2036">Draft for review</text>
+    </svg>
+  AI-003D.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1480" width="2000" height="1480" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.1" fill="#cfd3dc"/></pattern><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#555B66"/></marker></defs>
+    <rect width="2000" height="1480" fill="#fff"/>
+    <rect x="5" y="5" width="1990" height="1470" fill="#fff" stroke="#1F2A4A" stroke-width="2.5"/>
+    <text x="155" y="26" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="155" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="396" y="26" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="396" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="637" y="26" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="637" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="878" y="26" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="878" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="1119" y="26" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1119" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1360" y="26" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1360" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1601" y="26" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1601" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1842" y="26" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="1842" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="20" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="1979" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="20" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="1979" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="20" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="1979" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="20" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="1979" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="20" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="1979" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="20" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <text x="1979" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <rect x="35" y="35" width="1929" height="1411" fill="#fff" stroke="#1F2A4A" stroke-width="2"/>
+    <rect x="35" y="35" width="1929" height="118" fill="#1F2A4A"/>
+    <text x="71" y="97" font-size="42" font-weight="700" letter-spacing="3.5" fill="#fff">WORKFLOW D: MAINTENANCE</text>
+    <text x="71" y="133" font-size="18" letter-spacing="0.8" fill="#C9D0E4">Functional block diagram | Content health, backups and the restore test</text>
+    <text x="1927" y="86" font-size="19" font-weight="700" letter-spacing="1.2" text-anchor="end" fill="#fff">DWG AI-003D | REV A</text>
+    <text x="1927" y="117" font-size="15.5" letter-spacing="1" text-anchor="end" fill="#C9D0E4">23 OCT 2026 | DRAFT FOR REVIEW</text>
+    <rect x="35" y="148" width="141" height="5" fill="#5547C8"/>
+    <rect x="176" y="148" width="142" height="5" fill="#1E8C68"/>
+    <rect x="318" y="148" width="141" height="5" fill="#B6492A"/>
+    <rect x="70" y="177" width="1858" height="928" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="212" width="1858" height="893" fill="url(#dots)"/>
+    <rect x="70" y="177" width="1858" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="200" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">01 FUNCTIONAL FLOW: SCHEDULED JOBS</text>
+    <text x="1908" y="200" font-size="12.5" font-weight="700" letter-spacing="1.8" text-anchor="end" fill="#7a8093">NOT TO SCALE</text>
+    <rect x="100" y="262" width="1810" height="250" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="294" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">CONTENT HEALTH  |  SCHEDULE TO BE SET</text>
+    <rect x="125" y="340" width="316" height="90" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="283.0" y="377.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Timer</text>
+    <text x="283.0" y="400.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">maintenance job</text>
+    <rect x="481" y="340" width="316" height="90" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="639.0" y="377.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Lint</text>
+    <text x="639.0" y="400.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">frontmatter, tags, links</text>
+    <rect x="837" y="340" width="316" height="90" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="995.0" y="377.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Flag stale entries</text>
+    <text x="995.0" y="400.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">no activity for N days (N open)</text>
+    <rect x="1193" y="340" width="316" height="90" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1351.0" y="377.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Rebuild maps and router</text>
+    <text x="1351.0" y="400.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">from the notes below</text>
+    <rect x="1549" y="340" width="316" height="90" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1707.0" y="377.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">Findings to review</text>
+    <text x="1707.0" y="400.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">never auto-deleted</text>
+    <path d="M441,385 L481,385" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M797,385 L837,385" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1153,385 L1193,385" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1509,385 L1549,385" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="100" y="552" width="1810" height="400" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="584" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">DATA PROTECTION</text>
+    <rect x="125" y="630" width="316" height="90" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="283.0" y="667.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">git watcher</text>
+    <text x="283.0" y="690.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">commits on change; local only</text>
+    <rect x="481" y="630" width="316" height="90" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="639.0" y="667.0" font-size="18" font-weight="500" text-anchor="middle" fill="#223F5E">Longhorn snapshot</text>
+    <text x="639.0" y="690.0" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">of the vault volume</text>
+    <rect x="837" y="630" width="316" height="90" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="995.0" y="678.5" font-size="18" font-weight="500" text-anchor="middle" fill="#223F5E">QNAP copy</text>
+    <rect x="1193" y="630" width="316" height="90" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="1351.0" y="678.5" font-size="18" font-weight="500" text-anchor="middle" fill="#223F5E">USB copy</text>
+    <rect x="1549" y="630" width="316" height="90" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1707.0" y="657.5" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Scheduled restore test</text>
+    <text x="1707.0" y="680.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">restore to scratch; check count,</text>
+    <text x="1707.0" y="699.5" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">router build, a sample note</text>
+    <path d="M797,675 L837,675" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1153,675 L1193,675" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1509,675 L1549,675" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="1193" y="820" width="316" height="90" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="1351.0" y="857.0" font-size="18" font-weight="500" text-anchor="middle" fill="#0D5A41">Pass</text>
+    <text x="1351.0" y="880.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">logged with the date</text>
+    <rect x="1549" y="820" width="316" height="90" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1707.0" y="857.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">Fail</text>
+    <text x="1707.0" y="880.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">alert; do not wait to notice</text>
+    <path d="M1707,720 L1707,770 L1351,770 L1351,820" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <path d="M1707,770 L1707,820" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <rect x="100" y="982" width="1810" height="108" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="1014" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">SCHEDULING</text>
+    <rect x="125" y="1022" width="1760" height="50" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1005.0" y="1050.0" font-size="17" font-weight="500" text-anchor="middle" fill="#2A2A28">Fits the QNAP rule: one heavy job at a time, inside the agreed work window</text>
+    <rect x="70" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">02 LEGEND</text>
+    <rect x="681" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="681" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="701" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">03 NOTES</text>
+    <rect x="1293" y="1129" width="635" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="1293" y="1129" width="635" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">04 TITLE BLOCK</text>
+    <rect x="94" y="1175" width="36" height="26" rx="6" fill="#ECEAFB" stroke="#5547C8" stroke-width="2"/>
+    <text x="148" y="1192" font-size="15.5" fill="#2b2f3a">Your action</text>
+    <rect x="94" y="1202" width="36" height="26" rx="6" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="148" y="1219" font-size="15.5" fill="#2b2f3a">Automated step</text>
+    <rect x="94" y="1229" width="36" height="26" rx="6" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="148" y="1246" font-size="15.5" fill="#2b2f3a">Gate or human decision</text>
+    <rect x="94" y="1256" width="36" height="26" rx="6" fill="#FBEAE3" stroke="#B6492A" stroke-width="2"/>
+    <text x="148" y="1273" font-size="15.5" fill="#2b2f3a">External model call</text>
+    <rect x="94" y="1283" width="36" height="26" rx="6" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="148" y="1300" font-size="15.5" fill="#2b2f3a">Stored in the vault</text>
+    <rect x="94" y="1310" width="36" height="26" rx="6" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="148" y="1327" font-size="15.5" fill="#2b2f3a">Stage boundary</text>
+    <line x1="94" y1="1350" x2="128" y2="1350" stroke="#555B66" stroke-width="2" marker-end="url(#ah)"/>
+    <text x="148" y="1354" font-size="15.5" fill="#2b2f3a">Flow direction</text>
+    <line x1="94" y1="1377" x2="130" y2="1377" stroke="#555B66" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="148" y="1381" font-size="15.5" fill="#2b2f3a">Fallback path</text>
+    <path d="M94,1404 L104,1404 A9,9 0 0 1 122,1404 L130,1404" fill="none" stroke="#555B66" stroke-width="2"/>
+    <text x="148" y="1408" font-size="15.5" fill="#2b2f3a">Lines cross, not connected</text>
+    <text x="703" y="1192" font-size="14.5" fill="#2b2f3a">1.</text>
+    <text x="726" y="1192" font-size="14.5" fill="#2b2f3a">Maintenance flags; it does not delete. Anything it cannot</text>
+    <text x="726" y="1210" font-size="14.5" fill="#2b2f3a">settle goes to the review queue.</text>
+    <text x="703" y="1233" font-size="14.5" fill="#2b2f3a">2.</text>
+    <text x="726" y="1233" font-size="14.5" fill="#2b2f3a">git history is local only and sits alongside Obsidian</text>
+    <text x="726" y="1251" font-size="14.5" fill="#2b2f3a">Sync; it is not an off-site copy.</text>
+    <text x="703" y="1274" font-size="14.5" fill="#2b2f3a">3.</text>
+    <text x="726" y="1274" font-size="14.5" fill="#2b2f3a">Backups run Longhorn to QNAP to USB. Nothing leaves the</text>
+    <text x="726" y="1292" font-size="14.5" fill="#2b2f3a">house.</text>
+    <text x="703" y="1315" font-size="14.5" fill="#2b2f3a">4.</text>
+    <text x="726" y="1315" font-size="14.5" fill="#2b2f3a">The restore test is what proves the backups work; a</text>
+    <text x="726" y="1333" font-size="14.5" fill="#2b2f3a">failure raises an alert.</text>
+    <text x="703" y="1356" font-size="14.5" fill="#2b2f3a">5.</text>
+    <text x="726" y="1356" font-size="14.5" fill="#2b2f3a">Schedules are not set yet and must respect the QNAP's</text>
+    <text x="726" y="1374" font-size="14.5" fill="#2b2f3a">one-heavy-job rule.</text>
+    <text x="1313" y="1196" font-size="11.5" font-weight="700" letter-spacing="1.8" fill="#6a7080">TITLE</text>
+    <text x="1313" y="1230" font-size="27" font-weight="700" fill="#1a2036">Workflow D: Maintenance</text>
+    <text x="1313" y="1255" font-size="15.5" fill="#444a5a">Functional block diagram | Content health, backups and the restore test</text>
+    <rect x="1832" y="1178" width="76" height="58" fill="#1F2A4A"/><text x="1870" y="1216" font-size="21" font-weight="700" text-anchor="middle" fill="#fff" letter-spacing="1">AI</text>
+    <rect x="1832" y="1232" width="26" height="4" fill="#5547C8"/>
+    <rect x="1858" y="1232" width="26" height="4" fill="#1E8C68"/>
+    <rect x="1884" y="1232" width="24" height="4" fill="#B6492A"/>
+    <rect x="1293" y="1266" width="424" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">PROJECT</text>
+    <text x="1313" y="1309" font-size="17" font-weight="600" fill="#1a2036">Shared AI Memory System</text>
+    <rect x="1717" y="1266" width="211" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1737" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWING NO.</text>
+    <text x="1737" y="1309" font-size="17" font-weight="600" fill="#1a2036">AI-003D</text>
+    <rect x="1293" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">REVISION</text>
+    <text x="1313" y="1363" font-size="17" font-weight="600" fill="#1a2036">A</text>
+    <rect x="1453" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1473" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DATE</text>
+    <text x="1473" y="1363" font-size="17" font-weight="600" fill="#1a2036">23 Oct 2026</text>
+    <rect x="1613" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SCALE</text>
+    <text x="1633" y="1363" font-size="17" font-weight="600" fill="#1a2036">NTS</text>
+    <rect x="1773" y="1320" width="155" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1793" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SHEET</text>
+    <text x="1793" y="1363" font-size="17" font-weight="600" fill="#1a2036">6 of 7</text>
+    <rect x="1293" y="1372" width="320" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWN BY</text>
+    <text x="1313" y="1415" font-size="17" font-weight="600" fill="#1a2036">Claude (draft)</text>
+    <rect x="1613" y="1372" width="315" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">STATUS</text>
+    <text x="1633" y="1415" font-size="17" font-weight="600" fill="#1a2036">Draft for review</text>
+    </svg>
+  AI-004.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1480" width="2000" height="1480" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.1" fill="#cfd3dc"/></pattern><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#555B66"/></marker></defs>
+    <rect width="2000" height="1480" fill="#fff"/>
+    <rect x="5" y="5" width="1990" height="1470" fill="#fff" stroke="#1F2A4A" stroke-width="2.5"/>
+    <text x="155" y="26" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="155" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">1</text>
+    <text x="396" y="26" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="396" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">2</text>
+    <text x="637" y="26" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="637" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">3</text>
+    <text x="878" y="26" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="878" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">4</text>
+    <text x="1119" y="26" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1119" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">5</text>
+    <text x="1360" y="26" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1360" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">6</text>
+    <text x="1601" y="26" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1601" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">7</text>
+    <text x="1842" y="26" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="1842" y="1466" font-size="14" text-anchor="middle" fill="#4b5063">8</text>
+    <text x="20" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="1979" y="158" font-size="14" text-anchor="middle" fill="#4b5063">A</text>
+    <text x="20" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="1979" y="393" font-size="14" text-anchor="middle" fill="#4b5063">B</text>
+    <text x="20" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="1979" y="628" font-size="14" text-anchor="middle" fill="#4b5063">C</text>
+    <text x="20" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="1979" y="863" font-size="14" text-anchor="middle" fill="#4b5063">D</text>
+    <text x="20" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="1979" y="1098" font-size="14" text-anchor="middle" fill="#4b5063">E</text>
+    <text x="20" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <text x="1979" y="1333" font-size="14" text-anchor="middle" fill="#4b5063">F</text>
+    <rect x="35" y="35" width="1929" height="1411" fill="#fff" stroke="#1F2A4A" stroke-width="2"/>
+    <rect x="35" y="35" width="1929" height="118" fill="#1F2A4A"/>
+    <text x="71" y="97" font-size="42" font-weight="700" letter-spacing="3.5" fill="#fff">MEMORY TIERS</text>
+    <text x="71" y="133" font-size="18" letter-spacing="0.8" fill="#C9D0E4">How the vault is layered | Router, maps, notes, raw sources</text>
+    <text x="1927" y="86" font-size="19" font-weight="700" letter-spacing="1.2" text-anchor="end" fill="#fff">DWG AI-004 | REV A</text>
+    <text x="1927" y="117" font-size="15.5" letter-spacing="1" text-anchor="end" fill="#C9D0E4">23 OCT 2026 | DRAFT FOR REVIEW</text>
+    <rect x="35" y="148" width="141" height="5" fill="#5547C8"/>
+    <rect x="176" y="148" width="142" height="5" fill="#1E8C68"/>
+    <rect x="318" y="148" width="141" height="5" fill="#B6492A"/>
+    <rect x="70" y="177" width="1858" height="928" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="212" width="1858" height="893" fill="url(#dots)"/>
+    <rect x="70" y="177" width="1858" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="200" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">01 MEMORY ARCHITECTURE</text>
+    <text x="1908" y="200" font-size="12.5" font-weight="700" letter-spacing="1.8" text-anchor="end" fill="#7a8093">NOT TO SCALE</text>
+    <text x="125" y="258" font-size="13" text-anchor="start" font-weight="700" fill="#6a7080">TIER</text>
+    <text x="790" y="258" font-size="13" text-anchor="start" font-weight="700" fill="#6a7080">LOADED</text>
+    <text x="1100" y="258" font-size="13" text-anchor="start" font-weight="700" fill="#6a7080">WRITTEN BY</text>
+    <text x="1450" y="258" font-size="13" text-anchor="start" font-weight="700" fill="#6a7080">RULE</text>
+    <rect x="125" y="275" width="630" height="112" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="440.0" y="315.0" font-size="21" font-weight="500" text-anchor="middle" fill="#0D5A41">TIER 0  ROUTER</text>
+    <text x="440.0" y="341.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">wiki/index.md</text>
+    <text x="440.0" y="360.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">one thin line per project: status, next step, date, links</text>
+    <rect x="790" y="275" width="280" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="930.0" y="312.5" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">Every session start</text>
+    <text x="930.0" y="333.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">small by design</text>
+    <text x="930.0" y="352.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">(token budget open)</text>
+    <rect x="1100" y="275" width="320" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1260.0" y="312.5" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">Generated</text>
+    <text x="1260.0" y="333.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">from the tier below</text>
+    <text x="1260.0" y="352.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">never hand-edited</text>
+    <rect x="1450" y="275" width="440" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1670.0" y="322.0" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">Only active notes appear.</text>
+    <text x="1670.0" y="343.0" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">needs_review items are held out.</text>
+    <path d="M755,331.0 L790,331.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M1070,331.0 L1100,331.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M1420,331.0 L1450,331.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M260,387 L260,433" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="272" y="416" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">read: follow links down</text>
+    <path d="M520,433 L520,387" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" stroke-dasharray="8 6" marker-end="url(#ah)"/>
+    <text x="532" y="416" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">built from the tier below</text>
+    <rect x="125" y="433" width="630" height="112" rx="12" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="440.0" y="473.0" font-size="21" font-weight="500" text-anchor="middle" fill="#0D5A41">TIER 1  MAPS</text>
+    <text x="440.0" y="499.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">area or topic maps (OPEN: which)</text>
+    <text x="440.0" y="518.0" font-size="14.5" text-anchor="middle" fill="#0D5A41" opacity="0.85">context, key facts, links to notes</text>
+    <rect x="790" y="433" width="280" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="930.0" y="480.0" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">On demand, when the</text>
+    <text x="930.0" y="501.0" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">router points here</text>
+    <rect x="1100" y="433" width="320" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1260.0" y="480.0" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">Generated</text>
+    <text x="1260.0" y="501.0" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">from detail notes</text>
+    <rect x="1450" y="433" width="440" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1670.0" y="480.0" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">Only active notes appear.</text>
+    <text x="1670.0" y="501.0" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">Each map is small.</text>
+    <path d="M755,489.0 L790,489.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M1070,489.0 L1100,489.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M1420,489.0 L1450,489.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M260,545 L260,591" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="272" y="574" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">read: follow links down</text>
+    <path d="M520,591 L520,545" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" stroke-dasharray="8 6" marker-end="url(#ah)"/>
+    <text x="532" y="574" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">built from the tier below</text>
+    <rect x="125" y="591" width="630" height="112" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="440.0" y="640.5" font-size="21" font-weight="500" text-anchor="middle" fill="#223F5E">TIER 2  DETAIL NOTES</text>
+    <text x="440.0" y="666.5" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">dated claims, each with origin and a source link</text>
+    <rect x="790" y="591" width="280" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="930.0" y="649.5" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">On demand</text>
+    <rect x="1100" y="591" width="320" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1260.0" y="628.5" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">Agents, through MCP</text>
+    <text x="1260.0" y="649.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">frontmatter by agents:</text>
+    <text x="1260.0" y="668.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">status, origin, date, source, tags</text>
+    <rect x="1450" y="591" width="440" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1670.0" y="638.0" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">Tags only from wiki/meta/tags.md.</text>
+    <text x="1670.0" y="659.0" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">Conflicts go to your review.</text>
+    <path d="M755,647.0 L790,647.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M1070,647.0 L1100,647.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M1420,647.0 L1450,647.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M260,703 L260,749" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah)"/>
+    <text x="272" y="732" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">read: follow links down</text>
+    <path d="M520,749 L520,703" fill="none" stroke="#555B66" stroke-width="2" stroke-linejoin="round" stroke-dasharray="8 6" marker-end="url(#ah)"/>
+    <text x="532" y="732" font-size="13" text-anchor="start" font-weight="400" fill="#3a3f4a" stroke="#fff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">built from the tier below</text>
+    <rect x="125" y="749" width="630" height="112" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="440.0" y="789.0" font-size="21" font-weight="500" text-anchor="middle" fill="#223F5E">TIER 3  RAW SOURCES</text>
+    <text x="440.0" y="815.0" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">drops, session extracts, source files</text>
+    <text x="440.0" y="834.0" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">attachments (OPEN)</text>
+    <rect x="790" y="749" width="280" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="930.0" y="796.0" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">Only to check a claim</text>
+    <text x="930.0" y="817.0" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">against its source</text>
+    <rect x="1100" y="749" width="320" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1260.0" y="786.5" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">You drop files;</text>
+    <text x="1260.0" y="807.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">the extractor adds</text>
+    <text x="1260.0" y="826.5" font-size="14.5" text-anchor="middle" fill="#2A2A28" opacity="0.85">session extracts</text>
+    <rect x="1450" y="749" width="440" height="112" rx="12" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="1670.0" y="807.5" font-size="16" font-weight="500" text-anchor="middle" fill="#2A2A28">Never edited after capture.</text>
+    <path d="M755,805.0 L790,805.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M1070,805.0 L1100,805.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M1420,805.0 L1450,805.0" fill="none" stroke="#b5b8c2" stroke-width="1.5" stroke-linejoin="round"/>
+    <rect x="100" y="915" width="1810" height="150" rx="20" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="122" y="947" font-size="15" font-weight="700" letter-spacing="1.4" fill="#33332f">OUTSIDE THE TIERS</text>
+    <rect x="125" y="965" width="560" height="72" rx="12" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="405.0" y="993.0" font-size="18" font-weight="500" text-anchor="middle" fill="#223F5E">wiki/meta/tags.md</text>
+    <text x="405.0" y="1016.0" font-size="14.5" text-anchor="middle" fill="#223F5E" opacity="0.85">the controlled tag vocabulary</text>
+    <rect x="720" y="965" width="560" height="72" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1000.0" y="993.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">private/</text>
+    <text x="1000.0" y="1016.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">agent-blocked; time-boxed unlock, logged</text>
+    <rect x="1315" y="965" width="570" height="72" rx="12" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="1600.0" y="993.0" font-size="18" font-weight="500" text-anchor="middle" fill="#6B4B00">Trust gate</text>
+    <text x="1600.0" y="1016.0" font-size="14.5" text-anchor="middle" fill="#6B4B00" opacity="0.85">external-origin claims stay needs_review</text>
+    <rect x="70" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="70" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="90" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">02 LEGEND</text>
+    <rect x="681" y="1129" width="589" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="681" y="1129" width="589" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="701" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">03 NOTES</text>
+    <rect x="1293" y="1129" width="635" height="294" fill="#fff" stroke="#c9ccd6" stroke-width="1.5"/>
+    <rect x="1293" y="1129" width="635" height="35" fill="#E4E7EE" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1152" font-size="15" font-weight="700" letter-spacing="1.8" fill="#222a40">04 TITLE BLOCK</text>
+    <rect x="94" y="1175" width="36" height="26" rx="6" fill="#DFF3EA" stroke="#1E8C68" stroke-width="2"/>
+    <text x="148" y="1192" font-size="15.5" fill="#2b2f3a">Generated tier (rebuilt from below)</text>
+    <rect x="94" y="1202" width="36" height="26" rx="6" fill="#E4ECF5" stroke="#4A6A8F" stroke-width="2"/>
+    <text x="148" y="1219" font-size="15.5" fill="#2b2f3a">Written tier (agents, via MCP)</text>
+    <rect x="94" y="1229" width="36" height="26" rx="6" fill="#FFF1CF" stroke="#B58105" stroke-width="2"/>
+    <text x="148" y="1246" font-size="15.5" fill="#2b2f3a">Guarded or gated</text>
+    <rect x="94" y="1256" width="36" height="26" rx="6" fill="#FFFFFF" stroke="#6B6B66" stroke-width="2"/>
+    <text x="148" y="1273" font-size="15.5" fill="#2b2f3a">Property of the tier</text>
+    <rect x="94" y="1283" width="36" height="26" rx="6" fill="#F3F1EC" stroke="#8B8982" stroke-width="1.6"/>
+    <text x="148" y="1300" font-size="15.5" fill="#2b2f3a">Group boundary</text>
+    <line x1="94" y1="1323" x2="128" y2="1323" stroke="#555B66" stroke-width="2" marker-end="url(#ah)"/>
+    <text x="148" y="1327" font-size="15.5" fill="#2b2f3a">Read path</text>
+    <line x1="94" y1="1350" x2="130" y2="1350" stroke="#555B66" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="148" y="1354" font-size="15.5" fill="#2b2f3a">Build path</text>
+    <text x="703" y="1192" font-size="14.5" fill="#2b2f3a">1.</text>
+    <text x="726" y="1192" font-size="14.5" fill="#2b2f3a">Agents write only at the bottom. Tiers 0 and 1 are</text>
+    <text x="726" y="1210" font-size="14.5" fill="#2b2f3a">generated, so they cannot drift from the notes.</text>
+    <text x="703" y="1233" font-size="14.5" fill="#2b2f3a">2.</text>
+    <text x="726" y="1233" font-size="14.5" fill="#2b2f3a">Reading goes top down: router, map, notes, source. Each</text>
+    <text x="726" y="1251" font-size="14.5" fill="#2b2f3a">tier links to the one below.</text>
+    <text x="703" y="1274" font-size="14.5" fill="#2b2f3a">3.</text>
+    <text x="726" y="1274" font-size="14.5" fill="#2b2f3a">The router is the only tier loaded every time. Its size is</text>
+    <text x="726" y="1292" font-size="14.5" fill="#2b2f3a">the main budget decision. Claude Code's own 200-line</text>
+    <text x="726" y="1310" font-size="14.5" fill="#2b2f3a">memory limit does not apply: that feature is off.</text>
+    <text x="703" y="1333" font-size="14.5" fill="#2b2f3a">4.</text>
+    <text x="726" y="1333" font-size="14.5" fill="#2b2f3a">External-origin claims are written as needs_review and</text>
+    <text x="726" y="1351" font-size="14.5" fill="#2b2f3a">cannot enter tiers 0 or 1 until you approve.</text>
+    <text x="703" y="1374" font-size="14.5" fill="#2b2f3a">5.</text>
+    <text x="726" y="1374" font-size="14.5" fill="#2b2f3a">OPEN: area or topic maps; router token budget; where</text>
+    <text x="726" y="1392" font-size="14.5" fill="#2b2f3a">attachments live.</text>
+    <text x="1313" y="1196" font-size="11.5" font-weight="700" letter-spacing="1.8" fill="#6a7080">TITLE</text>
+    <text x="1313" y="1230" font-size="27" font-weight="700" fill="#1a2036">Memory Tiers</text>
+    <text x="1313" y="1255" font-size="15.5" fill="#444a5a">How the vault is layered | Router, maps, notes, raw sources</text>
+    <rect x="1832" y="1178" width="76" height="58" fill="#1F2A4A"/><text x="1870" y="1216" font-size="21" font-weight="700" text-anchor="middle" fill="#fff" letter-spacing="1">AI</text>
+    <rect x="1832" y="1232" width="26" height="4" fill="#5547C8"/>
+    <rect x="1858" y="1232" width="26" height="4" fill="#1E8C68"/>
+    <rect x="1884" y="1232" width="24" height="4" fill="#B6492A"/>
+    <rect x="1293" y="1266" width="424" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">PROJECT</text>
+    <text x="1313" y="1309" font-size="17" font-weight="600" fill="#1a2036">Shared AI Memory System</text>
+    <rect x="1717" y="1266" width="211" height="54" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1737" y="1286" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWING NO.</text>
+    <text x="1737" y="1309" font-size="17" font-weight="600" fill="#1a2036">AI-004</text>
+    <rect x="1293" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">REVISION</text>
+    <text x="1313" y="1363" font-size="17" font-weight="600" fill="#1a2036">A</text>
+    <rect x="1453" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1473" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DATE</text>
+    <text x="1473" y="1363" font-size="17" font-weight="600" fill="#1a2036">23 Oct 2026</text>
+    <rect x="1613" y="1320" width="160" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SCALE</text>
+    <text x="1633" y="1363" font-size="17" font-weight="600" fill="#1a2036">NTS</text>
+    <rect x="1773" y="1320" width="155" height="52" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1793" y="1340" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">SHEET</text>
+    <text x="1793" y="1363" font-size="17" font-weight="600" fill="#1a2036">7 of 7</text>
+    <rect x="1293" y="1372" width="320" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1313" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">DRAWN BY</text>
+    <text x="1313" y="1415" font-size="17" font-weight="600" fill="#1a2036">Claude (draft)</text>
+    <rect x="1613" y="1372" width="315" height="51" fill="none" stroke="#c9ccd6" stroke-width="1.5"/>
+    <text x="1633" y="1392" font-size="11" font-weight="700" letter-spacing="1.6" fill="#6a7080">STATUS</text>
+    <text x="1633" y="1415" font-size="17" font-weight="600" fill="#1a2036">Draft for review</text>
+    </svg>

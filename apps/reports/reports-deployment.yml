@@ -52,6 +52,7 @@ spec:
           volumeMounts:
             - {name: site, mountPath: /app/site, readOnly: true}
             - {name: backups-scanner, mountPath: /app/backups, readOnly: true}
+            - {name: drawings, mountPath: /app/drawings, readOnly: true}
             - {name: backup, mountPath: /mnt/backup, readOnly: true}
           readinessProbe:
             httpGet: {path: /healthz, port: http}
@@ -70,6 +71,9 @@ spec:
         - name: backups-scanner
           configMap:
             name: reports-backups
+        - name: drawings
+          configMap:
+            name: reports-drawings
         - name: backup
           hostPath:
             path: /mnt/backup
