@@ -595,7 +595,11 @@ data:
 
 
     def _norm(text):
-        return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+        # Apostrophes are dropped, not turned into spaces: a release name
+        # spells "Don't" as "Dont" and Radarr's title keeps the apostrophe.
+        # That mismatch left "I Do But I Dont" waiting 51 hours for a person.
+        text = re.sub(r"['\u2019`]", "", (text or "").lower())
+        return re.sub(r"[^a-z0-9]+", " ", text).strip()
 
 
     def run_fiximports():
@@ -625,6 +629,7 @@ data:
         now = datetime.datetime.now(datetime.timezone.utc)
         too_new = (now - datetime.timedelta(hours=FIX_MIN_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
         give_up = (now - datetime.timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        day_old = (now - datetime.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
         fixed, left, failed = [], [], []
 
         def remove(app, r, blocklist):
@@ -705,7 +710,13 @@ data:
                     elif "manual import required" in blob or "matched to" in blob or "archive file" in blob:
                         cands = candidates(app, r)
                         files = importable(app, cands)
-                        if files and len(files) == len(cands) and title_ok(app, r, cands):
+                        # Radarr's own grab history names the movie, so a title
+                        # spelled differently in the release name (subtitles,
+                        # punctuation, translations) is trustworthy once the item
+                        # has sat a day with a single clean candidate.
+                        grabbed = ("grab history" in blob and len(cands) == 1
+                                   and (r.get("added") or "9999") < day_old)
+                        if files and len(files) == len(cands) and (title_ok(app, r, cands) or grabbed):
                             arr_post(app, "command", {"name": "ManualImport", "importMode": "auto",
                                                       "files": files})
                             fixed.append({"app": app, "title": title,
