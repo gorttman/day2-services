@@ -95,11 +95,14 @@ data:
     METADATA_HOURS = int(os.environ.get("METADATA_HOURS", "6"))
     # Auto-feed: the unattended version of the "Search more midday movies"
     # button. Searches the next batch only when the pipe has drained, never
-    # past FEED_MAX_TIER (Drama/Thriller tiers by default - Romance,
-    # Christmas and the rest stay on the manual button), and never more than
+    # past FEED_MAX_TIER (all tiers by default since 2026-10-24; lower it to
+    # keep Christmas and the rest on the manual button), and never more than
     # FEED_MAX_PER_DAY titles in 24h so a runaway cannot burn the indexers'
     # daily API allowance the way Radarr's own "Search All Missing" does.
-    FEED_MAX_TIER = int(os.environ.get("FEED_MAX_TIER", "2"))
+    FEED_MAX_TIER = int(os.environ.get("FEED_MAX_TIER", "5"))
+    # A title searched with no result is tried again after this many days,
+    # so a release that appears later is still found without a person.
+    RETRY_DAYS = int(os.environ.get("RETRY_DAYS", "30"))
     FEED_MAX_INFLIGHT = int(os.environ.get("FEED_MAX_INFLIGHT", "12"))
     FEED_MAX_PER_DAY = int(os.environ.get("FEED_MAX_PER_DAY", "200"))
     FEED_MIN_FREE_TB = float(os.environ.get("FEED_MIN_FREE_TB", "2"))
@@ -525,11 +528,30 @@ data:
         done = set(state.get("searched", []))
         missing = [m for m in movies if not m.get("hasFile")
                    and m.get("monitored") and m.get("isAvailable")]
-        todo = [m for m in missing if m["id"] not in done
+        now = datetime.datetime.now(datetime.timezone.utc)
+        now_s = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        # searchedAt: when each id was last searched. Searches made before this
+        # existed have no stamp, so they are stamped on first sight and come up
+        # for retry RETRY_DAYS from then.
+        at = state.setdefault("searchedAt", {})
+        stamped = False
+        for m in missing:
+            if m["id"] in done and str(m["id"]) not in at:
+                at[str(m["id"])] = now_s
+                stamped = True
+        retry_cut = (now - datetime.timedelta(days=RETRY_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        in_queue = {r.get("movieId") for r in arr_queue("radarr")}
+        retry_ids = {m["id"] for m in missing if m["id"] in done
+                     and at.get(str(m["id"]), now_s) < retry_cut and m["id"] not in in_queue}
+        todo = [m for m in missing if (m["id"] not in done or m["id"] in retry_ids)
                 and (max_tier is None or tier_of(m) <= max_tier)]
-        todo.sort(key=lambda m: (tier_of(m), -(m.get("year") or 0)))
+        # Never-searched titles first, retries after.
+        todo.sort(key=lambda m: (m["id"] in retry_ids, tier_of(m), -(m.get("year") or 0)))
         pick = todo[:batch]
         if not pick:
+            if stamped:
+                with open(BULK_STATE, "w") as f:
+                    json.dump(state, f)
             return {"ok": True, "searched": 0, "remaining": 0,
                     "message": "Nothing left to search - every missing title has been tried."
                                if max_tier is None else
@@ -539,7 +561,8 @@ data:
         # State only after Radarr accepts the command, so a failure retries
         # the same batch rather than skipping it.
         done |= set(ids)
-        now = datetime.datetime.now(datetime.timezone.utc)
+        for i in ids:
+            at[str(i)] = now_s
         week = (now - datetime.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
         runs = [r for r in state.get("runs", []) if r[0] >= week]
         runs.append([now.strftime("%Y-%m-%dT%H:%M:%SZ"), len(ids)])
