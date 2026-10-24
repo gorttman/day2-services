@@ -745,11 +745,11 @@ data:
                         cands = candidates(app, r)
                         files = importable(app, cands)
                         # Radarr's own grab history names the movie, so a title
-                        # spelled differently in the release name (subtitles,
-                        # punctuation, translations) is trustworthy once the item
-                        # has sat a day with a single clean candidate.
-                        grabbed = ("grab history" in blob and len(cands) == 1
-                                   and (r.get("added") or "9999") < day_old)
+                        # spelled differently in the release name ("Tribute" vs
+                        # "Nora Roberts' Tribute", subtitles, translations) is
+                        # trustworthy with a single clean candidate. The 2h
+                        # FIX_MIN_HOURS gate above already stops racing a normal import.
+                        grabbed = "grab history" in blob and len(cands) == 1
                         if files and len(files) == len(cands) and (title_ok(app, r, cands) or grabbed):
                             arr_post(app, "command", {"name": "ManualImport", "importMode": "auto",
                                                       "files": files})
