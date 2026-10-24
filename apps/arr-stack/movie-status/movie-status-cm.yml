@@ -104,7 +104,7 @@ data:
     # so a release that appears later is still found without a person.
     RETRY_DAYS = int(os.environ.get("RETRY_DAYS", "30"))
     FEED_MAX_INFLIGHT = int(os.environ.get("FEED_MAX_INFLIGHT", "12"))
-    FEED_MAX_PER_DAY = int(os.environ.get("FEED_MAX_PER_DAY", "200"))
+    FEED_MAX_PER_DAY = int(os.environ.get("FEED_MAX_PER_DAY", "400"))
     FEED_MIN_FREE_TB = float(os.environ.get("FEED_MIN_FREE_TB", "2"))
     # Auto-fix of "needs you" imports: only acts on items at least this old,
     # so a normal import in progress is never raced.
