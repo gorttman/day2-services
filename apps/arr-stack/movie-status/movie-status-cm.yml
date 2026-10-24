@@ -301,8 +301,11 @@ data:
             return "stalled with no connections for %dh+" % STALLED_HOURS
         meta_cut = (datetime.datetime.now(datetime.timezone.utc)
                     - datetime.timedelta(hours=METADATA_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        if ("downloading metadata" in (r.get("errorMessage") or "").lower()
-                and (r.get("added") or "9999") < meta_cut):
+        # Radarr only sometimes carries the "downloading metadata" text, so size 0
+        # (no file list ever arrived) counts as the same thing.
+        no_metadata = ("downloading metadata" in (r.get("errorMessage") or "").lower()
+                       or (size == 0 and left == 0))
+        if no_metadata and (r.get("added") or "9999") < meta_cut:
             return "magnet metadata never arrived in %dh+" % METADATA_HOURS
         if size > 0 and left >= size and old_enough:
             return "no progress in %dh" % STUCK_HOURS
