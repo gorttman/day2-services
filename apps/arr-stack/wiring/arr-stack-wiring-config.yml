@@ -499,9 +499,13 @@ data:
       # live but were inert while this stayed false - declared explicitly
       # so the behaviour is legible rather than inherited.
       preferences:
-        max_active_downloads: 10
-        max_active_torrents: 15
-        max_active_uploads: 5
+        # Same numbers as qbittorrent-prefs (qbittorrent-config-seed-script.yml),
+        # which re-applies them every few minutes. They disagreed (10/15/5 here,
+        # 20/40/10 there) and the two writers flipped the limits back and forth
+        # 680+ times between 21 and 24 Oct 2026. Change both together.
+        max_active_downloads: 20
+        max_active_torrents: 40
+        max_active_uploads: 10
         dont_count_slow_torrents: true
         slow_torrent_dl_rate_threshold: 2   # KiB/s
         slow_torrent_inactive_timer: 60     # seconds

@@ -254,6 +254,43 @@ data:
             return r.status
 
 
+    DEAD_STALLED_HOURS = int(os.environ.get("DEAD_STALLED_HOURS", "24"))
+    DEAD_META_HOURS = int(os.environ.get("DEAD_META_HOURS", "3"))
+
+
+    def reap_dead():
+        """Stop (never delete) torrents that have shown no life for hours.
+
+        dont_count_slow_torrents is not enough on its own: on 2026-10-24 a
+        pile of stalledDL and metaDL torrents (some from September, no longer
+        in Radarr's queue) held every active slot and 57 real downloads sat in
+        queuedDL with nothing downloading. A stopped torrent holds no slot,
+        keeps its data, and can be started again from the WebUI. Radarr then
+        sees it as paused and movie-status clears it and searches again.
+        """
+        with urllib.request.urlopen(BASE + "/api/v2/torrents/info", timeout=30) as r:
+            torrents = json.load(r)
+        now = time.time()
+        dead = []
+        for t in torrents:
+            if t.get("state") not in ("stalledDL", "metaDL"):
+                continue
+            idle_h = (now - (t.get("last_activity") or t.get("added_on") or now)) / 3600.0
+            if t["state"] == "metaDL":
+                idle_h = max(idle_h, (now - (t.get("added_on") or now)) / 3600.0)
+            limit = DEAD_META_HOURS if t["state"] == "metaDL" else DEAD_STALLED_HOURS
+            if idle_h >= limit:
+                dead.append(t)
+        if not dead:
+            return
+        data = urllib.parse.urlencode({"hashes": "|".join(t["hash"] for t in dead)}).encode()
+        with urllib.request.urlopen(urllib.request.Request(BASE + "/api/v2/torrents/stop",
+                                                           data=data, method="POST"),
+                                    timeout=30):
+            pass
+        log("stopped %d dead torrents: %s" % (len(dead), "; ".join(t["name"][:30] for t in dead[:8])))
+
+
     def main():
         # No auth: WebUI\LocalHostAuth=false, and this runs in the same pod,
         # so every call is genuine 127.0.0.1 - the same path every other
@@ -270,6 +307,7 @@ data:
                         log("applied %s but qBittorrent still reports %s" % (drift, still))
                     else:
                         log("corrected %s" % drift)
+                reap_dead()
             except urllib.error.URLError as e:
                 # Expected while qBittorrent is still starting, or during the
                 # window where gluetun is reconnecting the tunnel.

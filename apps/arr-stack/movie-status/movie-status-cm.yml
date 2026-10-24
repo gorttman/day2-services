@@ -307,6 +307,14 @@ data:
                        or (size == 0 and left == 0))
         if no_metadata and (r.get("added") or "9999") < meta_cut:
             return "magnet metadata never arrived in %dh+" % METADATA_HOURS
+        # A torrent qBittorrent stopped because it was dead (see reap_dead in
+        # the qbittorrent-prefs sidecar) shows here as paused. Usenet pauses are
+        # a person's doing and are left alone.
+        paused_cut = (datetime.datetime.now(datetime.timezone.utc)
+                      - datetime.timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if (r.get("status") == "paused" and r.get("protocol") == "torrent"
+                and (r.get("added") or "9999") < paused_cut):
+            return "torrent stopped as dead, 48h+"
         if size > 0 and left >= size and old_enough:
             return "no progress in %dh" % STUCK_HOURS
         if size == 0 and left == 0 and old_enough:
