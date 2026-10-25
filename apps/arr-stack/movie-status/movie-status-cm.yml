@@ -102,7 +102,10 @@ data:
     FEED_MAX_TIER = int(os.environ.get("FEED_MAX_TIER", "5"))
     # A title searched with no result is tried again after this many days,
     # so a release that appears later is still found without a person.
-    RETRY_DAYS = int(os.environ.get("RETRY_DAYS", "30"))
+    # Retry ladder for titles that stay missing: weekly x6, then monthly x6,
+    # then the title is unmonitored and tagged lost-cause (never deleted).
+    WEEKLY_RETRIES = int(os.environ.get("WEEKLY_RETRIES", "6"))
+    MONTHLY_RETRIES = int(os.environ.get("MONTHLY_RETRIES", "6"))
     FEED_MAX_INFLIGHT = int(os.environ.get("FEED_MAX_INFLIGHT", "12"))
     FEED_MAX_PER_DAY = int(os.environ.get("FEED_MAX_PER_DAY", "400"))
     FEED_MIN_FREE_TB = float(os.environ.get("FEED_MIN_FREE_TB", "2"))
@@ -156,11 +159,11 @@ data:
         return json.loads(raw) if raw.strip() else {}
 
 
-    def arr_post(app, path, body):
+    def arr_post(app, path, body, method="POST"):
         config, base = ARRS[app]
         key = ET.parse(config).getroot().findtext("ApiKey")
         req = urllib.request.Request(
-            "%s/api/v3/%s" % (base, path), data=json.dumps(body).encode(), method="POST",
+            "%s/api/v3/%s" % (base, path), data=json.dumps(body).encode(), method=method,
             headers={"X-Api-Key": key, "Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=90) as r:
             raw = r.read().decode()
@@ -543,17 +546,38 @@ data:
         now_s = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         # searchedAt: when each id was last searched. Searches made before this
         # existed have no stamp, so they are stamped on first sight and come up
-        # for retry RETRY_DAYS from then.
+        # for retry a week from then.
         at = state.setdefault("searchedAt", {})
         stamped = False
         for m in missing:
             if m["id"] in done and str(m["id"]) not in at:
                 at[str(m["id"])] = now_s
                 stamped = True
-        retry_cut = (now - datetime.timedelta(days=RETRY_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # attempts[id] = retries already made after the first search.
+        tries = state.setdefault("attempts", {})
         in_queue = {r.get("movieId") for r in arr_queue("radarr")}
+
+        def _due(m):
+            n = tries.get(str(m["id"]), 0)
+            gap = 7 if n < WEEKLY_RETRIES else 30
+            cut = (now - datetime.timedelta(days=gap)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return at.get(str(m["id"]), now_s) < cut
+
+        lost = [m for m in missing if m["id"] in done and m["id"] not in in_queue
+                and tries.get(str(m["id"]), 0) >= WEEKLY_RETRIES + MONTHLY_RETRIES and _due(m)]
+        if lost:
+            tag_id = next((t["id"] for t in arr("radarr", "tag") if t["label"] == "lost-cause"), None)
+            if tag_id is None:
+                tag_id = arr_post("radarr", "tag", {"label": "lost-cause"})["id"]
+            for m in lost:
+                m["monitored"] = False
+                m["tags"] = sorted(set(m.get("tags", [])) | {tag_id})
+                arr_post("radarr", "movie/%d" % m["id"], m, method="PUT")
+            lost_ids = {m["id"] for m in lost}
+            missing = [m for m in missing if m["id"] not in lost_ids]
+            stamped = True
         retry_ids = {m["id"] for m in missing if m["id"] in done
-                     and at.get(str(m["id"]), now_s) < retry_cut and m["id"] not in in_queue}
+                     and m["id"] not in in_queue and _due(m)}
         todo = [m for m in missing if (m["id"] not in done or m["id"] in retry_ids)
                 and (max_tier is None or tier_of(m) <= max_tier)]
         # Never-searched titles first, retries after.
@@ -573,6 +597,8 @@ data:
         # the same batch rather than skipping it.
         done |= set(ids)
         for i in ids:
+            if i in retry_ids:
+                tries[str(i)] = tries.get(str(i), 0) + 1
             at[str(i)] = now_s
         week = (now - datetime.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
         runs = [r for r in state.get("runs", []) if r[0] >= week]
