@@ -77,7 +77,7 @@ spec:
           readOnly: true
         resources:
           requests:
-            memory: 1Gi
+            memory: 2Gi
             cpu: 250m
           limits:
             # Raised 2Gi -> 4Gi 2026-08-23: the 21K-photo backlog/camera-roll
@@ -87,7 +87,12 @@ spec:
             # re-crawling a growing tree. pinode-01 has headroom (was ~19%
             # mem). Can be trimmed back toward 2-3Gi once the one-time bulk
             # import is done and steady-state load is lower.
-            memory: 4Gi
+            # Raised 4Gi -> 6Gi 2026-10-29: still OOMKilled every night at
+            # ~00:10 and 00:15 (164 restarts in 13 days, steady use ~1.2Gi).
+            # The 00:00 external-library scan checks all ~91K assets and
+            # queues thumbnail/metadata jobs in one burst. The scan itself
+            # stays (it keeps the index matching /photos). pinode-01 has 16Gi.
+            memory: 6Gi
             cpu: "2"
         readinessProbe:
           httpGet:
