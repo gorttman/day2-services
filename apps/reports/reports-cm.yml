@@ -2273,17 +2273,18 @@ data:
         display: flex;
         align-items: stretch;
         justify-content: center;
-        gap: 12px;
+        gap: 10px;
         box-sizing: border-box;
+        padding: 16px;
         width: calc(100% - 120px);
-        max-width: 620px;
+        max-width: 640px;
       }
       #dock.glass-fallback {
-        background: rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.1);
         backdrop-filter: blur(34px) saturate(190%);
         -webkit-backdrop-filter: blur(34px) saturate(190%);
         border: 1px solid rgba(255,255,255,0.25);
-        border-radius: 18px;
+        border-radius: 24px;
       }
 
       .tile, .settings-tile {
@@ -2293,16 +2294,19 @@ data:
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 10px;
-        padding: 18px 12px 13px;
-        border-radius: 18px;
+        gap: 9px;
+        padding: 14px 10px 11px;
+        border-radius: 15px;
         cursor: pointer;
-        background: rgba(255,255,255,0.05);
-        border: 1.5px solid transparent;
-        transition: background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+        background: rgba(34,37,42,0.55);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        transition: background 180ms ease, box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease;
       }
-      .tile { flex: 1 1 0; min-width: 88px; max-width: 136px; }
-      .settings-tile { flex: 0 0 92px; margin-left: 6px; }
+      .tile { flex: 1 1 0; min-width: 78px; max-width: 122px; }
+      .settings-tile { flex: 0 0 82px; margin-left: 4px; }
 
       .tile:focus-visible, .settings-tile:focus-visible {
         outline: 2px solid rgba(255,255,255,0.85);
@@ -2310,12 +2314,15 @@ data:
       }
 
       .tile.selected, .settings-tile.selected {
-        background: rgba(255,255,255,0.2);
-        transform: translateY(-2px);
+        background: rgba(66,70,78,0.72);
+        border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+        transform: translateY(-6px) scale(1.03);
         box-shadow:
-          0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent),
-          0 0 30px color-mix(in srgb, var(--accent) 55%, transparent),
-          inset 0 1px 0 rgba(255,255,255,0.4);
+          0 0 0 2px color-mix(in srgb, var(--accent) 80%, transparent),
+          0 0 24px color-mix(in srgb, var(--accent) 85%, transparent),
+          0 0 60px color-mix(in srgb, var(--accent) 55%, transparent),
+          0 16px 28px rgba(0,0,0,0.45),
+          inset 0 1px 0 rgba(255,255,255,0.45);
       }
 
       .tile svg, .settings-tile svg {
@@ -2499,7 +2506,7 @@ data:
         "  vec3 plain = texture2D(u_texture, baseUV).rgb;",
 
         "  float insideDepth = clamp(-d, 0.0, 4000.0);",
-        "  float edgeBand = 50.0;",
+        "  float edgeBand = 68.0;",
         "  float edgeStrength = 1.0 - smoothstep(0.0, edgeBand, insideDepth);",
 
         "  float e = 1.5;",
@@ -2513,7 +2520,7 @@ data:
 
         "  vec3 col = vec3(0.0);",
         "  float wsum = 0.0;",
-        "  float blurPx = 5.5;",
+        "  float blurPx = mix(1.5, 8.5, edgeStrength);",
         "  for (int ix = -1; ix <= 1; ix++) {",
         "    for (int iy = -1; iy <= 1; iy++) {",
         "      vec2 tap = vec2(float(ix), float(iy)) * blurPx;",
@@ -2525,11 +2532,12 @@ data:
         "  col /= wsum;",
 
         "  float lum = dot(col, vec3(0.299, 0.587, 0.114));",
-        "  col = mix(vec3(lum), col, 1.3);",
-        "  col *= 1.07;",
-        "  col = mix(col, vec3(1.0), 0.13);",
+        "  col = mix(vec3(lum), col, mix(1.1, 1.3, edgeStrength));",
+        "  col *= mix(1.01, 1.1, edgeStrength);",
+        "  float tintAmt = mix(0.035, 0.26, edgeStrength);",
+        "  col = mix(col, vec3(1.0), tintAmt);",
 
-        "  float rim = exp(-abs(d + grain * 7.0) / 9.0) * 0.5;",
+        "  float rim = exp(-abs(d + grain * 7.0) / 15.0) * 0.55;",
         "  col += rim;",
 
         "  vec2 hlCenter = vec2(-u_barHalf.x * 0.55, -u_barHalf.y * 0.5);",
@@ -2623,10 +2631,7 @@ data:
         geom.centerY = (rect.top + rect.height / 2) * dpr;
         geom.halfW = (rect.width / 2) * dpr;
         geom.halfH = (rect.height / 2) * dpr;
-        // Match the tiles' own corner radius (18px), not a half-height stadium.
-        // The dock is the same height as its tiles (it has no padding of its
-        // own), so this lands at the same radius-to-height ratio as the tiles.
-        geom.radius = 18 * dpr;
+        geom.radius = 24 * dpr;
       }
 
       function layout() {
