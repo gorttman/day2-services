@@ -2283,7 +2283,7 @@ data:
         backdrop-filter: blur(34px) saturate(190%);
         -webkit-backdrop-filter: blur(34px) saturate(190%);
         border: 1px solid rgba(255,255,255,0.25);
-        border-radius: 48px;
+        border-radius: 999px;
       }
 
       .tile, .settings-tile {
@@ -2372,6 +2372,20 @@ data:
             <line x1="3" y1="8" x2="21" y2="8"></line>
           </svg>
           <span>Movies</span>
+        </button>
+        <button class="tile" data-icon="midday-movies" aria-label="Midday Movies">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.5"></circle>
+            <line x1="12" y1="2.5" x2="12" y2="5"></line>
+            <line x1="12" y1="19" x2="12" y2="21.5"></line>
+            <line x1="2.5" y1="12" x2="5" y2="12"></line>
+            <line x1="19" y1="12" x2="21.5" y2="12"></line>
+            <line x1="5.1" y1="5.1" x2="6.8" y2="6.8"></line>
+            <line x1="17.2" y1="17.2" x2="18.9" y2="18.9"></line>
+            <line x1="5.1" y1="18.9" x2="6.8" y2="17.2"></line>
+            <line x1="17.2" y1="6.8" x2="18.9" y2="5.1"></line>
+          </svg>
+          <span>Midday Movies</span>
         </button>
         <button class="tile" data-icon="tv" aria-label="TV Shows">
           <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
@@ -2609,7 +2623,9 @@ data:
         geom.centerY = (rect.top + rect.height / 2) * dpr;
         geom.halfW = (rect.width / 2) * dpr;
         geom.halfH = (rect.height / 2) * dpr;
-        geom.radius = 48 * dpr;
+        // Radius = half the real rendered height -> the short ends are true
+        // semicircles (a stadium shape), not an arbitrary rounded corner.
+        geom.radius = geom.halfH;
       }
 
       function layout() {
