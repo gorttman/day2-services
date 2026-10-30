@@ -102,9 +102,11 @@ data:
     FEED_MAX_TIER = int(os.environ.get("FEED_MAX_TIER", "5"))
     # A title searched with no result is tried again after this many days,
     # so a release that appears later is still found without a person.
-    # Retry ladder for titles that stay missing: weekly x6, then monthly x6,
-    # then the title is unmonitored and tagged lost-cause (never deleted).
-    WEEKLY_RETRIES = int(os.environ.get("WEEKLY_RETRIES", "6"))
+    # Retry ladder for titles that stay missing: every RETRY_GAP_DAYS days x
+    # SHORT_RETRIES (3 days x 14 = about 6 weeks, was weekly x6), then monthly
+    # x6, then the title is unmonitored and tagged lost-cause (never deleted).
+    RETRY_GAP_DAYS = int(os.environ.get("RETRY_GAP_DAYS", "3"))
+    SHORT_RETRIES = int(os.environ.get("SHORT_RETRIES", "14"))
     MONTHLY_RETRIES = int(os.environ.get("MONTHLY_RETRIES", "6"))
     FEED_MAX_INFLIGHT = int(os.environ.get("FEED_MAX_INFLIGHT", "12"))
     FEED_MAX_PER_DAY = int(os.environ.get("FEED_MAX_PER_DAY", "400"))
@@ -546,7 +548,7 @@ data:
         now_s = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         # searchedAt: when each id was last searched. Searches made before this
         # existed have no stamp, so they are stamped on first sight and come up
-        # for retry a week from then.
+        # for retry RETRY_GAP_DAYS days from then.
         at = state.setdefault("searchedAt", {})
         stamped = False
         for m in missing:
@@ -559,12 +561,12 @@ data:
 
         def _due(m):
             n = tries.get(str(m["id"]), 0)
-            gap = 7 if n < WEEKLY_RETRIES else 30
+            gap = RETRY_GAP_DAYS if n < SHORT_RETRIES else 30
             cut = (now - datetime.timedelta(days=gap)).strftime("%Y-%m-%dT%H:%M:%SZ")
             return at.get(str(m["id"]), now_s) < cut
 
         lost = [m for m in missing if m["id"] in done and m["id"] not in in_queue
-                and tries.get(str(m["id"]), 0) >= WEEKLY_RETRIES + MONTHLY_RETRIES and _due(m)]
+                and tries.get(str(m["id"]), 0) >= SHORT_RETRIES + MONTHLY_RETRIES and _due(m)]
         if lost:
             tag_id = next((t["id"] for t in arr("radarr", "tag") if t["label"] == "lost-cause"), None)
             if tag_id is None:
