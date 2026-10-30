@@ -2466,8 +2466,16 @@ data:
             </svg>
           </button>
           <span class="brand">
-            <svg class="brand-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 2.5c4 5 6.5 8.7 6.5 12a6.5 6.5 0 1 1-13 0c0-3.3 2.5-7 6.5-12Z"></path>
+            <!-- Jellyfin mark, (c) Jellyfin contributors, CC BY-SA 4.0 (jellyfin/jellyfin-ux) -->
+            <svg class="brand-icon" viewBox="0 0 512 512" width="22" height="22" aria-hidden="true">
+              <defs>
+                <linearGradient id="jf-icon-gradient" gradientUnits="userSpaceOnUse" x1="110.25" y1="213.3" x2="496.14" y2="436.09">
+                  <stop offset="0" stop-color="#AA5CC3"></stop>
+                  <stop offset="1" stop-color="#00A4DC"></stop>
+                </linearGradient>
+              </defs>
+              <path d="M256,201.6c-20.4,0-86.2,119.3-76.2,139.4s142.5,19.9,152.4,0S276.5,201.6,256,201.6z" fill="url(#jf-icon-gradient)"></path>
+              <path d="M256,23.3c-61.6,0-259.8,359.4-229.6,420.1s429.3,60,459.2,0S317.6,23.3,256,23.3z M406.5,390.8c-19.6,39.3-281.1,39.8-300.9,0s110.1-275.3,150.4-275.3S426.1,351.4,406.5,390.8z" fill="url(#jf-icon-gradient)"></path>
             </svg>
             <span class="brand-text">Jellyfin</span>
           </span>
