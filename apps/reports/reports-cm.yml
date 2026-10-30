@@ -2305,7 +2305,7 @@ data:
         box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         transition: background 180ms ease, box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease;
       }
-      .tile, .settings-tile { flex: 1 1 0; min-width: 54px; max-width: 80px; }
+      .tile, .settings-tile { flex: 1 1 0; min-width: 90px; max-width: 150px; }
       .settings-tile { margin-left: 4px; }
 
       .tile:focus-visible, .settings-tile:focus-visible {
