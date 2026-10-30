@@ -2263,14 +2263,58 @@ data:
         -webkit-backdrop-filter: blur(22px) saturate(170%);
       }
 
+      .topbar-left, .topbar-right {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+
       .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--fg-dim);
+      }
+      .brand-icon {
+        stroke: currentColor;
+        flex: none;
+      }
+      .brand-text {
         font-size: 14px;
         letter-spacing: 0.1em;
         font-weight: 500;
         text-transform: uppercase;
-        color: var(--fg-dim);
         text-shadow: 0 1px 6px rgba(0,0,0,0.55);
         white-space: nowrap;
+      }
+
+      .icon-btn {
+        all: unset;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        cursor: pointer;
+        color: var(--fg-dim);
+        text-shadow: 0 1px 6px rgba(0,0,0,0.55);
+        transition: color 180ms ease, background 180ms ease;
+      }
+      .icon-btn svg {
+        stroke: currentColor;
+        flex: none;
+      }
+      .icon-btn:hover,
+      .icon-btn:focus-visible {
+        color: var(--fg);
+        background: rgba(255,255,255,0.08);
+      }
+      .icon-btn:focus-visible {
+        outline: 2px solid rgba(255,255,255,0.85);
+        outline-offset: 2px;
       }
 
       #topnav {
@@ -2316,14 +2360,6 @@ data:
       .navlink:focus-visible {
         outline: 2px solid rgba(255,255,255,0.85);
         outline-offset: 4px;
-      }
-
-      .clock {
-        font-size: 15px;
-        font-variant-numeric: tabular-nums;
-        color: var(--fg);
-        text-shadow: 0 1px 6px rgba(0,0,0,0.55);
-        white-space: nowrap;
       }
 
       #dock {
@@ -2421,63 +2457,65 @@ data:
       <img id="fallbackImg" alt="" aria-hidden="true">
 
       <header id="topbar">
-        <div class="brand">Jellyfin</div>
-        <nav id="topnav" aria-label="Libraries">
-          <button class="navlink" data-icon="collections" aria-label="Collections">
-            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
-              <path d="M12 3 2 8l10 5 10-5-10-5Z"></path>
-              <path d="M2 13l10 5 10-5"></path>
-              <path d="M2 18l10 5 10-5"></path>
+        <div class="topbar-left">
+          <button class="icon-btn" aria-label="Menu">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <line x1="3" y1="7" x2="21" y2="7"></line>
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="17" x2="21" y2="17"></line>
             </svg>
-            <span>Collections</span>
           </button>
-          <button class="navlink" data-icon="movies" aria-label="Movies">
-            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
-              <rect x="3" y="8" width="18" height="13" rx="2"></rect>
-              <path d="M3 8 5 3h3l-2 5"></path>
-              <path d="M9 8 11 3h3l-2 5"></path>
-              <path d="M15 8 17 3h3l-1.5 5"></path>
-              <line x1="3" y1="8" x2="21" y2="8"></line>
+          <span class="brand">
+            <svg class="brand-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2.5c4 5 6.5 8.7 6.5 12a6.5 6.5 0 1 1-13 0c0-3.3 2.5-7 6.5-12Z"></path>
             </svg>
-            <span>Movies</span>
+            <span class="brand-text">Jellyfin</span>
+          </span>
+        </div>
+        <nav id="topnav" aria-label="Primary">
+          <button class="navlink" aria-label="Home">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+              <path d="M3 11.5 12 4l9 7.5"></path>
+              <path d="M5.5 10v9.5a1 1 0 0 0 1 1H9.5v-6h5v6h3a1 1 0 0 0 1-1V10"></path>
+            </svg>
+            <span>Home</span>
           </button>
-          <button class="navlink" data-icon="midday-movies" aria-label="Midday Movies">
-            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="4.5"></circle>
-              <line x1="12" y1="2.5" x2="12" y2="5"></line>
-              <line x1="12" y1="19" x2="12" y2="21.5"></line>
-              <line x1="2.5" y1="12" x2="5" y2="12"></line>
-              <line x1="19" y1="12" x2="21.5" y2="12"></line>
-              <line x1="5.1" y1="5.1" x2="6.8" y2="6.8"></line>
-              <line x1="17.2" y1="17.2" x2="18.9" y2="18.9"></line>
-              <line x1="5.1" y1="18.9" x2="6.8" y2="17.2"></line>
-              <line x1="17.2" y1="6.8" x2="18.9" y2="5.1"></line>
+          <button class="navlink" aria-label="Favourites">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+              <path d="M12 20s-7.5-4.6-10-9.3C.6 7.4 2.3 4 5.8 4c2 0 3.5 1.1 4.2 2.4h0C10.7 5.1 12.2 4 14.2 4c3.5 0 5.2 3.4 3.8 6.7C15.5 15.4 12 20 12 20Z"></path>
             </svg>
-            <span>Midday Movies</span>
-          </button>
-          <button class="navlink" data-icon="tv" aria-label="TV Shows">
-            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
-              <rect x="2" y="4" width="20" height="14" rx="2"></rect>
-              <line x1="8" y1="21" x2="16" y2="21"></line>
-              <line x1="12" y1="18" x2="12" y2="21"></line>
-            </svg>
-            <span>TV Shows</span>
-          </button>
-          <button class="navlink" aria-label="Settings">
-            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="7"></circle>
-              <circle cx="12" cy="12" r="2.4"></circle>
-              <line x1="20" y1="12" x2="22.5" y2="12"></line>
-              <line x1="16" y1="18.93" x2="17.25" y2="21.09"></line>
-              <line x1="8" y1="18.93" x2="6.75" y2="21.09"></line>
-              <line x1="4" y1="12" x2="1.5" y2="12"></line>
-              <line x1="8" y1="5.07" x2="6.75" y2="2.91"></line>
-              <line x1="16" y1="5.07" x2="17.25" y2="2.91"></line>
-            </svg>
-            <span>Settings</span>
+            <span>Favourites</span>
           </button>
         </nav>
-        <div class="clock" id="clock">9:41</div>
+        <div class="topbar-right">
+          <button class="icon-btn" aria-label="Groups">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+              <circle cx="9" cy="8" r="3"></circle>
+              <path d="M3.5 19c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5"></path>
+              <circle cx="17" cy="9" r="2.4"></circle>
+              <path d="M15.3 13.2c2.4 0.2 4.2 2 4.2 4.6"></path>
+            </svg>
+          </button>
+          <button class="icon-btn" aria-label="Cast">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <rect x="2.5" y="4" width="19" height="13" rx="1.5"></rect>
+              <path d="M2.5 13.5a8 8 0 0 1 8 8"></path>
+              <path d="M2.5 17.5a4 4 0 0 1 4 4"></path>
+            </svg>
+          </button>
+          <button class="icon-btn" aria-label="Search">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5"></circle>
+              <line x1="15.3" y1="15.3" x2="21" y2="21"></line>
+            </svg>
+          </button>
+          <button class="icon-btn" aria-label="Profile">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+              <circle cx="12" cy="8.5" r="3.8"></circle>
+              <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"></path>
+            </svg>
+          </button>
+        </div>
       </header>
 
       <nav id="dock" aria-label="Libraries">
@@ -2561,11 +2599,6 @@ data:
       }
       selectNav(0);
 
-      var now = new Date();
-      var hh = now.getHours() % 12 || 12;
-      var mm = String(now.getMinutes()).padStart(2, "0");
-      document.getElementById("clock").textContent = hh + ":" + mm;
-
       var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
       var canvas = document.getElementById("glCanvas");
@@ -2639,24 +2672,26 @@ data:
 
         "  float borderWidth = 46.0;",
         "  float borderSoft = 38.0;",
+        "  float topBorderWidth = 24.0;",
+        "  float topBorderSoft = 11.0;",
         "  float e = 1.5;",
         "  float lightAngle = radians(-130.0);",
 
         "  float topD = abs(fragTopLeft.y - u_topCenterY) - u_topHalfH;",
         "  float topInsideDepth = clamp(-topD, 0.0, 4000.0);",
-        "  float topEdgeStrength = 1.0 - smoothstep(borderWidth - borderSoft, borderWidth, topInsideDepth);",
+        "  float topEdgeStrength = 1.0 - smoothstep(topBorderWidth - topBorderSoft, topBorderWidth, topInsideDepth);",
 
         "  float topDyA = abs((fragTopLeft.y + e) - u_topCenterY) - u_topHalfH;",
         "  float topDyB = abs((fragTopLeft.y - e) - u_topCenterY) - u_topHalfH;",
         "  vec2 topNormal = vec2(0.0, sign(topDyA - topDyB) + 1e-5);",
 
         "  float topGrain = noise(vec2(fragTopLeft.x, 0.0) * 0.06 + u_time * 0.02) - 0.5;",
-        "  float topRefractPx = topEdgeStrength * (20.0 + topGrain * 9.0);",
+        "  float topRefractPx = topEdgeStrength * (12.0 + topGrain * 5.0);",
         "  vec2 topOffsetPx = topNormal * topRefractPx;",
 
         "  vec3 topCol = vec3(0.0);",
         "  float topWsum = 0.0;",
-        "  float topBlurPx = mix(1.5, 8.5, topEdgeStrength);",
+        "  float topBlurPx = mix(1.0, 5.0, topEdgeStrength);",
         "  for (int ix = -1; ix <= 1; ix++) {",
         "    for (int iy = -1; iy <= 1; iy++) {",
         "      vec2 tap = vec2(float(ix), float(iy)) * topBlurPx;",
@@ -2667,15 +2702,15 @@ data:
         "  }",
         "  topCol /= topWsum;",
         "  float topLum = dot(topCol, vec3(0.299, 0.587, 0.114));",
-        "  topCol = mix(vec3(topLum), topCol, mix(1.1, 1.32, topEdgeStrength));",
-        "  topCol *= mix(1.01, 1.14, topEdgeStrength);",
-        "  float topTintAmt = mix(0.035, 0.32, topEdgeStrength);",
+        "  topCol = mix(vec3(topLum), topCol, mix(1.04, 1.16, topEdgeStrength));",
+        "  topCol *= mix(1.0, 1.06, topEdgeStrength);",
+        "  float topTintAmt = mix(0.02, 0.16, topEdgeStrength);",
         "  topCol = mix(topCol, vec3(1.0), topTintAmt);",
 
         "  float topAngle = atan(topNormal.y, topNormal.x);",
         "  float topAngDiff = atan(sin(topAngle - lightAngle), cos(topAngle - lightAngle));",
         "  float topBurst = pow(max(0.0, cos(topAngDiff)), 5.0);",
-        "  float topRim = exp(-abs(topD + topGrain * 7.0) / 15.0) * topEdgeStrength * (0.4 + 1.1 * topBurst);",
+        "  float topRim = exp(-abs(topD + topGrain * 5.0) / 10.0) * topEdgeStrength * (0.22 + 0.55 * topBurst);",
         "  topCol += topRim;",
 
         "  float topShapeMix = 1.0 - smoothstep(0.0, 2.0, topD);",
