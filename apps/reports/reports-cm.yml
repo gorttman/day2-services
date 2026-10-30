@@ -2283,7 +2283,7 @@ data:
         backdrop-filter: blur(34px) saturate(190%);
         -webkit-backdrop-filter: blur(34px) saturate(190%);
         border: 1px solid rgba(255,255,255,0.25);
-        border-radius: 999px;
+        border-radius: 18px;
       }
 
       .tile, .settings-tile {
@@ -2623,9 +2623,10 @@ data:
         geom.centerY = (rect.top + rect.height / 2) * dpr;
         geom.halfW = (rect.width / 2) * dpr;
         geom.halfH = (rect.height / 2) * dpr;
-        // Radius = half the real rendered height -> the short ends are true
-        // semicircles (a stadium shape), not an arbitrary rounded corner.
-        geom.radius = geom.halfH;
+        // Match the tiles' own corner radius (18px), not a half-height stadium.
+        // The dock is the same height as its tiles (it has no padding of its
+        // own), so this lands at the same radius-to-height ratio as the tiles.
+        geom.radius = 18 * dpr;
       }
 
       function layout() {
