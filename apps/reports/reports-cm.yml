@@ -2506,8 +2506,8 @@ data:
         "  vec3 plain = texture2D(u_texture, baseUV).rgb;",
 
         "  float insideDepth = clamp(-d, 0.0, 4000.0);",
-        "  float borderWidth = 28.0;",
-        "  float borderSoft = 8.0;",
+        "  float borderWidth = 46.0;",
+        "  float borderSoft = 38.0;",
         "  float edgeStrength = 1.0 - smoothstep(borderWidth - borderSoft, borderWidth, insideDepth);",
 
         "  float e = 1.5;",
