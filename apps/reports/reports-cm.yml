@@ -27,6 +27,8 @@ data:
                                backup-dashboard app, moved here unchanged)
       /todo/                   long-term watchlist/todo register, reads
                                todo-register.json
+      /glass-mock/             throwaway WebGL design mockup (liquid-glass
+                               Jellyfin home screen); delete when done with it
       /drawings/               the AI memory design drawings (viewer page); the
                                SVG sheets come from the reports-drawings
                                ConfigMap mounted at /app/drawings
@@ -85,12 +87,13 @@ data:
         "/todo/": ("todo.html", "text/html; charset=utf-8"),
         "/drawings/": ("drawings.html", "text/html; charset=utf-8"),
         "/todo/todo-register.json": ("todo-register.json", "application/json"),
+        "/glass-mock/": ("glass-mock.html", "text/html; charset=utf-8"),
         "/placement/": ("placement.html", "text/html; charset=utf-8"),
         "/control/": ("control.html", "text/html; charset=utf-8"),
     }
     # The subscriptions page fetches subscriptions.json relative to itself, so
     # it must be served from a trailing-slash URL.
-    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/", "/icloud-migration": "/icloud-migration/", "/consolidation": "/consolidation/", "/todo": "/todo/", "/drawings": "/drawings/", "/placement": "/placement/", "/control": "/control/"}
+    SLASH_REDIRECTS = {"/subscriptions": "/subscriptions/", "/backups": "/backups/", "/icloud-migration": "/icloud-migration/", "/consolidation": "/consolidation/", "/todo": "/todo/", "/drawings": "/drawings/", "/placement": "/placement/", "/control": "/control/", "/glass-mock": "/glass-mock/"}
 
     ORDER = {"good": 0, "warn": 1, "crit": 2}
 
@@ -2182,3 +2185,469 @@ data:
         {"id": "paperless-cleanup", "title": "Clean up Paperless: remove the screenshots and other things that should not be in it", "category": "build", "added": "2026-10-12", "status": "open", "note": "Paperless should hold documents only. Images belong in Immich and books in the books library. Still in it: about 150 image documents added in September (mostly screenshots from the Study folders: SCU, MNG, ISY) and about 16 iCloud images from 6 Oct (Tax, Greenlaw, screenshots). Check whether the originals exist elsewhere, copy any that do not to Immich (photos/year/Documents scans/...), then delete them from Paperless. Also review the Imported: tags the 2026-10-12 backup-drive ingest created, and the duplicate Moroccan Meatballs recipe (documents 25 and 2176). Already done 2026-10-12: 44 image and book documents removed (Europe trip, aviation, Postfix); they sit in Paperless trash for a while."}
       ]
     }
+  glass-mock.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Jellyfin Glass Home (mockup)</title>
+    <style>
+      /*
+        Layout: full-bleed night-sky photo, one WebGL-rendered glass dock
+        anchored low-center holding library tiles + settings, nothing else
+        on screen. Single committed dark world (a TV at night) -> one theme.
+      */
+      :root {
+        color-scheme: dark;
+        --bg: #05070a;
+        --fg: rgba(255,255,255,0.92);
+        --fg-dim: rgba(255,255,255,0.7);
+        --accent: #6fb1ff;
+        --font-display: -apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+      }
+
+      html, body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+      }
+      body {
+        font-family: var(--font-display);
+        color: var(--fg);
+        overflow: hidden;
+      }
+
+      #stage {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+      }
+
+      #glCanvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      #fallbackImg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: none;
+      }
+
+      .hud {
+        position: absolute;
+        z-index: 3;
+        font-size: 14px;
+        color: var(--fg-dim);
+        text-shadow: 0 1px 6px rgba(0,0,0,0.55);
+      }
+      .hud.brand {
+        top: 28px;
+        left: 32px;
+        letter-spacing: 0.1em;
+        font-weight: 500;
+        text-transform: uppercase;
+      }
+      .hud.clock {
+        top: 26px;
+        right: 32px;
+        font-size: 15px;
+        font-variant-numeric: tabular-nums;
+        color: var(--fg);
+      }
+
+      #dock {
+        position: absolute;
+        z-index: 3;
+        left: 50%;
+        bottom: 9vh;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        gap: 12px;
+        box-sizing: border-box;
+        width: calc(100% - 120px);
+        max-width: 620px;
+      }
+      #dock.glass-fallback {
+        background: rgba(255,255,255,0.14);
+        backdrop-filter: blur(34px) saturate(190%);
+        -webkit-backdrop-filter: blur(34px) saturate(190%);
+        border: 1px solid rgba(255,255,255,0.25);
+        border-radius: 48px;
+      }
+
+      .tile, .settings-tile {
+        all: unset;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 18px 12px 13px;
+        border-radius: 18px;
+        cursor: pointer;
+        background: rgba(255,255,255,0.05);
+        border: 1.5px solid transparent;
+        transition: background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+      }
+      .tile { flex: 1 1 0; min-width: 88px; max-width: 136px; }
+      .settings-tile { flex: 0 0 92px; margin-left: 6px; }
+
+      .tile:focus-visible, .settings-tile:focus-visible {
+        outline: 2px solid rgba(255,255,255,0.85);
+        outline-offset: 3px;
+      }
+
+      .tile.selected, .settings-tile.selected {
+        background: rgba(255,255,255,0.2);
+        transform: translateY(-2px);
+        box-shadow:
+          0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent),
+          0 0 30px color-mix(in srgb, var(--accent) 55%, transparent),
+          inset 0 1px 0 rgba(255,255,255,0.4);
+      }
+
+      .tile svg, .settings-tile svg {
+        stroke: var(--fg);
+        transition: stroke 180ms ease;
+      }
+      .tile.selected svg, .settings-tile.selected svg {
+        stroke: var(--accent);
+      }
+
+      .tile span, .settings-tile span {
+        font-size: 12.5px;
+        letter-spacing: 0.01em;
+        color: var(--fg-dim);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        transition: color 180ms ease;
+      }
+      .tile.selected span, .settings-tile.selected span {
+        color: var(--fg);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .tile, .settings-tile { transition: none; }
+      }
+    </style>
+    </head>
+    <body>
+
+    <div id="stage">
+      <canvas id="glCanvas" aria-hidden="true"></canvas>
+      <img id="fallbackImg" alt="" aria-hidden="true">
+
+      <div class="hud brand">Jellyfin</div>
+      <div class="hud clock" id="clock">9:41</div>
+
+      <nav id="dock" aria-label="Libraries">
+        <button class="tile" data-icon="collections" aria-label="Collections">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 3 2 8l10 5 10-5-10-5Z"></path>
+            <path d="M2 13l10 5 10-5"></path>
+            <path d="M2 18l10 5 10-5"></path>
+          </svg>
+          <span>Collections</span>
+        </button>
+        <button class="tile" data-icon="movies" aria-label="Movies">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+            <rect x="3" y="8" width="18" height="13" rx="2"></rect>
+            <path d="M3 8 5 3h3l-2 5"></path>
+            <path d="M9 8 11 3h3l-2 5"></path>
+            <path d="M15 8 17 3h3l-1.5 5"></path>
+            <line x1="3" y1="8" x2="21" y2="8"></line>
+          </svg>
+          <span>Movies</span>
+        </button>
+        <button class="tile" data-icon="tv" aria-label="TV Shows">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="14" rx="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="18" x2="12" y2="21"></line>
+          </svg>
+          <span>TV Shows</span>
+        </button>
+        <button class="settings-tile" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="7"></circle>
+            <circle cx="12" cy="12" r="2.4"></circle>
+            <line x1="20" y1="12" x2="22.5" y2="12"></line>
+            <line x1="16" y1="18.93" x2="17.25" y2="21.09"></line>
+            <line x1="8" y1="18.93" x2="6.75" y2="21.09"></line>
+            <line x1="4" y1="12" x2="1.5" y2="12"></line>
+            <line x1="8" y1="5.07" x2="6.75" y2="2.91"></line>
+            <line x1="16" y1="5.07" x2="17.25" y2="2.91"></line>
+          </svg>
+          <span>Settings</span>
+        </button>
+      </nav>
+    </div>
+
+    <script>
+    (function () {
+      "use strict";
+
+      var dock = document.getElementById("dock");
+      var tiles = Array.prototype.slice.call(dock.querySelectorAll(".tile, .settings-tile"));
+      tiles.forEach(function (el, i) {
+        el.addEventListener("click", function () { select(i); });
+      });
+      function select(i) {
+        tiles.forEach(function (el, j) { el.classList.toggle("selected", j === i); });
+      }
+      select(0);
+
+      var now = new Date();
+      var hh = now.getHours() % 12 || 12;
+      var mm = String(now.getMinutes()).padStart(2, "0");
+      document.getElementById("clock").textContent = hh + ":" + mm;
+
+      var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      var canvas = document.getElementById("glCanvas");
+      var fallbackImg = document.getElementById("fallbackImg");
+      var gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+
+      function useFallback() {
+        canvas.style.display = "none";
+        fallbackImg.style.display = "block";
+        dock.classList.add("glass-fallback");
+      }
+
+      if (!gl) {
+        useFallback();
+        return;
+      }
+
+      var vertSrc = [
+        "attribute vec2 a_pos;",
+        "void main() {",
+        "  gl_Position = vec4(a_pos, 0.0, 1.0);",
+        "}"
+      ].join("\n");
+
+      var fragSrc = [
+        "precision highp float;",
+        "uniform vec2 u_resolution;",
+        "uniform sampler2D u_texture;",
+        "uniform vec2 u_imgSize;",
+        "uniform vec2 u_barCenter;",
+        "uniform vec2 u_barHalf;",
+        "uniform float u_barRadius;",
+        "uniform float u_time;",
+
+        "vec2 coverUV(vec2 pix) {",
+        "  float canvasAspect = u_resolution.x / u_resolution.y;",
+        "  float imgAspect = u_imgSize.x / u_imgSize.y;",
+        "  vec2 scale = canvasAspect > imgAspect ? vec2(1.0, canvasAspect / imgAspect) : vec2(imgAspect / canvasAspect, 1.0);",
+        "  vec2 p = pix / u_resolution;",
+        "  p = (p - 0.5) * scale + 0.5;",
+        "  p.y = 1.0 - p.y;",
+        "  return clamp(p, 0.0, 1.0);",
+        "}",
+
+        "float hash(vec2 p) {",
+        "  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);",
+        "}",
+        "float noise(vec2 p) {",
+        "  vec2 i = floor(p); vec2 f = fract(p);",
+        "  float a = hash(i), b = hash(i + vec2(1.0, 0.0));",
+        "  float c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));",
+        "  vec2 u = f * f * (3.0 - 2.0 * f);",
+        "  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;",
+        "}",
+
+        "float sdRoundedBox(vec2 p, vec2 b, float r) {",
+        "  vec2 q = abs(p) - b + r;",
+        "  return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;",
+        "}",
+
+        "void main() {",
+        "  vec2 fragTopLeft = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);",
+        "  vec2 local = fragTopLeft - u_barCenter;",
+        "  float d = sdRoundedBox(local, u_barHalf, u_barRadius);",
+
+        "  vec2 baseUV = coverUV(fragTopLeft);",
+        "  vec3 plain = texture2D(u_texture, baseUV).rgb;",
+
+        "  float insideDepth = clamp(-d, 0.0, 4000.0);",
+        "  float edgeBand = 50.0;",
+        "  float edgeStrength = 1.0 - smoothstep(0.0, edgeBand, insideDepth);",
+
+        "  float e = 1.5;",
+        "  float dx = sdRoundedBox(local + vec2(e, 0.0), u_barHalf, u_barRadius) - sdRoundedBox(local - vec2(e, 0.0), u_barHalf, u_barRadius);",
+        "  float dy = sdRoundedBox(local + vec2(0.0, e), u_barHalf, u_barRadius) - sdRoundedBox(local - vec2(0.0, e), u_barHalf, u_barRadius);",
+        "  vec2 normal = normalize(vec2(dx, dy) + 1e-5);",
+
+        "  float grain = noise(local * 0.06 + u_time * 0.02) - 0.5;",
+        "  float refractPx = edgeStrength * (20.0 + grain * 9.0);",
+        "  vec2 offsetPx = normal * refractPx;",
+
+        "  vec3 col = vec3(0.0);",
+        "  float wsum = 0.0;",
+        "  float blurPx = 5.5;",
+        "  for (int ix = -1; ix <= 1; ix++) {",
+        "    for (int iy = -1; iy <= 1; iy++) {",
+        "      vec2 tap = vec2(float(ix), float(iy)) * blurPx;",
+        "      vec2 uv = coverUV(fragTopLeft + offsetPx + tap);",
+        "      col += texture2D(u_texture, uv).rgb;",
+        "      wsum += 1.0;",
+        "    }",
+        "  }",
+        "  col /= wsum;",
+
+        "  float lum = dot(col, vec3(0.299, 0.587, 0.114));",
+        "  col = mix(vec3(lum), col, 1.3);",
+        "  col *= 1.07;",
+        "  col = mix(col, vec3(1.0), 0.13);",
+
+        "  float rim = exp(-abs(d + grain * 7.0) / 9.0) * 0.5;",
+        "  col += rim;",
+
+        "  vec2 hlCenter = vec2(-u_barHalf.x * 0.55, -u_barHalf.y * 0.5);",
+        "  hlCenter += vec2(sin(u_time * 0.15), cos(u_time * 0.11)) * 5.0;",
+        "  vec2 hlRadius = vec2(u_barHalf.x * 0.6, u_barHalf.y * 0.95);",
+        "  float hlDist = length((local - hlCenter) / hlRadius);",
+        "  float highlight = smoothstep(1.0, 0.0, hlDist) * 0.38;",
+        "  col += highlight;",
+
+        "  float shapeMix = 1.0 - smoothstep(0.0, 2.0, d);",
+        "  vec3 finalColor = mix(plain, col, shapeMix);",
+        "  float dither = (hash(gl_FragCoord.xy + u_time) - 0.5) / 255.0 * 1.5;",
+        "  finalColor += dither;",
+        "  gl_FragColor = vec4(finalColor, 1.0);",
+        "}"
+      ].join("\n");
+
+      function compile(type, src) {
+        var sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+          console.warn("Shader compile error:", gl.getShaderInfoLog(sh));
+          gl.deleteShader(sh);
+          return null;
+        }
+        return sh;
+      }
+
+      var vs = compile(gl.VERTEX_SHADER, vertSrc);
+      var fs = compile(gl.FRAGMENT_SHADER, fragSrc);
+      if (!vs || !fs) { useFallback(); return; }
+
+      var program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.warn("Program link error:", gl.getProgramInfoLog(program));
+        useFallback();
+        return;
+      }
+      gl.useProgram(program);
+
+      var buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      var aPos = gl.getAttribLocation(program, "a_pos");
+      gl.enableVertexAttribArray(aPos);
+      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+      var uResolution = gl.getUniformLocation(program, "u_resolution");
+      var uTexture = gl.getUniformLocation(program, "u_texture");
+      var uImgSize = gl.getUniformLocation(program, "u_imgSize");
+      var uBarCenter = gl.getUniformLocation(program, "u_barCenter");
+      var uBarHalf = gl.getUniformLocation(program, "u_barHalf");
+      var uBarRadius = gl.getUniformLocation(program, "u_barRadius");
+      var uTime = gl.getUniformLocation(program, "u_time");
+
+      var texture = gl.createTexture();
+      var imgLoaded = false;
+      var imgNatural = { w: 2400, h: 1600 };
+
+      var image = new Image();
+      image.crossOrigin = "anonymous";
+      image.onload = function () {
+        imgNatural.w = image.naturalWidth;
+        imgNatural.h = image.naturalHeight;
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        imgLoaded = true;
+        if (reduceMotion) render(0);
+      };
+      image.onerror = function () { useFallback(); };
+      // Public-domain (NPS) photo, same genre as the reference shot: Milky Way
+      // over a dune ridge, Great Sand Dunes National Park and Preserve.
+      image.src = "https://upload.wikimedia.org/wikipedia/commons/6/62/Milky_Way_over_a_Dune_Ridge_%2853908885943%29.jpg";
+      fallbackImg.src = image.src;
+
+      var geom = { centerX: 0, centerY: 0, halfW: 0, halfH: 0, radius: 0 };
+
+      function measureDock() {
+        var rect = dock.getBoundingClientRect();
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        geom.centerX = (rect.left + rect.width / 2) * dpr;
+        geom.centerY = (rect.top + rect.height / 2) * dpr;
+        geom.halfW = (rect.width / 2) * dpr;
+        geom.halfH = (rect.height / 2) * dpr;
+        geom.radius = 48 * dpr;
+      }
+
+      function layout() {
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.round(window.innerWidth * dpr);
+        canvas.height = Math.round(window.innerHeight * dpr);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        measureDock();
+      }
+
+      window.addEventListener("resize", layout);
+      if (window.ResizeObserver) {
+        new ResizeObserver(measureDock).observe(dock);
+      }
+      layout();
+
+      var start = performance.now();
+      function render(tMs) {
+        if (!imgLoaded) {
+          requestAnimationFrame(render);
+          return;
+        }
+        gl.uniform2f(uResolution, canvas.width, canvas.height);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.uniform1i(uTexture, 0);
+        gl.uniform2f(uImgSize, imgNatural.w, imgNatural.h);
+        gl.uniform2f(uBarCenter, geom.centerX, geom.centerY);
+        gl.uniform2f(uBarHalf, geom.halfW, geom.halfH);
+        gl.uniform1f(uBarRadius, geom.radius);
+        gl.uniform1f(uTime, reduceMotion ? 0.0 : (tMs - start) / 1000.0);
+
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        if (!reduceMotion) requestAnimationFrame(render);
+      }
+      requestAnimationFrame(render);
+    })();
+    </script>
+    </body>
+    </html>
