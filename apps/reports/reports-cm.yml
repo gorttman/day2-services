@@ -2305,8 +2305,8 @@ data:
         box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         transition: background 180ms ease, box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease;
       }
-      .tile { flex: 1 1 0; min-width: 78px; max-width: 122px; }
-      .settings-tile { flex: 0 0 82px; margin-left: 4px; }
+      .tile, .settings-tile { flex: 1 1 0; min-width: 78px; max-width: 122px; }
+      .settings-tile { margin-left: 4px; }
 
       .tile:focus-visible, .settings-tile:focus-visible {
         outline: 2px solid rgba(255,255,255,0.85);
@@ -2334,12 +2334,12 @@ data:
       }
 
       .tile span, .settings-tile span {
-        font-size: 12.5px;
+        font-size: 11.5px;
+        line-height: 1.25;
         letter-spacing: 0.01em;
         color: var(--fg-dim);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        text-align: center;
+        white-space: normal;
         max-width: 100%;
         transition: color 180ms ease;
       }
@@ -2506,8 +2506,9 @@ data:
         "  vec3 plain = texture2D(u_texture, baseUV).rgb;",
 
         "  float insideDepth = clamp(-d, 0.0, 4000.0);",
-        "  float edgeBand = 68.0;",
-        "  float edgeStrength = 1.0 - smoothstep(0.0, edgeBand, insideDepth);",
+        "  float borderWidth = 28.0;",
+        "  float borderSoft = 8.0;",
+        "  float edgeStrength = 1.0 - smoothstep(borderWidth - borderSoft, borderWidth, insideDepth);",
 
         "  float e = 1.5;",
         "  float dx = sdRoundedBox(local + vec2(e, 0.0), u_barHalf, u_barRadius) - sdRoundedBox(local - vec2(e, 0.0), u_barHalf, u_barRadius);",
@@ -2532,12 +2533,16 @@ data:
         "  col /= wsum;",
 
         "  float lum = dot(col, vec3(0.299, 0.587, 0.114));",
-        "  col = mix(vec3(lum), col, mix(1.1, 1.3, edgeStrength));",
-        "  col *= mix(1.01, 1.1, edgeStrength);",
-        "  float tintAmt = mix(0.035, 0.26, edgeStrength);",
+        "  col = mix(vec3(lum), col, mix(1.1, 1.32, edgeStrength));",
+        "  col *= mix(1.01, 1.14, edgeStrength);",
+        "  float tintAmt = mix(0.035, 0.32, edgeStrength);",
         "  col = mix(col, vec3(1.0), tintAmt);",
 
-        "  float rim = exp(-abs(d + grain * 7.0) / 15.0) * 0.55;",
+        "  float ringAngle = atan(local.y, local.x);",
+        "  float lightAngle = radians(-130.0);",
+        "  float angDiff = atan(sin(ringAngle - lightAngle), cos(ringAngle - lightAngle));",
+        "  float burst = pow(max(0.0, cos(angDiff)), 5.0);",
+        "  float rim = exp(-abs(d + grain * 7.0) / 15.0) * edgeStrength * (0.4 + 1.1 * burst);",
         "  col += rim;",
 
         "  vec2 hlCenter = vec2(-u_barHalf.x * 0.55, -u_barHalf.y * 0.5);",
