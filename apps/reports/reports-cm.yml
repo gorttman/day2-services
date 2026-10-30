@@ -2599,7 +2599,8 @@ data:
         "uniform vec2 u_barCenter;",
         "uniform vec2 u_barHalf;",
         "uniform float u_barRadius;",
-        "uniform float u_topBand;",
+        "uniform float u_topCenterY;",
+        "uniform float u_topHalfH;",
         "uniform float u_time;",
 
         "vec2 coverUV(vec2 pix) {",
@@ -2636,32 +2637,53 @@ data:
         "  vec2 baseUV = coverUV(fragTopLeft);",
         "  vec3 plain = texture2D(u_texture, baseUV).rgb;",
 
-        "  float topFade = 34.0;",
-        "  float topStrength = 1.0 - smoothstep(u_topBand - topFade, u_topBand, fragTopLeft.y);",
+        "  float borderWidth = 46.0;",
+        "  float borderSoft = 38.0;",
+        "  float e = 1.5;",
+        "  float lightAngle = radians(-130.0);",
+
+        "  float topD = abs(fragTopLeft.y - u_topCenterY) - u_topHalfH;",
+        "  float topInsideDepth = clamp(-topD, 0.0, 4000.0);",
+        "  float topEdgeStrength = 1.0 - smoothstep(borderWidth - borderSoft, borderWidth, topInsideDepth);",
+
+        "  float topDyA = abs((fragTopLeft.y + e) - u_topCenterY) - u_topHalfH;",
+        "  float topDyB = abs((fragTopLeft.y - e) - u_topCenterY) - u_topHalfH;",
+        "  vec2 topNormal = vec2(0.0, sign(topDyA - topDyB) + 1e-5);",
+
+        "  float topGrain = noise(vec2(fragTopLeft.x, 0.0) * 0.06 + u_time * 0.02) - 0.5;",
+        "  float topRefractPx = topEdgeStrength * (20.0 + topGrain * 9.0);",
+        "  vec2 topOffsetPx = topNormal * topRefractPx;",
+
         "  vec3 topCol = vec3(0.0);",
         "  float topWsum = 0.0;",
-        "  float topBlurPx = 5.0;",
+        "  float topBlurPx = mix(1.5, 8.5, topEdgeStrength);",
         "  for (int ix = -1; ix <= 1; ix++) {",
         "    for (int iy = -1; iy <= 1; iy++) {",
         "      vec2 tap = vec2(float(ix), float(iy)) * topBlurPx;",
-        "      vec2 uv = coverUV(fragTopLeft + tap);",
+        "      vec2 uv = coverUV(fragTopLeft + topOffsetPx + tap);",
         "      topCol += texture2D(u_texture, uv).rgb;",
         "      topWsum += 1.0;",
         "    }",
         "  }",
         "  topCol /= topWsum;",
         "  float topLum = dot(topCol, vec3(0.299, 0.587, 0.114));",
-        "  topCol = mix(vec3(topLum), topCol, 1.15);",
-        "  topCol *= 1.06;",
-        "  topCol = mix(topCol, vec3(1.0), 0.3);",
-        "  vec3 base = mix(plain, topCol, topStrength);",
+        "  topCol = mix(vec3(topLum), topCol, mix(1.1, 1.32, topEdgeStrength));",
+        "  topCol *= mix(1.01, 1.14, topEdgeStrength);",
+        "  float topTintAmt = mix(0.035, 0.32, topEdgeStrength);",
+        "  topCol = mix(topCol, vec3(1.0), topTintAmt);",
+
+        "  float topAngle = atan(topNormal.y, topNormal.x);",
+        "  float topAngDiff = atan(sin(topAngle - lightAngle), cos(topAngle - lightAngle));",
+        "  float topBurst = pow(max(0.0, cos(topAngDiff)), 5.0);",
+        "  float topRim = exp(-abs(topD + topGrain * 7.0) / 15.0) * topEdgeStrength * (0.4 + 1.1 * topBurst);",
+        "  topCol += topRim;",
+
+        "  float topShapeMix = 1.0 - smoothstep(0.0, 2.0, topD);",
+        "  vec3 base = mix(plain, topCol, topShapeMix);",
 
         "  float insideDepth = clamp(-d, 0.0, 4000.0);",
-        "  float borderWidth = 46.0;",
-        "  float borderSoft = 38.0;",
         "  float edgeStrength = 1.0 - smoothstep(borderWidth - borderSoft, borderWidth, insideDepth);",
 
-        "  float e = 1.5;",
         "  float dx = sdRoundedBox(local + vec2(e, 0.0), u_barHalf, u_barRadius) - sdRoundedBox(local - vec2(e, 0.0), u_barHalf, u_barRadius);",
         "  float dy = sdRoundedBox(local + vec2(0.0, e), u_barHalf, u_barRadius) - sdRoundedBox(local - vec2(0.0, e), u_barHalf, u_barRadius);",
         "  vec2 normal = normalize(vec2(dx, dy) + 1e-5);",
@@ -2690,7 +2712,6 @@ data:
         "  col = mix(col, vec3(1.0), tintAmt);",
 
         "  float ringAngle = atan(local.y, local.x);",
-        "  float lightAngle = radians(-130.0);",
         "  float angDiff = atan(sin(ringAngle - lightAngle), cos(ringAngle - lightAngle));",
         "  float burst = pow(max(0.0, cos(angDiff)), 5.0);",
         "  float rim = exp(-abs(d + grain * 7.0) / 15.0) * edgeStrength * (0.4 + 1.1 * burst);",
@@ -2751,7 +2772,8 @@ data:
       var uBarCenter = gl.getUniformLocation(program, "u_barCenter");
       var uBarHalf = gl.getUniformLocation(program, "u_barHalf");
       var uBarRadius = gl.getUniformLocation(program, "u_barRadius");
-      var uTopBand = gl.getUniformLocation(program, "u_topBand");
+      var uTopCenterY = gl.getUniformLocation(program, "u_topCenterY");
+      var uTopHalfH = gl.getUniformLocation(program, "u_topHalfH");
       var uTime = gl.getUniformLocation(program, "u_time");
 
       var texture = gl.createTexture();
@@ -2779,7 +2801,7 @@ data:
       image.src = "https://upload.wikimedia.org/wikipedia/commons/6/62/Milky_Way_over_a_Dune_Ridge_%2853908885943%29.jpg";
       fallbackImg.src = image.src;
 
-      var geom = { centerX: 0, centerY: 0, halfW: 0, halfH: 0, radius: 0, topBand: 0 };
+      var geom = { centerX: 0, centerY: 0, halfW: 0, halfH: 0, radius: 0, topCenterY: 0, topHalfH: 0 };
 
       function measureDock() {
         var rect = dock.getBoundingClientRect();
@@ -2794,7 +2816,8 @@ data:
       function measureTopbar() {
         var rect = topbar.getBoundingClientRect();
         var dpr = Math.min(window.devicePixelRatio || 1, 2);
-        geom.topBand = rect.bottom * dpr;
+        geom.topCenterY = ((rect.top + rect.bottom) / 2) * dpr;
+        geom.topHalfH = ((rect.bottom - rect.top) / 2) * dpr;
       }
 
       function layout() {
@@ -2827,7 +2850,8 @@ data:
         gl.uniform2f(uBarCenter, geom.centerX, geom.centerY);
         gl.uniform2f(uBarHalf, geom.halfW, geom.halfH);
         gl.uniform1f(uBarRadius, geom.radius);
-        gl.uniform1f(uTopBand, geom.topBand);
+        gl.uniform1f(uTopCenterY, geom.topCenterY);
+        gl.uniform1f(uTopHalfH, geom.topHalfH);
         gl.uniform1f(uTime, reduceMotion ? 0.0 : (tMs - start) / 1000.0);
 
         gl.drawArrays(gl.TRIANGLES, 0, 3);
