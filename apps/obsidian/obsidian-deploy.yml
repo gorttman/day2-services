@@ -23,6 +23,14 @@ spec:
         app.kubernetes.io/name: obsidian
         app.kubernetes.io/component: sync
     spec:
+      # The vault volume (RWO) is shared with the memory server (deployment memvault, applied by
+      # memory-system/deploy/deploy.sh). Sync must run on the same node as it.
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels: {app: memvault}
+            topologyKey: kubernetes.io/hostname
       # Hard requirement, not a preference: obsidian-headless-state is
       # local-path, which is node-local. pinode-01's k3s data dir is RAM
       # tmpfs (loses local-path PVCs on reboot) - k8smaster has real disk.
@@ -78,7 +86,7 @@ spec:
       volumes:
       - name: vault
         persistentVolumeClaim:
-          claimName: obsidian-vault
+          claimName: vault-data
       - name: state
         persistentVolumeClaim:
           claimName: obsidian-headless-state

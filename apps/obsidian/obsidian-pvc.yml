@@ -1,7 +1,9 @@
+# The vault. Longhorn, so it follows the pod and is replicated (was a static NFS PV on the QNAP until 2026-11-10).
+# Created by hand first on 2026-11-10 and loaded with the merged vault; this file adopts it.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: obsidian-vault
+  name: vault-data
   namespace: obsidian
   labels:
     app: obsidian
@@ -10,8 +12,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: qnap-static
-  volumeName: qnap-vault
+  storageClassName: longhorn
   resources:
     requests:
-      storage: 10Gi
+      storage: 20Gi
