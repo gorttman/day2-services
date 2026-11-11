@@ -9,6 +9,9 @@ metadata:
     app.kubernetes.io/component: sync
     app.kubernetes.io/part-of: day2-services
     argocd.argoproj.io/managed-by: argocd
+    # the Sync client must run all night: the memory jobs write the vault at night and every device reads it through Sync.
+    # Without this label the nightly quiet window stopped it (10 Nov 19:30 to 11 Nov 05:25).
+    quiet-window-exempt: "true"
 spec:
   replicas: 1
   strategy:
